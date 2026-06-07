@@ -164,6 +164,10 @@ export default function Approve() {
 function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(post.content)
+  const [selectedImage, setSelectedImage] = useState(post.image_url || null)
+  const [images, setImages] = useState([])
+  const [showImagePicker, setShowImagePicker] = useState(false)
+  const [loadingImages, setLoadingImages] = useState(false)
   const [scheduleTime, setScheduleTime] = useState(
     post.scheduled_at
       ? new Date(post.scheduled_at).toISOString().slice(0, 16)
@@ -172,6 +176,18 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
 
   const platCfg = PLATFORM_CONFIG[post.platform] || { color: '#6366f1', bg: 'rgba(99,102,241,0.1)', label: post.platform }
   const brandCfg = BRAND_CONFIG[post.brand]
+
+  const loadImages = async () => {
+    if (images.length > 0) { setShowImagePicker(!showImagePicker); return }
+    setLoadingImages(true)
+    const { data } = await supabase.storage.from('marketing-assets').list('', { limit: 50 })
+    if (data) setImages(data.filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name)).map(f => ({
+      name: f.name,
+      url: `https://xxkpvnokhqbpbqefegxa.supabase.co/storage/v1/object/public/marketing-assets/${encodeURIComponent(f.name)}`
+    })))
+    setLoadingImages(false)
+    setShowImagePicker(true)
+  }
   const limit = CHAR_LIMITS[post.platform]
   const editLen = editContent.length
 
@@ -338,6 +354,31 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
             </>
           ) : (
             <>
+              {/* Image picker */}
+              <div style={{ width: '100%', marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Image</div>
+                  <button onClick={loadImages} style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, padding: '3px 10px', color: '#a5b4fc', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                    {loadingImages ? 'Loading...' : showImagePicker ? 'Close' : selectedImage ? 'Change Image' : '+ Add Image'}
+                  </button>
+                </div>
+                {selectedImage && (
+                  <div style={{ position: 'relative', marginBottom: 8 }}>
+                    <img src={selectedImage} alt="" style={{ width: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 8 }} />
+                    <button onClick={() => setSelectedImage(null)} style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: 4, color: '#fff', fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>Remove</button>
+                  </div>
+                )}
+                {showImagePicker && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, maxHeight: 160, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 8 }}>
+                    {images.map(img => (
+                      <img key={img.name} src={img.url} alt={img.name}
+                        onClick={() => { setSelectedImage(img.url); setShowImagePicker(false) }}
+                        style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: selectedImage === img.url ? '2px solid #6366f1' : '2px solid transparent', transition: 'border 0.15s' }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Schedule time picker */}
               <div style={{ width: '100%', marginBottom: 10 }}>
                 <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Schedule For</div>
@@ -349,7 +390,7 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                 />
               </div>
               <button
-                onClick={() => onApprove({ ...post, scheduled_at: new Date(scheduleTime).toISOString() })}
+                onClick={() => onApprove({ ...post, scheduled_at: new Date(scheduleTime).toISOString(), image_url: selectedImage })}
                 disabled={processing === post.id}
                 style={{
                   flex: 1,
