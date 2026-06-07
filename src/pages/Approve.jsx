@@ -2,22 +2,42 @@ import { useState, useEffect } from 'react'
 import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
 
-const PLATFORM_EMOJI = { facebook: '📘', instagram: '📸', twitter: '🐦', linkedin: '💼' }
-const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
-const BLOTADO_PROXY = 'https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/blotado-proxy'
-// ClearPass accounts (updated after reconnect June 7 2026)
-const BLOTADO_ACCOUNTS = {
-  facebook: { id: 35715 },
-  instagram: { id: 51707 }, // clearpasspassport
-  twitter: { id: 19956 },  // UseClearPass
+const PLATFORM_CONFIG = {
+  facebook: { color: '#1877f2', bg: 'rgba(24,119,242,0.1)', label: 'Facebook' },
+  instagram: { color: '#e1306c', bg: 'rgba(225,48,108,0.1)', label: 'Instagram' },
+  twitter: { color: '#1da1f2', bg: 'rgba(29,161,242,0.1)', label: 'Twitter / X' },
+  linkedin: { color: '#0a66c2', bg: 'rgba(10,102,194,0.1)', label: 'LinkedIn' },
 }
 
-// ResumeFix accounts
+const BRAND_CONFIG = {
+  clearpass: { color: '#10b981', bg: 'rgba(16,185,129,0.1)', label: 'ClearPass' },
+  resumefix: { color: '#60a5fa', bg: 'rgba(96,165,250,0.1)', label: 'ResumeFix' },
+}
+
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
+const BLOTADO_PROXY = 'https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/blotado-proxy'
+
+const BLOTADO_ACCOUNTS = {
+  facebook: { id: 35715 },
+  instagram: { id: 51707 },
+  twitter: { id: 19956 },
+}
+
 const BLOTADO_RESUMEFIX = {
   facebook: { id: 35362, pageId: 1165218503337980 },
-  instagram: { id: 51335 }, // resumefix6
-  twitter: { id: 19838 },   // resumefix1
+  instagram: { id: 51335 },
+  twitter: { id: 19838 },
 }
+
+function charColor(count, limit) {
+  if (!limit) return 'var(--text-muted)'
+  const pct = count / limit
+  if (pct < 0.7) return '#10b981'
+  if (pct < 0.9) return '#f59e0b'
+  return '#ef4444'
+}
+
+const CHAR_LIMITS = { facebook: 2200, instagram: 2200, twitter: 280, linkedin: 3000 }
 
 export default function Approve() {
   const [posts, setPosts] = useState([])
@@ -28,8 +48,9 @@ export default function Approve() {
 
   const loadPending = async () => {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data } = await supabase.from('flo_posts').select('*')
+    const { data } = await supabase
+      .from('flo_posts')
+      .select('*')
       .in('status', ['pending', 'draft'])
       .order('created_at', { ascending: false })
     setPosts(data || [])
@@ -39,42 +60,37 @@ export default function Approve() {
   const approvePost = async (post) => {
     setProcessing(post.id)
     try {
-      // Schedule via Blotado
       const accounts = post.brand === 'resumefix' ? BLOTADO_RESUMEFIX : BLOTADO_ACCOUNTS
       const acc = accounts[post.platform]
       if (acc) {
         const scheduledAt = post.scheduled_at
           ? new Date(post.scheduled_at).toISOString()
-          : new Date(Date.now() + 60000).toISOString() // 1 min from now if no schedule
-
+          : new Date(Date.now() + 60000).toISOString()
         const payload = {
           post: {
             accountId: acc.id,
             content: { text: post.content, mediaUrls: post.image_url ? [post.image_url] : [], platform: post.platform },
-            target: { targetType: post.platform }
+            target: { targetType: post.platform },
           },
-          scheduledTime: scheduledAt
+          scheduledTime: scheduledAt,
         }
         if (post.platform === 'facebook' && acc.pageId) payload.post.target.pageId = acc.pageId
-
         const res = await fetch(BLOTADO_PROXY, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON}`, 'apikey': ANON },
-          body: JSON.stringify({ endpoint: 'posts', payload })
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
+          body: JSON.stringify({ endpoint: 'posts', payload }),
         })
         const result = await res.json()
-
         if (res.ok && result.ok) {
           await supabase.from('flo_posts').update({ status: 'scheduled' }).eq('id', post.id)
         } else {
           throw new Error('Blotado error')
         }
       } else {
-        // No Blotado account — just mark approved
         await supabase.from('flo_posts').update({ status: 'scheduled' }).eq('id', post.id)
       }
       loadPending()
-    } catch (e) {
+    } catch {
       alert('Could not schedule post. Please try again.')
     }
     setProcessing('')
@@ -93,17 +109,51 @@ export default function Approve() {
   return (
     <Layout title="Approve Posts">
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: '#475569' }}>Loading...</div>
+        <div style={{ textAlign: 'center', padding: 56 }}>
+          <div className="spinner" style={{ margin: '0 auto', width: 24, height: 24 }} />
+        </div>
       ) : posts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 60 }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
-          <p style={{ color: '#64748b', fontSize: 16 }}>No posts pending approval. All caught up!</p>
+        <div style={{
+          textAlign: 'center',
+          padding: '72px 40px',
+          animation: 'fadeIn 0.3s ease',
+        }}>
+          <div style={{
+            width: 72,
+            height: 72,
+            background: 'rgba(16,185,129,0.1)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px',
+            fontSize: 30,
+          }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <h3 style={{ color: 'var(--text-primary)', fontSize: 17, fontWeight: 700, marginBottom: 6 }}>
+            All caught up!
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13.5 }}>No posts pending approval right now.</p>
         </div>
       ) : (
-        <div style={{ maxWidth: 700, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <p style={{ color: '#64748b', fontSize: 14 }}>{posts.length} post{posts.length !== 1 ? 's' : ''} waiting for review</p>
-          {posts.map(post => (
-            <PostCard key={post.id} post={post} processing={processing} onApprove={approvePost} onReject={rejectPost} onEdit={editPost} />
+        <div style={{ maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: 12.5, marginBottom: 2 }}>
+            <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{posts.length}</span>{' '}
+            post{posts.length !== 1 ? 's' : ''} waiting for review
+          </p>
+          {posts.map((post, i) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              processing={processing}
+              onApprove={approvePost}
+              onReject={rejectPost}
+              onEdit={editPost}
+              index={i}
+            />
           ))}
         </div>
       )}
@@ -111,69 +161,267 @@ export default function Approve() {
   )
 }
 
-function PostCard({ post, processing, onApprove, onReject, onEdit }) {
+function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(post.content)
 
+  const platCfg = PLATFORM_CONFIG[post.platform] || { color: '#6366f1', bg: 'rgba(99,102,241,0.1)', label: post.platform }
+  const brandCfg = BRAND_CONFIG[post.brand]
+  const limit = CHAR_LIMITS[post.platform]
+  const editLen = editContent.length
+
   return (
-    <div style={{ background: '#1e293b', borderRadius: 16, padding: 20, border: '1px solid rgba(255,255,255,0.06)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <span style={{ fontSize: 20 }}>{PLATFORM_EMOJI[post.platform] || '📱'}</span>
-        <span style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>{post.platform}</span>
-        {post.brand && <span style={{ background: post.brand === 'clearpass' ? 'rgba(76,187,23,0.15)' : 'rgba(59,130,246,0.15)', color: post.brand === 'clearpass' ? '#4CBB17' : '#60a5fa', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600, textTransform: 'capitalize' }}>{post.brand}</span>}
-        <span style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600, marginLeft: 'auto' }}>
-          {post.status === 'pending' ? 'Pending Approval' : 'Draft'}
+    <div style={{
+      background: 'var(--card)',
+      borderRadius: 16,
+      border: '1px solid var(--border)',
+      overflow: 'hidden',
+      transition: 'border-color 0.15s',
+      animation: `fadeIn 0.25s ease ${index * 0.05}s both`,
+    }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)'}
+      onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'}
+    >
+      {/* Header row */}
+      <div style={{
+        padding: '14px 18px',
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        background: 'rgba(255,255,255,0.01)',
+      }}>
+        <span style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+          padding: '3px 10px',
+          borderRadius: 6,
+          fontSize: 11.5,
+          fontWeight: 600,
+          background: platCfg.bg,
+          color: platCfg.color,
+          border: `1px solid ${platCfg.color}25`,
+        }}>
+          {platCfg.label}
+        </span>
+        {brandCfg && (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '3px 10px',
+            borderRadius: 6,
+            fontSize: 11.5,
+            fontWeight: 600,
+            background: brandCfg.bg,
+            color: brandCfg.color,
+            border: `1px solid ${brandCfg.color}25`,
+          }}>
+            {brandCfg.label}
+          </span>
+        )}
+        <span className={`badge ${post.status === 'pending' ? 'badge-pending' : 'badge-draft'}`} style={{ marginLeft: 'auto' }}>
+          {post.status === 'pending' ? 'Pending' : 'Draft'}
         </span>
       </div>
 
-      {post.image_url && (
-        <img src={post.image_url} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 10, marginBottom: 12 }} />
-      )}
-
-      {editing ? (
-        <textarea
-          value={editContent}
-          onChange={e => setEditContent(e.target.value)}
-          style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(99,102,241,0.4)', borderRadius: 10, padding: 12, color: '#fff', fontSize: 14, minHeight: 100, resize: 'vertical', marginBottom: 10 }}
-        />
-      ) : (
-        <p style={{ color: '#e2e8f0', fontSize: 14, lineHeight: 1.7, marginBottom: 14, whiteSpace: 'pre-wrap' }}>{post.content}</p>
-      )}
-
-      {post.scheduled_at && (
-        <p style={{ color: '#475569', fontSize: 12, marginBottom: 14 }}>
-          Scheduled: {new Date(post.scheduled_at).toLocaleString()}
-        </p>
-      )}
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        {editing ? (
-          <>
-            <button onClick={() => { onEdit(post, editContent); setEditing(false) }}
-              style={{ flex: 1, background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: '8px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              Save Edit
-            </button>
-            <button onClick={() => setEditing(false)}
-              style={{ background: 'rgba(255,255,255,0.05)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>
-              Cancel
-            </button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => onApprove(post)} disabled={processing === post.id}
-              style={{ flex: 1, background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, padding: '8px', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: processing === post.id ? 0.7 : 1 }}>
-              {processing === post.id ? 'Scheduling...' : '✅ Approve & Schedule'}
-            </button>
-            <button onClick={() => setEditing(true)}
-              style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>
-              ✏️ Edit
-            </button>
-            <button onClick={() => onReject(post.id)}
-              style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>
-              ✕
-            </button>
-          </>
+      {/* Body */}
+      <div style={{ padding: '16px 18px' }}>
+        {post.image_url && (
+          <img
+            src={post.image_url}
+            alt=""
+            style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 10, marginBottom: 14 }}
+          />
         )}
+
+        {editing ? (
+          <div style={{ marginBottom: 12 }}>
+            <textarea
+              value={editContent}
+              onChange={e => setEditContent(e.target.value)}
+              style={{
+                width: '100%',
+                background: 'var(--surface)',
+                border: '1px solid rgba(99,102,241,0.35)',
+                borderRadius: 10,
+                padding: '11px 13px',
+                color: 'var(--text-primary)',
+                fontSize: 13.5,
+                minHeight: 110,
+                resize: 'vertical',
+                lineHeight: 1.6,
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 5 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: charColor(editLen, limit) }}>
+                {editLen}{limit ? ` / ${limit}` : ''}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <p style={{
+            color: 'var(--text-primary)',
+            fontSize: 13.5,
+            lineHeight: 1.7,
+            marginBottom: 12,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}>
+            {post.content}
+          </p>
+        )}
+
+        {post.scheduled_at && (
+          <p style={{
+            color: 'var(--text-muted)',
+            fontSize: 11.5,
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+          }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Scheduled for {new Date(post.scheduled_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          </p>
+        )}
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {editing ? (
+            <>
+              <button
+                onClick={() => { onEdit(post, editContent); setEditing(false) }}
+                style={{
+                  flex: 1,
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '9px',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(99,102,241,0.3)',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={() => { setEditing(false); setEditContent(post.content) }}
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  padding: '9px 16px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => onApprove(post)}
+                disabled={processing === post.id}
+                style={{
+                  flex: 1,
+                  background: processing === post.id
+                    ? 'rgba(16,185,129,0.25)'
+                    : 'linear-gradient(135deg, #10b981, #059669)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '9px',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: processing === post.id ? 'default' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  boxShadow: processing === post.id ? 'none' : '0 2px 10px rgba(16,185,129,0.28)',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { if (processing !== post.id) e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                {processing === post.id ? (
+                  <><div className="spinner" /> Scheduling...</>
+                ) : (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Approve
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => setEditing(true)}
+                style={{
+                  background: 'rgba(99,102,241,0.1)',
+                  color: '#a5b4fc',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  borderRadius: 8,
+                  padding: '9px 14px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.17)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(99,102,241,0.1)'}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                </svg>
+                Edit
+              </button>
+
+              <button
+                onClick={() => onReject(post.id)}
+                style={{
+                  background: 'rgba(239,68,68,0.07)',
+                  color: '#f87171',
+                  border: '1px solid rgba(239,68,68,0.2)',
+                  borderRadius: 8,
+                  padding: '9px 14px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.13)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                Reject
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
