@@ -30,7 +30,7 @@ export default function Dashboard() {
 
   const STAT_CARDS = [
     { label: 'Total Posts', value: stats.total, icon: '📝', color: '#6366f1' },
-    { label: 'Scheduled', value: stats.scheduled, icon: '⏰', color: '#f59e0b' },
+    { label: 'Pending Approval', value: posts.filter(p => p.status === 'pending').length, icon: '🔔', color: '#f59e0b' },
     { label: 'Published', value: stats.published, icon: '✅', color: '#10b981' },
     { label: 'Drafts', value: stats.drafts, icon: '📄', color: '#64748b' },
   ]

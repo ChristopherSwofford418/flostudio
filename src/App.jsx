@@ -7,6 +7,7 @@ import Compose from './pages/Compose.jsx'
 import Calendar from './pages/Calendar.jsx'
 import ImageBank from './pages/ImageBank.jsx'
 import Accounts from './pages/Accounts.jsx'
+import Approve from './pages/Approve.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/calendar" element={session ? <Calendar /> : <Navigate to="/auth" />} />
       <Route path="/images" element={session ? <ImageBank /> : <Navigate to="/auth" />} />
       <Route path="/accounts" element={session ? <Accounts /> : <Navigate to="/auth" />} />
+      <Route path="/approve" element={session ? <Approve /> : <Navigate to="/auth" />} />
     </Routes>
   )
 }

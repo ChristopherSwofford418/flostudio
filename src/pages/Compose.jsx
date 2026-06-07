@@ -69,7 +69,7 @@ export default function Compose() {
       user_id: user.id, platform, content,
       image_url: selectedImage?.url || null,
       scheduled_at: scheduledAt || null,
-      status: scheduledAt ? 'scheduled' : status,
+      status: status === 'draft' ? 'draft' : 'pending',
       created_at: new Date().toISOString()
     })
     setSaving(false)
@@ -156,7 +156,7 @@ export default function Compose() {
             </button>
             <button onClick={() => savePost('scheduled')} disabled={saving || overLimit}
               style={{ flex: 2, background: '#6366f1', color: '#fff', border: 'none', borderRadius: 12, padding: '13px', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: (saving || overLimit) ? 0.7 : 1 }}>
-              {saving ? 'Saving...' : scheduledAt ? '📅 Schedule Post' : '💾 Save Post'}
+  {saving ? 'Saving...' : '📤 Submit for Approval'}
             </button>
           </div>
         </div>

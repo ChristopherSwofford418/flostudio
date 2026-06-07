@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 const NAV = [
   { path: '/', icon: '📊', label: 'Dashboard' },
   { path: '/compose', icon: '✍️', label: 'Compose' },
+  { path: '/approve', icon: '🔔', label: 'Approve' },
   { path: '/calendar', icon: '📅', label: 'Calendar' },
   { path: '/images', icon: '🖼️', label: 'Image Bank' },
   { path: '/accounts', icon: '🔗', label: 'Accounts' },
