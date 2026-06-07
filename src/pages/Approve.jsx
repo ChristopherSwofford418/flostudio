@@ -5,10 +5,18 @@ import { supabase } from '../supabase'
 const PLATFORM_EMOJI = { facebook: '📘', instagram: '📸', twitter: '🐦', linkedin: '💼' }
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 const BLOTADO_PROXY = 'https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/blotado-proxy'
+// ClearPass accounts (updated after reconnect June 7 2026)
 const BLOTADO_ACCOUNTS = {
-  facebook: { id: 35362, pageId: 1092443813950741 },
-  instagram: { id: 51495 },
-  twitter: { id: 19886 },
+  facebook: { id: 35715 },
+  instagram: { id: 51707 }, // clearpasspassport
+  twitter: { id: 19956 },  // UseClearPass
+}
+
+// ResumeFix accounts
+const BLOTADO_RESUMEFIX = {
+  facebook: { id: 35362, pageId: 1165218503337980 },
+  instagram: { id: 51335 }, // resumefix6
+  twitter: { id: 19838 },   // resumefix1
 }
 
 export default function Approve() {
@@ -32,7 +40,8 @@ export default function Approve() {
     setProcessing(post.id)
     try {
       // Schedule via Blotado
-      const acc = BLOTADO_ACCOUNTS[post.platform]
+      const accounts = post.brand === 'resumefix' ? BLOTADO_RESUMEFIX : BLOTADO_ACCOUNTS
+      const acc = accounts[post.platform]
       if (acc) {
         const scheduledAt = post.scheduled_at
           ? new Date(post.scheduled_at).toISOString()
@@ -111,6 +120,7 @@ function PostCard({ post, processing, onApprove, onReject, onEdit }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <span style={{ fontSize: 20 }}>{PLATFORM_EMOJI[post.platform] || '📱'}</span>
         <span style={{ color: '#94a3b8', fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>{post.platform}</span>
+        {post.brand && <span style={{ background: post.brand === 'clearpass' ? 'rgba(76,187,23,0.15)' : 'rgba(59,130,246,0.15)', color: post.brand === 'clearpass' ? '#4CBB17' : '#60a5fa', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600, textTransform: 'capitalize' }}>{post.brand}</span>}
         <span style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600, marginLeft: 'auto' }}>
           {post.status === 'pending' ? 'Pending Approval' : 'Draft'}
         </span>

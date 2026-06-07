@@ -15,6 +15,7 @@ const PLATFORMS = [
 export default function Compose() {
   const navigate = useNavigate()
   const [platform, setPlatform] = useState('facebook')
+  const [brand, setBrand] = useState('clearpass')
   const [content, setContent] = useState('')
   const [topic, setTopic] = useState('')
   const [tone, setTone] = useState('professional')
@@ -66,7 +67,7 @@ export default function Compose() {
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('flo_posts').insert({
-      user_id: user.id, platform, content,
+      user_id: user.id, platform, content, brand,
       image_url: selectedImage?.url || null,
       scheduled_at: scheduledAt || null,
       status: status === 'draft' ? 'draft' : 'pending',
@@ -85,6 +86,19 @@ export default function Compose() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: 24, maxWidth: 1100 }}>
         {/* Left - compose */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Brand selector */}
+          <div style={{ background: '#1e293b', borderRadius: 16, padding: 20, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <label style={{ color: '#94a3b8', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 12 }}>Brand</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[{ id: 'clearpass', label: '🛡️ ClearPass' }, { id: 'resumefix', label: '📄 ResumeFix' }].map(b => (
+                <button key={b.id} onClick={() => setBrand(b.id)}
+                  style={{ padding: '8px 16px', borderRadius: 10, border: `1px solid ${brand === b.id ? '#6366f1' : 'rgba(255,255,255,0.08)'}`, background: brand === b.id ? 'rgba(99,102,241,0.15)' : 'transparent', color: brand === b.id ? '#a5b4fc' : '#64748b', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Platform selector */}
           <div style={{ background: '#1e293b', borderRadius: 16, padding: 20, border: '1px solid rgba(255,255,255,0.06)' }}>
             <label style={{ color: '#94a3b8', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 12 }}>Platform</label>
