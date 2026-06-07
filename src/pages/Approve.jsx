@@ -18,15 +18,15 @@ const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 const BLOTADO_PROXY = 'https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/blotado-proxy'
 
 const BLOTADO_ACCOUNTS = {
-  facebook: { id: 35715 },
+  facebook: { id: 35715, pageId: 1092443813950741 },
   instagram: { id: 51707 },
   twitter: { id: 19956 },
 }
 
 const BLOTADO_RESUMEFIX = {
-  facebook: { id: 35362, pageId: 1165218503337980 },
-  instagram: { id: 51335 },
-  twitter: { id: 19838 },
+  facebook: { id: 35715, pageId: 1165218503337980 },
+  instagram: { id: 51705 },
+  twitter: { id: 19954 },
 }
 
 function charColor(count, limit) {
