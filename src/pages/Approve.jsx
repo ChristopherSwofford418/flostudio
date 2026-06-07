@@ -3,7 +3,8 @@ import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
 
 const PLATFORM_EMOJI = { facebook: '📘', instagram: '📸', twitter: '🐦', linkedin: '💼' }
-const BLOTADO_KEY = 'blt_Sg1cEchKRInUk4QsgKtmT2BusAQK9ttfXPZ59JcarqI='
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
+const BLOTADO_PROXY = 'https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/blotado-proxy'
 const BLOTADO_ACCOUNTS = {
   facebook: { id: 35362, pageId: 1092443813950741 },
   instagram: { id: 51495 },
@@ -47,13 +48,14 @@ export default function Approve() {
         }
         if (post.platform === 'facebook' && acc.pageId) payload.post.target.pageId = acc.pageId
 
-        const res = await fetch('https://backend.blotato.com/v2/posts', {
+        const res = await fetch(BLOTADO_PROXY, {
           method: 'POST',
-          headers: { 'blotato-api-key': BLOTADO_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON}`, 'apikey': ANON },
+          body: JSON.stringify({ endpoint: 'posts', payload })
         })
+        const result = await res.json()
 
-        if (res.ok) {
+        if (res.ok && result.ok) {
           await supabase.from('flo_posts').update({ status: 'scheduled' }).eq('id', post.id)
         } else {
           throw new Error('Blotado error')
