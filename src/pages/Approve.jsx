@@ -164,6 +164,11 @@ export default function Approve() {
 function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(post.content)
+  const [scheduleTime, setScheduleTime] = useState(
+    post.scheduled_at
+      ? new Date(post.scheduled_at).toISOString().slice(0, 16)
+      : new Date(Date.now() + 3600000).toISOString().slice(0, 16)
+  )
 
   const platCfg = PLATFORM_CONFIG[post.platform] || { color: '#6366f1', bg: 'rgba(99,102,241,0.1)', label: post.platform }
   const brandCfg = BRAND_CONFIG[post.brand]
@@ -333,8 +338,18 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
             </>
           ) : (
             <>
+              {/* Schedule time picker */}
+              <div style={{ width: '100%', marginBottom: 10 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Schedule For</div>
+                <input
+                  type="datetime-local"
+                  value={scheduleTime}
+                  onChange={e => setScheduleTime(e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 12px', color: '#e2e8f0', fontSize: 13, width: '100%', boxSizing: 'border-box' }}
+                />
+              </div>
               <button
-                onClick={() => onApprove(post)}
+                onClick={() => onApprove({ ...post, scheduled_at: new Date(scheduleTime).toISOString() })}
                 disabled={processing === post.id}
                 style={{
                   flex: 1,
