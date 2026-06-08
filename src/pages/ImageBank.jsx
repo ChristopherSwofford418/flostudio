@@ -162,8 +162,14 @@ export default function ImageBank() {
             e.preventDefault()
             e.stopPropagation()
             setDraggingToAI(false)
-            const url = e.dataTransfer.getData('text/plain')
-            if (url) setReferenceImage(url)
+            // Try multiple dataTransfer formats
+            const url = e.dataTransfer.getData('text/plain') ||
+                        e.dataTransfer.getData('text/uri-list') ||
+                        e.dataTransfer.getData('URL')
+            console.log('Drop URL:', url, 'Types:', [...e.dataTransfer.types])
+            if (url && (url.startsWith('http') || url.startsWith('data:'))) {
+              setReferenceImage(url)
+            }
           }}
           style={{ border: `2px dashed ${draggingToAI ? 'rgba(139,92,246,0.6)' : referenceImage ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.06)'}`, borderRadius: 12, padding: referenceImage ? 0 : '16px 20px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.15s', background: draggingToAI ? 'rgba(139,92,246,0.08)' : 'transparent', overflow: 'hidden', cursor: referenceImage ? 'default' : 'default' }}>
           {referenceImage ? (
@@ -344,8 +350,13 @@ export default function ImageBank() {
             {images.map((img, i) => (
               <div
                 key={img.name}
-                draggable
-                onDragStart={e => { e.dataTransfer.setData('text/plain', img.url); e.dataTransfer.effectAllowed = 'copy' }}
+                draggable="true"
+                onDragStart={e => {
+                  e.dataTransfer.setData('text/plain', img.url)
+                  e.dataTransfer.setData('text/uri-list', img.url)
+                  e.dataTransfer.setData('URL', img.url)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
                 onMouseEnter={() => setHoveredImg(img.name)}
                 onMouseLeave={() => setHoveredImg(null)}
                 style={{
