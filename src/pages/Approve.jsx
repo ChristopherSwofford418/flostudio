@@ -354,30 +354,67 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
             </>
           ) : (
             <>
-              {/* Image picker */}
+              {/* Image + Preview section */}
               <div style={{ width: '100%', marginBottom: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <div style={{ color: 'var(--text-muted)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Image</div>
-                  <button onClick={loadImages} style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, padding: '3px 10px', color: '#a5b4fc', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                    {loadingImages ? 'Loading...' : showImagePicker ? 'Close' : selectedImage ? 'Change Image' : '+ Add Image'}
-                  </button>
-                </div>
+                {/* Image preview */}
                 {selectedImage && (
-                  <div style={{ position: 'relative', marginBottom: 8 }}>
-                    <img src={selectedImage} alt="" style={{ width: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 8 }} />
-                    <button onClick={() => setSelectedImage(null)} style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: 4, color: '#fff', fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>Remove</button>
+                  <div style={{ position: 'relative', marginBottom: 8, borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <img src={selectedImage} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
+                    <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+                      <button onClick={loadImages} style={{ background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 11, padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}>Change</button>
+                      <button onClick={() => setSelectedImage(null)} style={{ background: 'rgba(239,68,68,0.8)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}>×</button>
+                    </div>
                   </div>
                 )}
-                {showImagePicker && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, maxHeight: 160, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 8 }}>
-                    {images.map(img => (
-                      <img key={img.name} src={img.url} alt={img.name}
-                        onClick={() => { setSelectedImage(img.url); setShowImagePicker(false) }}
-                        style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: selectedImage === img.url ? '2px solid #6366f1' : '2px solid transparent', transition: 'border 0.15s' }} />
-                    ))}
+
+                {/* Post preview */}
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 12, marginBottom: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg, #4CBB17, #2d8a0f)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>CP</div>
+                    <div>
+                      <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>ClearPass</div>
+                      <div style={{ color: '#64748b', fontSize: 11 }}>{PLATFORM_CONFIG[post.platform]?.label}</div>
+                    </div>
                   </div>
+                  <p style={{ color: '#e2e8f0', fontSize: 13, lineHeight: 1.5, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>{editing ? editContent : post.content}</p>
+                  {selectedImage && <img src={selectedImage} alt="" style={{ width: '100%', borderRadius: 8, maxHeight: 150, objectFit: 'cover' }} />}
+                </div>
+
+                {!selectedImage && (
+                  <button onClick={loadImages}
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px', color: '#64748b', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.color = '#a5b4fc' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#64748b' }}>
+                    {loadingImages ? 'Loading...' : '🖼️ Add Image from Bank'}
+                  </button>
                 )}
               </div>
+
+              {/* Image picker modal */}
+              {showImagePicker && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 24 }}>
+                  <div style={{ background: '#0d1525', borderRadius: 16, padding: 24, width: '100%', maxWidth: 560, border: '1px solid rgba(255,255,255,0.08)', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>Select Image</h3>
+                      <button onClick={() => setShowImagePicker(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 22 }}>×</button>
+                    </div>
+                    <div style={{ overflowY: 'auto', flex: 1 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                        {images.map(img => (
+                          <div key={img.name} style={{ position: 'relative', cursor: 'pointer' }}
+                            onClick={() => { setSelectedImage(img.url); setShowImagePicker(false) }}>
+                            <img src={img.url} alt={img.name}
+                              style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8, border: selectedImage === img.url ? '2px solid #6366f1' : '2px solid transparent', transition: 'all 0.15s' }}
+                              onMouseEnter={e => e.target.style.opacity = '0.8'}
+                              onMouseLeave={e => e.target.style.opacity = '1'} />
+                          </div>
+                        ))}
+                      </div>
+                      {images.length === 0 && <p style={{ color: '#64748b', textAlign: 'center', padding: 32 }}>No images in bank. Upload some in the Image Bank page.</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Schedule time picker */}
               <div style={{ width: '100%', marginBottom: 10 }}>
