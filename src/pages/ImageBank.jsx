@@ -154,41 +154,52 @@ export default function ImageBank() {
           </div>
         </div>
 
-        {/* Reference image drop zone */}
-        <div
-          onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDraggingToAI(true) }}
-          onDragLeave={e => { e.stopPropagation(); setDraggingToAI(false) }}
-          onDrop={e => {
-            e.preventDefault()
-            e.stopPropagation()
-            setDraggingToAI(false)
-            // Try multiple dataTransfer formats
-            const url = e.dataTransfer.getData('text/plain') ||
-                        e.dataTransfer.getData('text/uri-list') ||
-                        e.dataTransfer.getData('URL')
-            console.log('Drop URL:', url, 'Types:', [...e.dataTransfer.types])
-            if (url && (url.startsWith('http') || url.startsWith('data:'))) {
-              setReferenceImage(url)
-            }
-          }}
-          style={{ border: `2px dashed ${draggingToAI ? 'rgba(139,92,246,0.6)' : referenceImage ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.06)'}`, borderRadius: 12, padding: referenceImage ? 0 : '16px 20px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.15s', background: draggingToAI ? 'rgba(139,92,246,0.08)' : 'transparent', overflow: 'hidden', cursor: referenceImage ? 'default' : 'default' }}>
+        {/* Reference image picker */}
+        <div style={{ marginBottom: 12 }}>
           {referenceImage ? (
-            <>
-              <img src={referenceImage} alt="Reference" style={{ width: 80, height: 80, objectFit: 'cover' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 12, padding: '10px 14px' }}>
+              <img src={referenceImage} alt="Reference" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }} />
               <div style={{ flex: 1 }}>
-                <div style={{ color: '#a5b4fc', fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Reference image set</div>
-                <div style={{ color: '#64748b', fontSize: 12 }}>AI will match this style and composition</div>
+                <div style={{ color: '#a5b4fc', fontSize: 13, fontWeight: 600 }}>Reference image set</div>
+                <div style={{ color: '#64748b', fontSize: 12 }}>AI will match this style</div>
               </div>
-              <button onClick={() => setReferenceImage(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 18, padding: '8px 12px' }}>×</button>
-            </>
+              <button onClick={() => setReferenceImage(null)} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#f87171', cursor: 'pointer', fontSize: 12, padding: '5px 10px', fontWeight: 600 }}>Remove</button>
+            </div>
           ) : (
-            <>
-              <span style={{ fontSize: 20 }}>{draggingToAI ? '🎯' : '🖼️'}</span>
-              <div>
-                <div style={{ color: draggingToAI ? '#a5b4fc' : '#64748b', fontSize: 13, fontWeight: 500 }}>Drag an image from your bank here as a reference</div>
-                <div style={{ color: '#475569', fontSize: 12 }}>Optional - AI will match the style</div>
+            <button
+              onClick={() => setShowImagePicker(true)}
+              style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '2px dashed rgba(255,255,255,0.08)', borderRadius: 12, padding: '14px 20px', color: '#64748b', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.4)'; e.currentTarget.style.color = '#a5b4fc' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#64748b' }}
+            >
+              <span style={{ fontSize: 18 }}>🖼️</span>
+              <span>Select a reference image from your bank <span style={{ opacity: 0.6 }}>(optional)</span></span>
+            </button>
+          )}
+
+          {/* Image picker modal */}
+          {showImagePicker && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24 }}>
+              <div style={{ background: '#0d1525', borderRadius: 16, padding: 24, width: '100%', maxWidth: 600, border: '1px solid rgba(255,255,255,0.08)', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>Select Reference Image</h3>
+                  <button onClick={() => setShowImagePicker(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>×</button>
+                </div>
+                <div style={{ overflowY: 'auto', flex: 1 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    {images.map(img => (
+                      <img key={img.name} src={img.url} alt={img.name}
+                        onClick={() => { setReferenceImage(img.url); setShowImagePicker(false) }}
+                        style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: '2px solid transparent', transition: 'all 0.15s' }}
+                        onMouseEnter={e => e.target.style.borderColor = '#6366f1'}
+                        onMouseLeave={e => e.target.style.borderColor = 'transparent'}
+                      />
+                    ))}
+                  </div>
+                  {images.length === 0 && <p style={{ color: '#64748b', textAlign: 'center', padding: 24 }}>No images in your bank yet. Upload some first.</p>}
+                </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 
