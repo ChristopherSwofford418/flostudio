@@ -9,6 +9,8 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
+
 export default function ImageBank() {
   const [images, setImages] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -17,6 +19,12 @@ export default function ImageBank() {
   const [dragging, setDragging] = useState(false)
   const [hoveredImg, setHoveredImg] = useState(null)
   const fileRef = useRef()
+  // AI Image Generator
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiStyle, setAiStyle] = useState('professional')
+  const [generatingAI, setGeneratingAI] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [generatedImages, setGeneratedImages] = useState([])
 
   useEffect(() => { loadImages() }, [])
 
@@ -69,8 +77,128 @@ export default function ImageBank() {
     loadImages()
   }
 
+  const generateAIImage = async () => {
+    if (!aiPrompt.trim()) return
+    setGeneratingAI(true)
+    setAiError('')
+    setGeneratedImages([])
+    try {
+      const styleMap = {
+        professional: 'clean, professional, corporate, high quality, modern design',
+        social: 'vibrant, eye-catching, social media friendly, bold colors',
+        minimal: 'minimalist, clean white background, simple elegant',
+        dark: 'dark background, neon accents, modern tech aesthetic',
+      }
+      const fullPrompt = `${aiPrompt}. Style: ${styleMap[aiStyle]}. No text overlays.`
+      // Make 2 calls since DALL-E 3 only supports n=1
+      const [res1, res2] = await Promise.all([
+        fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON}`, 'apikey': ANON },
+          body: JSON.stringify({ prompt: fullPrompt, n: 1, size: '1024x1024' })
+        }),
+        fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON}`, 'apikey': ANON },
+          body: JSON.stringify({ prompt: fullPrompt + ' (variation)', n: 1, size: '1024x1024' })
+        })
+      ])
+      const [d1, d2] = await Promise.all([res1.json(), res2.json()])
+      const imgs = [...(d1.images || []), ...(d2.images || [])]
+      if (imgs.length) {
+        setGeneratedImages(imgs)
+      } else {
+        setAiError(d1.error || d2.error || 'Could not generate images. Please try again.')
+      }
+    } catch (e) {
+      setAiError('Generation failed: ' + e.message)
+    }
+    setGeneratingAI(false)
+  }
+
+  const saveAIImage = async (imageUrl) => {
+    try {
+      // Fetch the image and upload to Supabase
+      const res = await fetch(imageUrl)
+      const blob = await res.blob()
+      const filename = `ai-generated-${Date.now()}.png`
+      await supabase.storage.from('marketing-assets').upload(filename, blob, { contentType: 'image/png', upsert: true })
+      await loadImages()
+      setGeneratedImages([])
+      setAiPrompt('')
+      alert('Image saved to your bank!')
+    } catch (e) {
+      alert('Could not save image: ' + e.message)
+    }
+  }
+
   return (
     <Layout title="Image Bank">
+
+      {/* AI Image Generator */}
+      <div style={{ background: 'linear-gradient(135deg, #0d1a2e, #111827)', borderRadius: 16, padding: 24, border: '1px solid rgba(139,92,246,0.2)', marginBottom: 24, boxShadow: '0 4px 30px rgba(139,92,246,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>✨</div>
+          <div>
+            <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 700, margin: 0 }}>AI Image Generator</h3>
+            <p style={{ color: '#64748b', fontSize: 12, margin: 0 }}>Generate marketing images with DALL-E 3</p>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, marginBottom: 12 }}>
+          <input
+            value={aiPrompt}
+            onChange={e => setAiPrompt(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && generateAIImage()}
+            placeholder="Describe the image... e.g. 'Healthcare worker using a mobile app to track credentials'"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14 }}
+          />
+          <select value={aiStyle} onChange={e => setAiStyle(e.target.value)}
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '11px 14px', color: '#e2e8f0', fontSize: 13 }}>
+            <option value="professional" style={{ background: '#111827' }}>Professional</option>
+            <option value="social" style={{ background: '#111827' }}>Social Media</option>
+            <option value="minimal" style={{ background: '#111827' }}>Minimal</option>
+            <option value="dark" style={{ background: '#111827' }}>Dark/Tech</option>
+          </select>
+          <button onClick={generateAIImage} disabled={generatingAI || !aiPrompt.trim()}
+            style={{ background: aiPrompt.trim() ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : '#1e293b', color: aiPrompt.trim() ? '#fff' : '#475569', border: 'none', borderRadius: 10, padding: '11px 20px', fontWeight: 700, fontSize: 14, cursor: aiPrompt.trim() ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
+            {generatingAI ? 'Generating...' : '✨ Generate'}
+          </button>
+        </div>
+
+        {aiError && <div style={{ color: '#f87171', fontSize: 13, marginBottom: 12 }}>⚠️ {aiError}</div>}
+
+        {generatingAI && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#94a3b8', fontSize: 13, padding: '12px 0' }}>
+            <div style={{ width: 18, height: 18, border: '2px solid rgba(99,102,241,0.3)', borderTop: '2px solid #6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            Creating your images with DALL-E 3...
+          </div>
+        )}
+
+        {generatedImages.length > 0 && (
+          <div>
+            <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 12 }}>2 images generated. Click to save to your bank:</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {generatedImages.map((imgUrl, i) => (
+                <div key={i} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <img src={imgUrl} alt={`Generated ${i+1}`} style={{ width: '100%', display: 'block' }} />
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.8))', padding: '20px 12px 12px', display: 'flex', gap: 8 }}>
+                    <button onClick={() => saveAIImage(imgUrl)}
+                      style={{ flex: 1, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                      Save to Bank
+                    </button>
+                    <a href={imgUrl} target="_blank" rel="noreferrer"
+                      style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 13, textDecoration: 'none' }}>
+                      Open
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Upload zone */}
       <div
         onClick={() => fileRef.current.click()}
