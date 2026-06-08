@@ -361,15 +361,26 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                     <img src={selectedImage} alt="" onClick={() => window.open(selectedImage, '_blank')} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />
                     <div style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 4 }}>
                       <button onClick={() => window.open(selectedImage, '_blank')} style={{ background: 'rgba(0,0,0,0.65)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 11, padding: '3px 8px', cursor: 'pointer' }}>⛶ Expand</button>
-                      <button onClick={() => setSelectedImage(null)} style={{ background: 'rgba(0,0,0,0.65)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}>✕</button>
+                      <button onClick={async () => { setSelectedImage(null); await supabase.from('flo_posts').update({ image_url: null }).eq('id', post.id) }} style={{ background: 'rgba(0,0,0,0.65)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}>✕</button>
                     </div>
                   </div>
                 ) : (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', color: '#a5b4fc', fontSize: 13, fontWeight: 500 }}>
                     <span>🖼️</span> Add Image
-                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
                       const file = e.target.files?.[0]
-                      if (file) {
+                      if (!file) return
+                      try {
+                        // Upload to Supabase storage
+                        const filename = `post-images/${post.id}-${Date.now()}.${file.name.split('.').pop()}`
+                        const { error } = await supabase.storage.from('marketing-assets').upload(filename, file, { upsert: true })
+                        if (error) throw error
+                        const url = `https://xxkpvnokhqbpbqefegxa.supabase.co/storage/v1/object/public/marketing-assets/${filename}`
+                        // Save URL to post record
+                        await supabase.from('flo_posts').update({ image_url: url }).eq('id', post.id)
+                        setSelectedImage(url)
+                      } catch {
+                        // Fallback to base64 preview only
                         const reader = new FileReader()
                         reader.onload = ev => setSelectedImage(ev.target.result)
                         reader.readAsDataURL(file)
