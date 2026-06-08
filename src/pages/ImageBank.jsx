@@ -93,25 +93,18 @@ export default function ImageBank() {
       }
       const refNote = referenceImage ? ` Use a similar composition and color palette to the reference image style.` : ''
       const fullPrompt = `${aiPrompt}.${refNote} Style: ${styleMap[aiStyle]}. No text overlays.`
-      // Make 2 calls since DALL-E 3 only supports n=1
-      const [res1, res2] = await Promise.all([
-        fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON}`, 'apikey': ANON },
-          body: JSON.stringify({ prompt: fullPrompt, n: 1, size: '1024x1024' })
-        }),
-        fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON}`, 'apikey': ANON },
-          body: JSON.stringify({ prompt: fullPrompt + ' (variation)', n: 1, size: '1024x1024' })
-        })
-      ])
-      const [d1, d2] = await Promise.all([res1.json(), res2.json()])
-      const imgs = [...(d1.images || []), ...(d2.images || [])]
+      // Single call - gpt-image-1 supports n=2
+      const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON}`, 'apikey': ANON },
+        body: JSON.stringify({ prompt: fullPrompt, n: 2, size: '1024x1024' })
+      })
+      const data = await res.json()
+      const imgs = data.images || []
       if (imgs.length) {
         setGeneratedImages(imgs)
       } else {
-        setAiError(d1.error || d2.error || 'Could not generate images. Please try again.')
+        setAiError(data.error || 'Could not generate images. Please try again.')
       }
     } catch (e) {
       setAiError('Generation failed: ' + e.message)
@@ -121,10 +114,19 @@ export default function ImageBank() {
 
   const saveAIImage = async (imageUrl) => {
     try {
-      // Fetch the image and upload to Supabase
-      const res = await fetch(imageUrl)
-      const blob = await res.blob()
       const filename = `ai-generated-${Date.now()}.png`
+      let blob
+      if (imageUrl.startsWith('data:')) {
+        // Base64 image
+        const base64 = imageUrl.split(',')[1]
+        const bytes = atob(base64)
+        const arr = new Uint8Array(bytes.length)
+        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i)
+        blob = new Blob([arr], { type: 'image/png' })
+      } else {
+        const res = await fetch(imageUrl)
+        blob = await res.blob()
+      }
       await supabase.storage.from('marketing-assets').upload(filename, blob, { contentType: 'image/png', upsert: true })
       await loadImages()
       setGeneratedImages([])
