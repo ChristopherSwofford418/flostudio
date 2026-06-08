@@ -369,12 +369,28 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                   </div>
                 )}
                 {showImagePicker && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, maxHeight: 160, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 8 }}>
-                    {images.map(img => (
-                      <img key={img.name} src={img.url} alt={img.name}
-                        onClick={() => { setSelectedImage(img.url); setShowImagePicker(false) }}
-                        style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: selectedImage === img.url ? '2px solid #6366f1' : '2px solid transparent', transition: 'border 0.15s' }} />
-                    ))}
+                  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 24 }}>
+                    <div style={{ background: '#0d1525', borderRadius: 16, padding: 24, width: '100%', maxWidth: 540, border: '1px solid rgba(255,255,255,0.08)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 700, margin: 0 }}>Select Image</h3>
+                        <button onClick={() => setShowImagePicker(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 22, lineHeight: 1 }}>×</button>
+                      </div>
+                      <div style={{ overflowY: 'auto', flex: 1 }}>
+                        {images.length === 0 ? (
+                          <p style={{ color: '#64748b', textAlign: 'center', padding: 32 }}>No images yet. Upload some in the Image Bank.</p>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                            {images.map(img => (
+                              <img key={img.name} src={img.url} alt={img.name}
+                                onClick={() => { setSelectedImage(img.url); setShowImagePicker(false) }}
+                                style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: selectedImage === img.url ? '2px solid #6366f1' : '2px solid transparent', transition: 'all 0.15s', opacity: 0.9 }}
+                                onMouseEnter={e => e.target.style.opacity = '1'}
+                                onMouseLeave={e => e.target.style.opacity = '0.9'} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
