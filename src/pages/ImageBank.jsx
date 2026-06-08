@@ -64,7 +64,10 @@ export default function ImageBank() {
   const onDrop = (e) => {
     e.preventDefault()
     setDragging(false)
-    handleUpload(e.dataTransfer.files)
+    // Only handle file drops, not image URL drags from bank
+    if (e.dataTransfer.files?.length > 0) {
+      handleUpload(e.dataTransfer.files)
+    }
   }
 
   const copyUrl = async (url, name) => {
@@ -153,10 +156,11 @@ export default function ImageBank() {
 
         {/* Reference image drop zone */}
         <div
-          onDragOver={e => { e.preventDefault(); setDraggingToAI(true) }}
-          onDragLeave={() => setDraggingToAI(false)}
+          onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDraggingToAI(true) }}
+          onDragLeave={e => { e.stopPropagation(); setDraggingToAI(false) }}
           onDrop={e => {
             e.preventDefault()
+            e.stopPropagation()
             setDraggingToAI(false)
             const url = e.dataTransfer.getData('text/plain')
             if (url) setReferenceImage(url)
