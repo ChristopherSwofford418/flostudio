@@ -25,6 +25,8 @@ export default function ImageBank() {
   const [generatingAI, setGeneratingAI] = useState(false)
   const [aiError, setAiError] = useState('')
   const [generatedImages, setGeneratedImages] = useState([])
+  const [referenceImage, setReferenceImage] = useState(null)
+  const [draggingToAI, setDraggingToAI] = useState(false)
 
   useEffect(() => { loadImages() }, [])
 
@@ -89,7 +91,8 @@ export default function ImageBank() {
         minimal: 'minimalist, clean white background, simple elegant',
         dark: 'dark background, neon accents, modern tech aesthetic',
       }
-      const fullPrompt = `${aiPrompt}. Style: ${styleMap[aiStyle]}. No text overlays.`
+      const refNote = referenceImage ? ` Use a similar composition and color palette to the reference image style.` : ''
+      const fullPrompt = `${aiPrompt}.${refNote} Style: ${styleMap[aiStyle]}. No text overlays.`
       // Make 2 calls since DALL-E 3 only supports n=1
       const [res1, res2] = await Promise.all([
         fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
@@ -143,6 +146,37 @@ export default function ImageBank() {
             <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 700, margin: 0 }}>AI Image Generator</h3>
             <p style={{ color: '#64748b', fontSize: 12, margin: 0 }}>Generate marketing images with DALL-E 3</p>
           </div>
+        </div>
+
+        {/* Reference image drop zone */}
+        <div
+          onDragOver={e => { e.preventDefault(); setDraggingToAI(true) }}
+          onDragLeave={() => setDraggingToAI(false)}
+          onDrop={e => {
+            e.preventDefault()
+            setDraggingToAI(false)
+            const url = e.dataTransfer.getData('text/plain')
+            if (url) setReferenceImage(url)
+          }}
+          style={{ border: `2px dashed ${draggingToAI ? 'rgba(139,92,246,0.6)' : referenceImage ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.06)'}`, borderRadius: 12, padding: referenceImage ? 0 : '16px 20px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.15s', background: draggingToAI ? 'rgba(139,92,246,0.08)' : 'transparent', overflow: 'hidden', cursor: referenceImage ? 'default' : 'default' }}>
+          {referenceImage ? (
+            <>
+              <img src={referenceImage} alt="Reference" style={{ width: 80, height: 80, objectFit: 'cover' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#a5b4fc', fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Reference image set</div>
+                <div style={{ color: '#64748b', fontSize: 12 }}>AI will match this style and composition</div>
+              </div>
+              <button onClick={() => setReferenceImage(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 18, padding: '8px 12px' }}>×</button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 20 }}>{draggingToAI ? '🎯' : '🖼️'}</span>
+              <div>
+                <div style={{ color: draggingToAI ? '#a5b4fc' : '#64748b', fontSize: 13, fontWeight: 500 }}>Drag an image from your bank here as a reference</div>
+                <div style={{ color: '#475569', fontSize: 12 }}>Optional - AI will match the style</div>
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, marginBottom: 12 }}>
@@ -284,6 +318,8 @@ export default function ImageBank() {
             {images.map((img, i) => (
               <div
                 key={img.name}
+                draggable
+                onDragStart={e => { e.dataTransfer.setData('text/plain', img.url); e.dataTransfer.effectAllowed = 'copy' }}
                 onMouseEnter={() => setHoveredImg(img.name)}
                 onMouseLeave={() => setHoveredImg(null)}
                 style={{
