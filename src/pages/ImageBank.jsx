@@ -27,6 +27,7 @@ export default function ImageBank() {
   const [generatedImages, setGeneratedImages] = useState([])
   const [referenceImage, setReferenceImage] = useState(null)
   const [draggingToAI, setDraggingToAI] = useState(false)
+  const [showImagePicker, setShowImagePicker] = useState(false)
 
   useEffect(() => { loadImages() }, [])
 
