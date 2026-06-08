@@ -86,13 +86,14 @@ export default function ImageBank() {
     setGeneratedImages([])
     try {
       const styleMap = {
-        professional: 'clean, professional, corporate, high quality, modern design',
-        social: 'vibrant, eye-catching, social media friendly, bold colors',
-        minimal: 'minimalist, clean white background, simple elegant',
-        dark: 'dark background, neon accents, modern tech aesthetic',
+        professional: 'photorealistic, ultra high quality, professional corporate photography, 8K resolution, crisp sharp focus, studio lighting, real people and real environments, no cartoon or illustration, no text overlays',
+        social: 'photorealistic, vibrant professional photography, high quality, social media marketing image, natural lighting, real people, no cartoon or illustration, no text overlays',
+        minimal: 'photorealistic, minimalist professional photography, clean white studio background, sharp focus, product photography quality, no cartoon or illustration, no text overlays',
+        dark: 'photorealistic, modern dark tech aesthetic, professional photography, dramatic lighting, sharp focus, no cartoon or illustration, no text overlays',
       }
-      const refNote = referenceImage ? ` Use a similar composition and color palette to the reference image style.` : ''
-      const fullPrompt = `${aiPrompt}.${refNote} Style: ${styleMap[aiStyle]}. No text overlays.`
+      const brandContext = 'This is a marketing image for ClearPass, a credential management platform used by healthcare staffing agencies, travel nurses, and compliance teams. '
+      const refNote = referenceImage ? ` Match the composition and visual style of the reference image.` : ''
+      const fullPrompt = `${brandContext}${aiPrompt}.${refNote} Style: ${styleMap[aiStyle]}. Make it look like a real premium stock photo, not AI generated.`
       // Single call - gpt-image-1 supports n=2
       const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
         method: 'POST',
@@ -181,20 +182,39 @@ export default function ImageBank() {
           )}
         </div>
 
+        {/* Quick prompt suggestions */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          <span style={{ color: '#475569', fontSize: 11, paddingTop: 3 }}>Quick:</span>
+          {[
+            'Nurse on phone smiling in hospital hallway',
+            'Healthcare team meeting in modern office',
+            'HR manager reviewing digital documents on tablet',
+            'Staffing agency professional at computer',
+            'Doctor using smartphone app',
+          ].map(s => (
+            <button key={s} onClick={() => setAiPrompt(s)}
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, padding: '3px 10px', color: '#64748b', fontSize: 11, cursor: 'pointer' }}
+              onMouseEnter={e => { e.target.style.borderColor = 'rgba(99,102,241,0.4)'; e.target.style.color = '#a5b4fc' }}
+              onMouseLeave={e => { e.target.style.borderColor = 'rgba(255,255,255,0.07)'; e.target.style.color = '#64748b' }}>
+              {s.length > 30 ? s.substring(0, 30) + '...' : s}
+            </button>
+          ))}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, marginBottom: 12 }}>
           <input
             value={aiPrompt}
             onChange={e => setAiPrompt(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && generateAIImage()}
-            placeholder="Describe the image... e.g. 'Healthcare worker using a mobile app to track credentials'"
+            placeholder="Describe the image... e.g. 'Nurse smiling while using mobile app in hospital'"
             style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14 }}
           />
           <select value={aiStyle} onChange={e => setAiStyle(e.target.value)}
             style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '11px 14px', color: '#e2e8f0', fontSize: 13 }}>
-            <option value="professional" style={{ background: '#111827' }}>Professional</option>
-            <option value="social" style={{ background: '#111827' }}>Social Media</option>
-            <option value="minimal" style={{ background: '#111827' }}>Minimal</option>
-            <option value="dark" style={{ background: '#111827' }}>Dark/Tech</option>
+            <option value="professional" style={{ background: '#111827' }}>📸 Corporate Photo</option>
+            <option value="social" style={{ background: '#111827' }}>📱 Social/Lifestyle</option>
+            <option value="minimal" style={{ background: '#111827' }}>⬜ Clean Studio</option>
+            <option value="dark" style={{ background: '#111827' }}>🌙 Dark/Tech</option>
           </select>
           <button onClick={generateAIImage} disabled={generatingAI || !aiPrompt.trim()}
             style={{ background: aiPrompt.trim() ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : '#1e293b', color: aiPrompt.trim() ? '#fff' : '#475569', border: 'none', borderRadius: 10, padding: '11px 20px', fontWeight: 700, fontSize: 14, cursor: aiPrompt.trim() ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
