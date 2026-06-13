@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { runFloAgent } from '../lib/floAgent'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../supabase'
 
@@ -23,49 +24,23 @@ function stringToColor(str) {
 
 function AgentPanel({ onClose }) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: "👋 I'm **Flo**, your AI social media agent. I can generate content calendars, write posts, analyze your strategy, and more. What would you like to do?" }
+    { role: 'assistant', content: "👋 I'm **Flo**, your agentic AI. I don't just talk — I take real actions.\n\nTry:\n• *Create 5 Instagram posts about my coffee shop*\n• *Fill my calendar for the next 2 weeks*\n• *Approve all pending posts*\n• *Show me my pipeline*\n• *Rewrite my posts to be more engaging*" }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [progressMsg, setProgressMsg] = useState('')
+  const [lastActions, setLastActions] = useState([])
   const bottomRef = useRef()
+  const conversationRef = useRef([])
 
   const QUICK_PROMPTS = [
-    "Generate a week of posts for Instagram",
-    "Best time to post on LinkedIn?",
-    "Write 5 post ideas for my brand",
-    "Analyze my content strategy",
+    "Fill my calendar for next week",
+    "Create 5 Instagram posts for a fitness brand",
+    "Approve all pending posts",
+    "Show me my pipeline stats",
   ]
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-
-  const send = async (text) => {
-    const msg = text || input.trim()
-    if (!msg) return
-    setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: msg }])
-    setLoading(true)
-    try {
-      const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/ai-proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: 'You are Flo, an expert AI social media strategist and content creator. Help users create engaging content, plan their social media calendar, and grow their audience. Be concise, actionable, and use emojis sparingly. Format with markdown when helpful.' },
-            ...messages.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: msg }
-          ],
-          max_tokens: 800,
-        }),
-      })
-      const data = await res.json()
-      const reply = data?.content || data?.choices?.[0]?.message?.content || 'Sorry, I had trouble responding. Please try again.'
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }])
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ Connection error. Please try again.' }])
-    }
-    setLoading(false)
-  }
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, loading])
 
   const renderContent = (content) => content
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -73,18 +48,45 @@ function AgentPanel({ onClose }) {
     .replace(/`(.*?)`/g, '<code style="background:rgba(99,102,241,0.15);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>')
     .replace(/\n/g, '<br/>')
 
+  const send = async (text) => {
+    const msg = text || input.trim()
+    if (!msg || loading) return
+    setInput('')
+    setLastActions([])
+    const userMsg = { role: 'user', content: msg }
+    setMessages(prev => [...prev, userMsg])
+    setLoading(true)
+    setProgressMsg('Flo is thinking...')
+    try {
+      const history = conversationRef.current
+      const { reply, actions } = await runFloAgent(
+        history,
+        msg,
+        (progress) => setProgressMsg(progress),
+        (action) => setLastActions(prev => [...prev, action])
+      )
+      conversationRef.current = [...history, { role: 'user', content: msg }, { role: 'assistant', content: reply }]
+      setMessages(prev => [...prev, { role: 'assistant', content: reply, actions }])
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ Error: ${err.message || 'Connection failed. Please try again.'}` }])
+    }
+    setLoading(false)
+    setProgressMsg('')
+  }
+
   return (
-    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:380, background:'linear-gradient(180deg,#0a0f1e 0%,#030712 100%)', borderLeft:'1px solid rgba(99,102,241,0.2)', display:'flex', flexDirection:'column', zIndex:1000, boxShadow:'-20px 0 60px rgba(0,0,0,0.5)', animation:'slideInRight 0.3s ease' }}>
-      <style>{`@keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:400, background:'linear-gradient(180deg,#0a0f1e 0%,#030712 100%)', borderLeft:'1px solid rgba(99,102,241,0.2)', display:'flex', flexDirection:'column', zIndex:1000, boxShadow:'-20px 0 60px rgba(0,0,0,0.5)', animation:'slideInRight 0.3s ease' }}>
+      <style>{`@keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      {/* Header */}
       <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(99,102,241,0.15)', display:'flex', alignItems:'center', gap:12 }}>
         <div style={{ width:38, height:38, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 16px rgba(99,102,241,0.4)', flexShrink:0 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
         </div>
         <div style={{ flex:1 }}>
-          <div style={{ fontWeight:700, fontSize:14, color:'#f1f5f9' }}>Flo AI Agent</div>
+          <div style={{ fontWeight:700, fontSize:14, color:'#f1f5f9' }}>Flo — Agentic AI</div>
           <div style={{ fontSize:11, color:'#10b981', display:'flex', alignItems:'center', gap:4 }}>
             <span style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', display:'inline-block' }}/>
-            Online · GPT-4o powered
+            Takes real actions · GPT-4o
           </div>
         </div>
         <button onClick={onClose} style={{ background:'none', border:'none', color:'#64748b', cursor:'pointer', padding:4 }}>
@@ -92,30 +94,48 @@ function AgentPanel({ onClose }) {
         </button>
       </div>
 
+      {/* Messages */}
       <div style={{ flex:1, overflowY:'auto', padding:'16px 16px 8px', display:'flex', flexDirection:'column', gap:12 }}>
         {messages.map((msg, i) => (
-          <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start', flexDirection:msg.role==='user'?'row-reverse':'row' }}>
-            {msg.role==='assistant' && (
-              <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+          <div key={i}>
+            <div style={{ display:'flex', gap:10, alignItems:'flex-start', flexDirection:msg.role==='user'?'row-reverse':'row' }}>
+              {msg.role==='assistant' && (
+                <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+                </div>
+              )}
+              <div style={{ maxWidth:'82%', padding:'10px 14px', borderRadius:msg.role==='user'?'14px 14px 4px 14px':'4px 14px 14px 14px', background:msg.role==='user'?'linear-gradient(135deg,#6366f1,#8b5cf6)':'rgba(255,255,255,0.04)', border:msg.role==='user'?'none':'1px solid rgba(255,255,255,0.07)', fontSize:13, lineHeight:1.6, color:'#f1f5f9' }} dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
+            </div>
+            {/* Action badges */}
+            {msg.actions?.length > 0 && (
+              <div style={{ marginLeft:38, marginTop:6, display:'flex', flexWrap:'wrap', gap:4 }}>
+                {msg.actions.map((a, ai) => (
+                  <div key={ai} style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 8px', background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.25)', borderRadius:20, fontSize:11, color:'#10b981' }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    {a.tool.replace(/_/g,' ')}
+                    {a.result?.created && ` · ${a.result.created} created`}
+                    {a.result?.approved && ` · ${a.result.approved} approved`}
+                    {a.result?.rewritten && ` · ${a.result.rewritten} rewritten`}
+                  </div>
+                ))}
               </div>
             )}
-            <div style={{ maxWidth:'82%', padding:'10px 14px', borderRadius:msg.role==='user'?'14px 14px 4px 14px':'4px 14px 14px 14px', background:msg.role==='user'?'linear-gradient(135deg,#6366f1,#8b5cf6)':'rgba(255,255,255,0.04)', border:msg.role==='user'?'none':'1px solid rgba(255,255,255,0.07)', fontSize:13, lineHeight:1.6, color:'#f1f5f9' }} dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
           </div>
         ))}
         {loading && (
           <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
             <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" style={{ animation:'spin 1s linear infinite' }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
             </div>
-            <div style={{ padding:'12px 16px', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'4px 14px 14px 14px', display:'flex', gap:5, alignItems:'center' }}>
-              {[0,1,2].map(i => <span key={i} style={{ width:7, height:7, borderRadius:'50%', background:'#6366f1', display:'inline-block', animation:`pulse 1.2s ease ${i*0.2}s infinite` }}/>)}
+            <div style={{ padding:'10px 14px', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'4px 14px 14px 14px', fontSize:12, color:'#a5b4fc', fontStyle:'italic' }}>
+              {progressMsg || 'Thinking...'}
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
+      {/* Quick prompts */}
       {messages.length <= 1 && (
         <div style={{ padding:'0 16px 12px', display:'flex', flexWrap:'wrap', gap:6 }}>
           {QUICK_PROMPTS.map((p, i) => (
@@ -124,14 +144,15 @@ function AgentPanel({ onClose }) {
         </div>
       )}
 
+      {/* Input */}
       <div style={{ padding:'12px 16px 16px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Ask Flo anything..." rows={2} style={{ flex:1, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, padding:'10px 14px', color:'#f1f5f9', fontSize:13, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }} />
-          <button onClick={()=>send()} disabled={!input.trim()||loading} style={{ width:40, height:40, borderRadius:10, flexShrink:0, background:input.trim()?'linear-gradient(135deg,#6366f1,#8b5cf6)':'rgba(255,255,255,0.06)', border:'none', cursor:input.trim()?'pointer':'not-allowed', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Tell Flo what to do..." rows={2} style={{ flex:1, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, padding:'10px 14px', color:'#f1f5f9', fontSize:13, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }} />
+          <button onClick={()=>send()} disabled={!input.trim()||loading} style={{ width:40, height:40, borderRadius:10, flexShrink:0, background:input.trim()&&!loading?'linear-gradient(135deg,#6366f1,#8b5cf6)':'rgba(255,255,255,0.06)', border:'none', cursor:input.trim()&&!loading?'pointer':'not-allowed', display:'flex', alignItems:'center', justifyContent:'center' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
-        <div style={{ fontSize:11, color:'#334155', marginTop:6, textAlign:'center' }}>Enter to send · Shift+Enter for new line</div>
+        <div style={{ fontSize:11, color:'#334155', marginTop:6, textAlign:'center' }}>Flo can create posts, fill calendars, approve & rewrite content</div>
       </div>
     </div>
   )
