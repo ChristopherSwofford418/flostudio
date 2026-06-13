@@ -1,151 +1,43 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import Layout from '../components/Layout.jsx'
+import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 
-const PLATFORM_COLORS = {
-  facebook: '#1877f2',
-  instagram: '#e1306c',
-  twitter: '#1da1f2',
-  linkedin: '#0a66c2',
-}
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 
+const PLATFORM_COLORS = { instagram:'#e1306c', twitter:'#1da1f2', linkedin:'#0077b5', facebook:'#1877f2', tiktok:'#ff0050' }
 const PLATFORM_ICONS = {
-  facebook: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
-    </svg>
-  ),
-  instagram: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/>
-      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-    </svg>
-  ),
-  twitter: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"/>
-    </svg>
-  ),
-  linkedin: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"/><circle cx="4" cy="4" r="2"/>
-    </svg>
-  ),
+  instagram: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>,
+  twitter: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/></svg>,
+  linkedin: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>,
+  facebook: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>,
+  tiktok: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.27 8.27 0 004.84 1.55V6.79a4.85 4.85 0 01-1.07-.1z"/></svg>,
 }
 
-const STATUS_CONFIG = {
-  published: { label: 'Published', className: 'badge-published' },
-  scheduled: { label: 'Scheduled', className: 'badge-scheduled' },
-  pending: { label: 'Pending', className: 'badge-pending' },
-  draft: { label: 'Draft', className: 'badge-draft' },
-  rejected: { label: 'Rejected', className: 'badge-rejected' },
-}
-
-const QUICK_ACTIONS = [
-  { platform: 'facebook', label: 'Facebook', color: '#1877f2', bg: 'rgba(24,119,242,0.1)', path: '/compose' },
-  { platform: 'instagram', label: 'Instagram', color: '#e1306c', bg: 'rgba(225,48,108,0.1)', path: '/compose' },
-  { platform: 'twitter', label: 'Twitter / X', color: '#1da1f2', bg: 'rgba(29,161,242,0.1)', path: '/compose' },
-  { platform: 'linkedin', label: 'LinkedIn', color: '#0a66c2', bg: 'rgba(10,102,194,0.1)', path: '/compose' },
-]
-
-const STAT_DEFS = [
-  {
-    label: 'Total Posts',
-    key: 'total',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-      </svg>
-    ),
-    color: '#6366f1',
-    bg: 'rgba(99,102,241,0.12)',
-  },
-  {
-    label: 'Pending Approval',
-    key: 'pending',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-    ),
-    color: '#f59e0b',
-    bg: 'rgba(245,158,11,0.12)',
-  },
-  {
-    label: 'Published',
-    key: 'published',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-      </svg>
-    ),
-    color: '#10b981',
-    bg: 'rgba(16,185,129,0.12)',
-  },
-  {
-    label: 'Drafts',
-    key: 'drafts',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
-      </svg>
-    ),
-    color: '#64748b',
-    bg: 'rgba(100,116,139,0.12)',
-  },
-]
-
-function StatCard({ def, value, index }) {
-  const [hovered, setHovered] = useState(false)
+function AIInsightCard({ insight, loading }) {
+  if (loading) return (
+    <div style={{ padding:'16px 20px', background:'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.04))', border:'1px solid rgba(99,102,241,0.15)', borderRadius:12, display:'flex', alignItems:'center', gap:12 }}>
+      <div style={{ width:36, height:36, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      </div>
+      <div style={{ flex:1 }}>
+        <div style={{ fontSize:11, color:'#6366f1', fontWeight:600, marginBottom:4 }}>FLO AI · ANALYZING</div>
+        <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+          {[0,1,2].map(i => <span key={i} style={{ width:7, height:7, borderRadius:'50%', background:'#6366f1', display:'inline-block', animation:`pulse 1.2s ease ${i*0.2}s infinite` }}/>)}
+        </div>
+      </div>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+    </div>
+  )
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: 'var(--card)',
-        borderRadius: 16,
-        padding: '20px 22px',
-        border: `1px solid ${hovered ? def.color + '33' : 'var(--border)'}`,
-        transition: 'all 0.2s ease',
-        boxShadow: hovered ? `0 4px 24px ${def.color}18` : 'none',
-        animation: `fadeIn 0.3s ease ${index * 0.05}s both`,
-        cursor: 'default',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
-      {hovered && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: `linear-gradient(90deg, ${def.color}, ${def.color}88)`,
-          borderRadius: '16px 16px 0 0',
-        }} />
-      )}
-      <div style={{
-        width: 38,
-        height: 38,
-        borderRadius: 10,
-        background: def.bg,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: def.color,
-        marginBottom: 14,
-        transition: 'transform 0.2s',
-        transform: hovered ? 'scale(1.08)' : 'scale(1)',
-      }}>
-        {def.icon}
+    <div style={{ padding:'16px 20px', background:'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.04))', border:'1px solid rgba(99,102,241,0.15)', borderRadius:12, display:'flex', alignItems:'flex-start', gap:12 }}>
+      <div style={{ width:36, height:36, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
       </div>
-      <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, marginBottom: 5 }}>
-        {value}
+      <div>
+        <div style={{ fontSize:11, color:'#a5b4fc', fontWeight:600, marginBottom:6, letterSpacing:'0.05em' }}>✦ FLO AI INSIGHT</div>
+        <div style={{ fontSize:13.5, color:'#e2e8f0', lineHeight:1.65 }}>{insight}</div>
       </div>
-      <div style={{ color: 'var(--text-muted)', fontSize: 12.5, fontWeight: 500 }}>{def.label}</div>
     </div>
   )
 }
@@ -153,216 +45,186 @@ function StatCard({ def, value, index }) {
 export default function Dashboard() {
   const navigate = useNavigate()
   const [posts, setPosts] = useState([])
-  const [stats, setStats] = useState({ total: 0, scheduled: 0, published: 0, drafts: 0, pending: 0 })
   const [loading, setLoading] = useState(true)
+  const [aiInsight, setAiInsight] = useState('')
+  const [insightLoading, setInsightLoading] = useState(true)
 
-  useEffect(() => { loadPosts() }, [])
+  useEffect(() => {
+    loadPosts()
+    loadAiInsight()
+  }, [])
 
   const loadPosts = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data } = await supabase
-      .from('flo_posts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(10)
-    const p = data || []
-    setPosts(p)
-    setStats({
-      total: p.length,
-      scheduled: p.filter(x => x.status === 'scheduled').length,
-      published: p.filter(x => x.status === 'published').length,
-      drafts: p.filter(x => x.status === 'draft').length,
-      pending: p.filter(x => x.status === 'pending').length,
-    })
+    setLoading(true)
+    const { data } = await supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(20)
+    setPosts(data || [])
     setLoading(false)
   }
 
-  const statValues = [stats.total, stats.pending, stats.published, stats.drafts]
+  const loadAiInsight = async () => {
+    setInsightLoading(true)
+    try {
+      const { data: posts } = await supabase.from('posts').select('platform, status, created_at').limit(50)
+      const summary = posts?.length ? `User has ${posts.length} posts. Platforms: ${[...new Set(posts.map(p=>p.platform))].join(', ')}. Statuses: ${[...new Set(posts.map(p=>p.status))].join(', ')}.` : 'New user with no posts yet.'
+      const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/ai-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            { role: 'system', content: 'You are Flo, an AI social media strategist. Give one short, specific, actionable insight or tip in 1-2 sentences. Be direct and helpful. No fluff.' },
+            { role: 'user', content: `Give me a social media insight based on this: ${summary}` }
+          ],
+          max_tokens: 120,
+        }),
+      })
+      const d = await res.json()
+      setAiInsight(d?.content || d?.choices?.[0]?.message?.content || 'Post consistently at peak times to maximize engagement. Try posting between 9-11am and 6-8pm for best results.')
+    } catch {
+      setAiInsight('Post consistently at peak times to maximize engagement. Try posting between 9-11am and 6-8pm for best results.')
+    }
+    setInsightLoading(false)
+  }
+
+  const stats = {
+    total: posts.length,
+    published: posts.filter(p => p.status === 'published').length,
+    scheduled: posts.filter(p => p.status === 'scheduled').length,
+    pending: posts.filter(p => p.status === 'pending').length,
+  }
+
+  const platformCounts = posts.reduce((acc, p) => { acc[p.platform] = (acc[p.platform] || 0) + 1; return acc }, {})
+
+  const recentPosts = posts.slice(0, 5)
+
+  const STAT_CARDS = [
+    { label: 'Total Posts', value: stats.total, icon: '📝', color: '#6366f1', change: '+12%' },
+    { label: 'Published', value: stats.published, icon: '✅', color: '#10b981', change: '+8%' },
+    { label: 'Scheduled', value: stats.scheduled, icon: '🕐', color: '#f59e0b', change: '+3' },
+    { label: 'Pending Review', value: stats.pending, icon: '⏳', color: '#ec4899', change: stats.pending > 0 ? 'Needs attention' : 'All clear' },
+  ]
 
   return (
     <Layout title="Dashboard">
-      {/* Quick Actions */}
-      <div style={{ marginBottom: 24 }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-          Quick Compose
-        </p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {QUICK_ACTIONS.map((qa, i) => (
-            <button
-              key={qa.platform}
-              onClick={() => navigate(qa.path)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '7px 14px',
-                borderRadius: 9,
-                border: `1px solid ${qa.color}22`,
-                background: qa.bg,
-                color: qa.color,
-                fontSize: 12.5,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                animation: `fadeIn 0.3s ease ${i * 0.04}s both`,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 4px 12px ${qa.color}22` }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
-            >
-              <span style={{ opacity: 0.9 }}>{PLATFORM_ICONS[qa.platform]}</span>
-              {qa.label}
-            </button>
+      <div style={{ display:'flex', flexDirection:'column', gap:24, animation:'fadeIn 0.3s ease' }}>
+        <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+        {/* Welcome + AI Insight */}
+        <div>
+          <h2 style={{ fontSize:22, fontWeight:800, color:'#f1f5f9', marginBottom:4 }}>Good morning ✦</h2>
+          <p style={{ fontSize:14, color:'#64748b', marginBottom:16 }}>Here's what's happening with your social media today.</p>
+          <AIInsightCard insight={aiInsight} loading={insightLoading} />
+        </div>
+
+        {/* Stats */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
+          {STAT_CARDS.map((s, i) => (
+            <div key={i} style={{ background:'var(--card)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:14, padding:'18px 20px', transition:'all 0.2s', cursor:'default' }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.12)';e.currentTarget.style.transform='translateY(-2px)'}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.06)';e.currentTarget.style.transform='translateY(0)'}}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
+                <span style={{ fontSize:20 }}>{s.icon}</span>
+                <span style={{ fontSize:11, fontWeight:600, color:s.color, background:`${s.color}18`, padding:'2px 8px', borderRadius:20 }}>{s.change}</span>
+              </div>
+              <div style={{ fontSize:30, fontWeight:800, color:'#f1f5f9', lineHeight:1, marginBottom:4 }}>{s.value}</div>
+              <div style={{ fontSize:12, color:'#64748b', fontWeight:500 }}>{s.label}</div>
+            </div>
           ))}
         </div>
-      </div>
 
-      {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
-        {STAT_DEFS.map((def, i) => (
-          <StatCard key={def.key} def={def} value={statValues[i]} index={i} />
-        ))}
-      </div>
-
-      {/* Recent posts */}
-      <div style={{
-        background: 'var(--card)',
-        borderRadius: 16,
-        border: '1px solid var(--border)',
-        animation: 'fadeIn 0.35s ease 0.1s both',
-      }}>
-        <div style={{
-          padding: '18px 24px',
-          borderBottom: '1px solid rgba(255,255,255,0.04)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}>
-          <div>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Recent Posts</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 1 }}>Last 10 posts across all platforms</p>
-          </div>
-          <button
-            onClick={() => navigate('/compose')}
-            style={{
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              padding: '7px 14px',
-              fontSize: 12.5,
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(99,102,241,0.4)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(99,102,241,0.3)' }}
-          >
-            + New Post
-          </button>
-        </div>
-
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center' }}>
-            <div className="spinner" style={{ margin: '0 auto' }} />
-          </div>
-        ) : posts.length === 0 ? (
-          <div style={{ padding: '56px 40px', textAlign: 'center', animation: 'fadeIn 0.3s ease' }}>
-            <div style={{ fontSize: 52, marginBottom: 14, opacity: 0.8 }}>✍️</div>
-            <h3 style={{ color: 'var(--text-primary)', fontSize: 16, fontWeight: 700, marginBottom: 6 }}>No posts yet</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13.5, marginBottom: 22, lineHeight: 1.6 }}>
-              Create your first AI-generated post and start growing your audience.
-            </p>
-            <button
-              onClick={() => navigate('/compose')}
-              style={{
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 10,
-                padding: '11px 26px',
-                fontWeight: 600,
-                fontSize: 14,
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(99,102,241,0.35)',
-                transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(99,102,241,0.45)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(99,102,241,0.35)' }}
-            >
-              Create your first post
-            </button>
-          </div>
-        ) : (
-          <div>
-            {posts.map((post, i) => {
-              const platformColor = PLATFORM_COLORS[post.platform] || '#6366f1'
-              const statusCfg = STATUS_CONFIG[post.status] || STATUS_CONFIG.draft
-              return (
-                <div
-                  key={post.id}
-                  style={{
-                    padding: '14px 24px',
-                    borderBottom: i < posts.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    transition: 'background 0.12s',
-                    animation: `fadeIn 0.25s ease ${i * 0.03}s both`,
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  {/* Platform icon */}
-                  <div style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 9,
-                    background: `${platformColor}18`,
-                    border: `1px solid ${platformColor}28`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: platformColor,
-                    flexShrink: 0,
-                  }}>
-                    {PLATFORM_ICONS[post.platform] || (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
-                      </svg>
-                    )}
+        {/* Main grid */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:20 }}>
+          {/* Recent posts */}
+          <div style={{ background:'var(--card)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:14, overflow:'hidden' }}>
+            <div style={{ padding:'18px 20px', borderBottom:'1px solid rgba(255,255,255,0.05)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div style={{ fontWeight:700, fontSize:15, color:'#f1f5f9' }}>Recent Posts</div>
+              <button onClick={()=>navigate('/approve')} style={{ fontSize:12, color:'#6366f1', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>View all →</button>
+            </div>
+            {loading ? (
+              <div style={{ padding:40, textAlign:'center', color:'#475569' }}>Loading...</div>
+            ) : recentPosts.length === 0 ? (
+              <div style={{ padding:40, textAlign:'center' }}>
+                <div style={{ fontSize:32, marginBottom:12 }}>✦</div>
+                <div style={{ fontSize:14, color:'#64748b', marginBottom:16 }}>No posts yet. Let Flo help you get started.</div>
+                <button onClick={()=>navigate('/compose')} style={{ background:'linear-gradient(135deg,#6366f1,#8b5cf6)', color:'#fff', border:'none', borderRadius:9, padding:'9px 20px', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Create First Post</button>
+              </div>
+            ) : (
+              <div>
+                {recentPosts.map((post, i) => (
+                  <div key={post.id} onClick={()=>navigate('/approve')} style={{ padding:'14px 20px', borderBottom:i<recentPosts.length-1?'1px solid rgba(255,255,255,0.04)':'none', display:'flex', alignItems:'flex-start', gap:12, cursor:'pointer', transition:'background 0.15s' }}
+                    onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.02)'}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <div style={{ width:34, height:34, borderRadius:9, background:`${PLATFORM_COLORS[post.platform]||'#6366f1'}22`, display:'flex', alignItems:'center', justifyContent:'center', color:PLATFORM_COLORS[post.platform]||'#6366f1', flexShrink:0 }}>
+                      {PLATFORM_ICONS[post.platform] || <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13.5, color:'#e2e8f0', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:4 }}>{post.content || 'No content'}</div>
+                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <span style={{ fontSize:11, color:'#475569', textTransform:'capitalize' }}>{post.platform}</span>
+                        <span style={{ fontSize:11, color:'#334155' }}>·</span>
+                        <span style={{ fontSize:11, color:'#475569' }}>{new Date(post.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:20, flexShrink:0,
+                      background: post.status==='published'?'rgba(16,185,129,0.12)':post.status==='scheduled'?'rgba(99,102,241,0.12)':post.status==='pending'?'rgba(245,158,11,0.12)':'rgba(71,85,105,0.12)',
+                      color: post.status==='published'?'#34d399':post.status==='scheduled'?'#a5b4fc':post.status==='pending'?'#fbbf24':'#64748b',
+                    }}>{post.status}</span>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-                  {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{
-                      color: 'var(--text-primary)',
-                      fontSize: 13.5,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      marginBottom: 3,
-                      fontWeight: 450,
-                    }}>
-                      {post.content}
-                    </p>
-                    <p style={{ color: 'var(--text-muted)', fontSize: 11.5 }}>
-                      <span style={{ textTransform: 'capitalize' }}>{post.platform}</span>
-                      {post.brand && <span> &middot; <span style={{ textTransform: 'capitalize' }}>{post.brand}</span></span>}
-                      {post.scheduled_at && <span> &middot; {new Date(post.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
-                    </p>
-                  </div>
-
-                  {/* Status badge */}
-                  <span className={`badge ${statusCfg.className}`} style={{ flexShrink: 0 }}>
-                    {statusCfg.label}
-                  </span>
+          {/* Right column */}
+          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+            {/* Platform breakdown */}
+            <div style={{ background:'var(--card)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:14, padding:'18px 20px' }}>
+              <div style={{ fontWeight:700, fontSize:14, color:'#f1f5f9', marginBottom:14 }}>Platform Breakdown</div>
+              {Object.keys(platformCounts).length === 0 ? (
+                <div style={{ fontSize:13, color:'#475569', textAlign:'center', padding:'12px 0' }}>No data yet</div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                  {Object.entries(platformCounts).sort((a,b)=>b[1]-a[1]).map(([platform, count]) => {
+                    const pct = Math.round((count / stats.total) * 100)
+                    return (
+                      <div key={platform}>
+                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:7, fontSize:12.5, color:'#94a3b8', fontWeight:500, textTransform:'capitalize' }}>
+                            <span style={{ color:PLATFORM_COLORS[platform]||'#6366f1' }}>{PLATFORM_ICONS[platform]}</span>
+                            {platform}
+                          </div>
+                          <span style={{ fontSize:12, color:'#64748b' }}>{count} · {pct}%</span>
+                        </div>
+                        <div style={{ height:4, background:'rgba(255,255,255,0.06)', borderRadius:2, overflow:'hidden' }}>
+                          <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,${PLATFORM_COLORS[platform]||'#6366f1'},${PLATFORM_COLORS[platform]||'#6366f1'}88)`, borderRadius:2, transition:'width 0.8s ease' }}/>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              )}
+            </div>
+
+            {/* Quick actions */}
+            <div style={{ background:'var(--card)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:14, padding:'18px 20px' }}>
+              <div style={{ fontWeight:700, fontSize:14, color:'#f1f5f9', marginBottom:14 }}>Quick Actions</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {[
+                  { label:'✦ AI Generate Post', action:()=>navigate('/compose'), primary:true },
+                  { label:'📅 View Calendar', action:()=>navigate('/calendar') },
+                  { label:'🖼 Image Studio', action:()=>navigate('/images') },
+                  { label:'✅ Review Pending', action:()=>navigate('/approve') },
+                ].map((item, i) => (
+                  <button key={i} onClick={item.action} style={{ padding:'10px 14px', borderRadius:9, border:item.primary?'1px solid rgba(99,102,241,0.3)':'1px solid rgba(255,255,255,0.06)', background:item.primary?'linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08))':'rgba(255,255,255,0.02)', color:item.primary?'#a5b4fc':'#94a3b8', fontSize:13, fontWeight:item.primary?600:500, cursor:'pointer', textAlign:'left', fontFamily:'inherit', transition:'all 0.15s' }}
+                    onMouseEnter={e=>{e.currentTarget.style.background=item.primary?'rgba(99,102,241,0.2)':'rgba(255,255,255,0.05)';e.currentTarget.style.color='#f1f5f9'}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=item.primary?'linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08))':'rgba(255,255,255,0.02)';e.currentTarget.style.color=item.primary?'#a5b4fc':'#94a3b8'}}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </Layout>
   )
