@@ -11,6 +11,7 @@ import Approve from './pages/Approve.jsx'
 import AgentHQ from './pages/AgentHQ.jsx'
 import AICalendar from './pages/AICalendar.jsx'
 import Pipeline from './pages/Pipeline.jsx'
+import ResetPassword from './pages/ResetPassword.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -37,6 +38,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/auth" element={!session ? <Auth /> : <Navigate to="/agent" />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={session ? <Navigate to="/agent" /> : <Navigate to="/auth" />} />
       {/* Agentic AI pages */}
       <Route path="/agent" element={session ? <AgentHQ /> : <Navigate to="/auth" />} />

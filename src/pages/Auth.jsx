@@ -7,16 +7,26 @@ export default function Auth() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setMessage('')
     try {
-      const { error } = mode === 'signup'
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password })
-      if (error) setError(error.message)
+      if (mode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`
+        })
+        if (error) setError(error.message)
+        else setMessage('Password reset email sent! Check your inbox.')
+      } else {
+        const { error } = mode === 'signup'
+          ? await supabase.auth.signUp({ email, password })
+          : await supabase.auth.signInWithPassword({ email, password })
+        if (error) setError(error.message)
+      }
     } catch (e) {
       setError(e.message)
     }
@@ -35,35 +45,54 @@ export default function Auth() {
 
         <div style={{ background: '#1e293b', borderRadius: 20, padding: 32, border: '1px solid rgba(255,255,255,0.07)' }}>
           <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 700, marginBottom: 24 }}>
-            {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+            {mode === 'signin' ? 'Welcome back' : mode === 'signup' ? 'Create your account' : 'Reset your password'}
           </h2>
 
           {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '10px 14px', color: '#f87171', fontSize: 14, marginBottom: 16 }}>{error}</div>}
+          {message && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 10, padding: '10px 14px', color: '#4ade80', fontSize: 14, marginBottom: 16 }}>{message}</div>}
 
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 14 }}>
               <label style={{ color: '#94a3b8', fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 6 }}>Email</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14 }}
+                style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
                 placeholder="you@company.com" />
             </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ color: '#94a3b8', fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 6 }}>Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-                style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14 }}
-                placeholder="••••••••" />
-            </div>
+            {mode !== 'forgot' && (
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ color: '#94a3b8', fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 6 }}>Password</label>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+                  style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+                  placeholder="••••••••" />
+              </div>
+            )}
+            {mode === 'signin' && (
+              <div style={{ textAlign: 'right', marginBottom: 16 }}>
+                <button type="button" onClick={() => { setMode('forgot'); setError(''); setMessage('') }}
+                  style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 13, cursor: 'pointer', padding: 0 }}>
+                  Forgot password?
+                </button>
+              </div>
+            )}
+            {mode !== 'signin' && <div style={{ marginBottom: 20 }} />}
             <button type="submit" disabled={loading}
               style={{ width: '100%', background: '#6366f1', color: '#fff', border: 'none', borderRadius: 12, padding: '13px', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
-              {loading ? 'Please wait...' : mode === 'signin' ? 'Sign In' : 'Create Account'}
+              {loading ? 'Please wait...' : mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Email'}
             </button>
           </form>
 
           <div style={{ textAlign: 'center', marginTop: 20 }}>
-            <button onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-              style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 14, cursor: 'pointer' }}>
-              {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-            </button>
+            {mode === 'forgot' ? (
+              <button onClick={() => { setMode('signin'); setError(''); setMessage('') }}
+                style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 14, cursor: 'pointer' }}>
+                Back to Sign In
+              </button>
+            ) : (
+              <button onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setMessage('') }}
+                style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 14, cursor: 'pointer' }}>
+                {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+              </button>
+            )}
           </div>
         </div>
       </div>
