@@ -1,0 +1,47 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "db",
+    "server",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {
+    "DATABASE_URL": "mysql://3toGadv4J9JKbzL.root:j9vM0JPHaE0bA9nJSA68@gateway03.us-east-1.prod.aws.tidbcloud.com:4000/RRyRR2r653oYHaMMETFRjb?ssl={\"rejectUnauthorized\":true}"
+  },
+  "experiments": [
+    "no_db_push"
+  ],
+  "git_remote": {
+    "repo_url": "s3://vida-prod-gitrepo/webdev-git/310519663747676936/RRyRR2r653oYHaMMETFRjb",
+    "access_key_id": "ASIAZV3A2ECZOJ3265PY",
+    "secret_access_key": "tPByzpQcgThSwUjFUzg0c4aeOPAud9qyFPgIn/vW",
+    "session_token": "IQoJb3JpZ2luX2VjEIT//////////wEaCXVzLWVhc3QtMSJHMEUCIQCjwiiy/I6Y0oqEkAqt4CxV5RbybBy6J0OFZk8ZoH4k+wIgOrgSPEp7yKnhaYdBT8rrcxwFoLp7P05lwCku4DCmXMkq9gMITRAEGgw2NjUzODYwOTg4NjYiDC7zv7pWbIBt6BxgfSrTA/eBtdh7E/Wz3v0HNadAtvzSTyuwP45667v+Y/4EbW+O6Pujjs8qYtSbgP6Mu/DLNNpdS9yaMGGGX0h2OEk3IIQU2GgrFHrIOEnczR7ikBT9doHqwYkTrHt9AnKK7ucl2fehUEVcZ/Hn6TFxdylmoGjTphgeNxCzuKkhFLGnywdLJERC2ZSuwkPvmxLe3MHTL1nmyrqYsEOCGRNfE3clxNVNt/0PNCZXPZOhFV+4UGJVUEA16sXiBvX4in6AkjlrXsSgMFT5VoN83nMHlg1LSXGae20FSycHQRKVN4XXs29swOw/gEDsBq23jv30Ymjz6TGL4fyFgtaafDi9J3svYBCto2Fy2NF7ACv4vnbDXAYG18M6TOLHNKi0ixClailSuYH0IzJusgo9a2zIE6CIm0sL/9j/W2+Bx34KK94yoaWx33dgpiZ6uoH72zaZbR78GVZySnWFHP8pYB4S8M9K0Y9xMg6mfHxTKTcD1jGASxHaqsuuqwBfLlLcY5YlX3/OSm8gDngX9oa8gbUvkeK3SdBDI3UxFd06rpPIRcQReW4F+tvcqDnOdzqff9PDLEMkS7fQyfHhKlfgotkSi/f7BIDq49lONj3Xeo1UoBGscN45oHOTMIeBvNEGOp0ByvrtdCKyxoof8h+34uganSsGkOtLfsX90KlgedqD+6i/enNPcz6bH/CEMVRO8QEs9MrTxfnFQM7In8K/l+DolXMz3FJark7NCq6U5R2JeWh1lySZPbjBQN4OQhQ/bvHcR1iJkqhYrgrut5vAPKcWUWkSKAIMP6m3kY7eXyeI2TR5g25/pv3P92zKyF0i7Qi7KuQ0YGJSS6Z30upZsQ==",
+    "expiration": "2026-06-15T07:27:03.000Z"
+  },
+  "name": "auto-wizard",
+  "path": "/home/ubuntu/auto-wizard",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "oYMtr3BVs8N9GSvKKAK6Hm",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "EXPO_APP_QR_URL": "exps://8081-irpyty4v1zesiyju01cs0-58514302.us2.manus.computer",
+    "EXPO_PACKAGER_PROXY_URL": "https://8081-irpyty4v1zesiyju01cs0-58514302.us2.manus.computer",
+    "EXPO_PUBLIC_API_BASE_URL": "https://3000-irpyty4v1zesiyju01cs0-58514302.us2.manus.computer",
+    "JWT_SECRET": "3DTQwf5yC3bZS5RmBCtLT8",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "Christopher Swofford",
+    "OWNER_OPEN_ID": "Fi2VH4X7rD8AanXhC24MeF",
+    "REACT_NATIVE_PACKAGER_HOSTNAME": "8081-irpyty4v1zesiyju01cs0-58514302.us2.manus.computer",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "8a22a233-a13a-4b80-9bbd-8e3adc7a0d3e",
+    "VITE_APP_ID": "RRyRR2r653oYHaMMETFRjb",
+    "VITE_APP_LOGO": "",
+    "VITE_APP_TITLE": "Auto Wizard",
+    "VITE_FRONTEND_FORGE_API_KEY": "YVuyM8oGRb9cqzMtQwyk2R",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "app",
+  "test_command": "pnpm test"
+}

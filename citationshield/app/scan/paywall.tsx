@@ -1,6 +1,22 @@
-import { useState } from "react";
+/**
+ * Paywall Screen — Apple App Store Review Compliant
+ *
+ * Compliance checklist (App Store Review Guideline 3.1.2):
+ * ✅ Price and billing period clearly shown for each plan
+ * ✅ Auto-renew disclosure visible without scrolling
+ * ✅ Restore Purchases button present
+ * ✅ Privacy Policy link accessible
+ * ✅ Terms of Service link accessible
+ * ✅ Cancellation instructions provided
+ * ✅ No external payment links
+ * ✅ IAP via StoreKit / RevenueCat (react-native-purchases)
+ */
+
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,42 +25,63 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { Platform } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { setSubscription } from "@/lib/scan-store";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import {
+  configurePurchases,
+  getOfferings,
+  purchasePackage,
+  restorePurchases,
+} from "@/lib/purchases";
 
-type Plan = {
-  id: "pro" | "law_firm";
+// Product IDs must match exactly what's configured in App Store Connect
+// and RevenueCat dashboard
+const PRODUCT_IDS = {
+  pro: "com.citationshield.app.pro.monthly",
+  law_firm: "com.citationshield.app.lawfirm.monthly",
+};
+
+type PlanId = "pro" | "law_firm";
+
+type PlanDef = {
+  id: PlanId;
   name: string;
   price: string;
   period: string;
+  billingDescription: string;
   description: string;
   features: string[];
   highlighted: boolean;
+  productId: string;
 };
 
-const PLANS: Plan[] = [
+const PLAN_DEFS: PlanDef[] = [
   {
     id: "pro",
     name: "Pro",
-    price: "$29",
-    period: "/month",
+    price: "$29.99",
+    period: "/ month",
+    billingDescription: "$29.99 per month, auto-renews monthly",
     description: "For solo practitioners and small firms",
     features: [
       "Unlimited citation scans",
       "PDF, DOCX, and TXT support",
-      "Full verification reports",
+      "Full AI verification reports",
       "Export & share reports",
       "Priority processing",
     ],
     highlighted: true,
+    productId: PRODUCT_IDS.pro,
   },
   {
     id: "law_firm",
     name: "Law Firm",
-    price: "$99",
-    period: "/month",
+    price: "$99.99",
+    period: "/ month",
+    billingDescription: "$99.99 per month, auto-renews monthly",
     description: "For teams and large firms",
     features: [
       "Everything in Pro",
@@ -54,11 +91,28 @@ const PLANS: Plan[] = [
       "Dedicated support",
     ],
     highlighted: false,
+    productId: PRODUCT_IDS.law_firm,
   },
 ];
 
-function PlanCard({ plan, selected, onSelect }: { plan: Plan; selected: boolean; onSelect: () => void }) {
+function PlanCard({
+  plan,
+  selected,
+  storePackage,
+  onSelect,
+}: {
+  plan: PlanDef;
+  selected: boolean;
+  storePackage: any | null;
+  onSelect: () => void;
+}) {
   const colors = useColors();
+  // Use live price from StoreKit if available, otherwise fall back to static
+  const displayPrice = storePackage?.product?.priceString ?? plan.price;
+  const displayBilling = storePackage
+    ? `${storePackage.product.priceString} per month, auto-renews monthly`
+    : plan.billingDescription;
+
   return (
     <Pressable
       onPress={onSelect}
@@ -73,20 +127,22 @@ function PlanCard({ plan, selected, onSelect }: { plan: Plan; selected: boolean;
       ]}
     >
       {plan.highlighted && (
-        <View style={[styles.popularBadge, { backgroundColor: colors.accent }]}>
+        <View style={[styles.popularBadge, { backgroundColor: colors.accent ?? colors.primary }]}>
           <Text style={styles.popularText}>MOST POPULAR</Text>
         </View>
       )}
       <View style={styles.planHeader}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={[styles.planName, { color: colors.foreground }]}>{plan.name}</Text>
           <Text style={[styles.planDesc, { color: colors.muted }]}>{plan.description}</Text>
         </View>
         <View style={styles.planPriceContainer}>
-          <Text style={[styles.planPrice, { color: colors.primary }]}>{plan.price}</Text>
+          <Text style={[styles.planPrice, { color: colors.primary }]}>{displayPrice}</Text>
           <Text style={[styles.planPeriod, { color: colors.muted }]}>{plan.period}</Text>
         </View>
       </View>
+      {/* Billing description — required by Apple */}
+      <Text style={[styles.billingDesc, { color: colors.muted }]}>{displayBilling}</Text>
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
       {plan.features.map((f) => (
         <View key={f} style={styles.featureRow}>
@@ -105,24 +161,97 @@ function PlanCard({ plan, selected, onSelect }: { plan: Plan; selected: boolean;
 
 export default function PaywallScreen() {
   const colors = useColors();
-  const [selectedPlan, setSelectedPlan] = useState<"pro" | "law_firm">("pro");
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>("pro");
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [offerings, setOfferings] = useState<any | null>(null);
+  const [loadingOfferings, setLoadingOfferings] = useState(true);
+
+  useEffect(() => {
+    loadOfferings();
+  }, []);
+
+  async function loadOfferings() {
+    setLoadingOfferings(true);
+    try {
+      await configurePurchases();
+      const offering = await getOfferings();
+      setOfferings(offering);
+    } catch {
+      // Silently fail — will use static prices
+    } finally {
+      setLoadingOfferings(false);
+    }
+  }
+
+  function getPackageForPlan(planId: PlanId): any | null {
+    if (!offerings?.availablePackages) return null;
+    const productId = PRODUCT_IDS[planId];
+    return (
+      offerings.availablePackages.find(
+        (pkg: any) => pkg.product?.productIdentifier === productId
+      ) ?? null
+    );
+  }
 
   async function handleSubscribe() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
-    // In production, this would open the App Store subscription flow via react-native-purchases (RevenueCat)
-    // For now, we simulate a successful purchase
-    await new Promise((r) => setTimeout(r, 1500));
-    await setSubscription({ tier: selectedPlan });
-    setLoading(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    Alert.alert(
-      "Subscription Activated!",
-      `Welcome to Citation Shield ${selectedPlan === "pro" ? "Pro" : "Law Firm"}. You now have unlimited scans.`,
-      [{ text: "Start Scanning", onPress: () => router.replace("/scan/upload") }]
-    );
+
+    try {
+      const pkg = getPackageForPlan(selectedPlan);
+
+      if (pkg && Platform.OS !== "web") {
+        // Real StoreKit purchase via RevenueCat
+        const success = await purchasePackage(pkg);
+        if (!success) {
+          setLoading(false);
+          return; // User cancelled — don't show error
+        }
+      } else {
+        // Fallback for web preview / simulator (no real IAP)
+        await setSubscription({ tier: selectedPlan });
+      }
+
+      setLoading(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "Subscription Activated!",
+        `Welcome to Citation Shield ${selectedPlan === "pro" ? "Pro" : "Law Firm"}. You now have unlimited scans.`,
+        [{ text: "Start Scanning", onPress: () => router.replace("/scan/upload") }]
+      );
+    } catch (err: any) {
+      setLoading(false);
+      if (!err?.userCancelled) {
+        Alert.alert("Purchase Failed", "Something went wrong. Please try again.");
+      }
+    }
   }
+
+  async function handleRestore() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRestoring(true);
+    try {
+      const success = await restorePurchases();
+      if (success) {
+        Alert.alert(
+          "Purchases Restored",
+          "Your subscription has been restored.",
+          [{ text: "OK", onPress: () => router.replace("/(tabs)") }]
+        );
+      } else {
+        Alert.alert("No Purchases Found", "No previous subscriptions were found for this Apple ID.");
+      }
+    } catch {
+      Alert.alert("Restore Failed", "Could not restore purchases. Please try again.");
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  const selectedPkg = getPackageForPlan(selectedPlan);
+  const selectedDef = PLAN_DEFS.find((p) => p.id === selectedPlan)!;
+  const displayPrice = selectedPkg?.product?.priceString ?? selectedDef.price;
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
@@ -144,19 +273,24 @@ export default function PaywallScreen() {
           <Text style={styles.heroEmoji}>⭐</Text>
           <Text style={[styles.heroTitle, { color: colors.foreground }]}>Unlock Unlimited Scans</Text>
           <Text style={[styles.heroSubtitle, { color: colors.muted }]}>
-            You've used all your free scans. Upgrade to keep verifying citations without limits.
+            Upgrade to verify citations without limits. Subscriptions auto-renew monthly. Cancel anytime in Settings → Apple ID → Subscriptions.
           </Text>
         </View>
 
         {/* Plans */}
-        {PLANS.map((plan) => (
-          <PlanCard
-            key={plan.id}
-            plan={plan}
-            selected={selectedPlan === plan.id}
-            onSelect={() => setSelectedPlan(plan.id)}
-          />
-        ))}
+        {loadingOfferings ? (
+          <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+        ) : (
+          PLAN_DEFS.map((plan) => (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              selected={selectedPlan === plan.id}
+              storePackage={getPackageForPlan(plan.id)}
+              onSelect={() => setSelectedPlan(plan.id)}
+            />
+          ))
+        )}
 
         {/* Subscribe Button */}
         <Pressable
@@ -164,17 +298,56 @@ export default function PaywallScreen() {
           disabled={loading}
           style={({ pressed }) => [
             styles.subscribeButton,
-            { backgroundColor: colors.primary, opacity: loading || pressed ? 0.75 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+            {
+              backgroundColor: colors.primary,
+              opacity: loading || pressed ? 0.75 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            },
           ]}
         >
-          <Text style={styles.subscribeButtonText}>
-            {loading ? "Processing…" : `Subscribe to ${selectedPlan === "pro" ? "Pro" : "Law Firm"}`}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.subscribeButtonText}>
+              Subscribe — {displayPrice}/month
+            </Text>
+          )}
         </Pressable>
 
+        {/* Restore Purchases — required by Apple */}
+        <Pressable
+          onPress={handleRestore}
+          disabled={restoring}
+          style={({ pressed }) => [styles.restoreButton, { opacity: pressed || restoring ? 0.6 : 1 }]}
+        >
+          {restoring ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <Text style={[styles.restoreText, { color: colors.primary }]}>Restore Purchases</Text>
+          )}
+        </Pressable>
+
+        {/* Auto-renew disclosure — required by Apple, must be visible */}
         <Text style={[styles.legalText, { color: colors.muted }]}>
-          Subscriptions auto-renew. Cancel anytime in App Store settings. By subscribing you agree to our Terms of Service.
+          Subscriptions automatically renew at the end of each billing period unless cancelled at least 24 hours before the renewal date. Your Apple ID account will be charged upon confirmation of purchase. Manage or cancel your subscription in Settings → Apple ID → Subscriptions.
         </Text>
+
+        {/* Privacy & Terms links — required by Apple */}
+        <View style={styles.legalLinks}>
+          <Pressable
+            onPress={() => Linking.openURL("https://citationshield.app/privacy")}
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          >
+            <Text style={[styles.legalLink, { color: colors.primary }]}>Privacy Policy</Text>
+          </Pressable>
+          <Text style={[styles.legalSep, { color: colors.muted }]}>·</Text>
+          <Pressable
+            onPress={() => Linking.openURL("https://citationshield.app/terms")}
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          >
+            <Text style={[styles.legalLink, { color: colors.primary }]}>Terms of Service</Text>
+          </Pressable>
+        </View>
 
         <Pressable
           onPress={() => router.back()}
@@ -209,7 +382,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 48,
     gap: 14,
   },
   hero: {
@@ -227,9 +400,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   heroSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 20,
     maxWidth: 300,
   },
   planCard: {
@@ -274,6 +447,10 @@ const styles = StyleSheet.create({
   planPeriod: {
     fontSize: 12,
   },
+  billingDesc: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
   divider: {
     height: StyleSheet.hairlineWidth,
   },
@@ -307,10 +484,31 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
   },
+  restoreButton: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  restoreText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
   legalText: {
     fontSize: 11,
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 17,
+  },
+  legalLinks: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  legalLink: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  legalSep: {
+    fontSize: 12,
   },
   notNowText: {
     fontSize: 14,

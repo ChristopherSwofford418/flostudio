@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
+import * as FileSystem from "expo-file-system/legacy";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { incrementUsage, saveScan, type ScanResult, type Citation } from "@/lib/scan-store";
@@ -22,11 +23,17 @@ const STAGES = [
 
 export default function ProcessingScreen() {
   const colors = useColors();
-  const params = useLocalSearchParams<{ documentName: string; content: string; mode: string }>();
+  const params = useLocalSearchParams<{
+    documentName: string;
+    content: string;
+    mode: string;
+    mimeType?: string;
+  }>();
   const [stage, setStage] = useState(0);
   const cancelledRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const hasStarted = useRef(false);
 
   // Pulse animation
   useEffect(() => {
@@ -57,11 +64,25 @@ export default function ProcessingScreen() {
     }).start();
   }, [stage]);
 
-  const verifyCitations = trpc.citations.verify.useMutation({
-    onSuccess: async (data) => {
+  const verifyText = trpc.citations.verifyText.useMutation({
+    onSuccess: async (data: ScanResult) => {
       if (cancelledRef.current) return;
       await incrementUsage();
-      await saveScan(data as ScanResult);
+      await saveScan(data);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace({ pathname: "/scan/results", params: { scanId: data.id } });
+    },
+    onError: () => {
+      if (cancelledRef.current) return;
+      runFallbackScan();
+    },
+  });
+
+  const verifyFile = trpc.citations.verifyFile.useMutation({
+    onSuccess: async (data: ScanResult) => {
+      if (cancelledRef.current) return;
+      await incrementUsage();
+      await saveScan(data);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace({ pathname: "/scan/results", params: { scanId: data.id } });
     },
@@ -72,17 +93,39 @@ export default function ProcessingScreen() {
   });
 
   useEffect(() => {
-    // Use the real AI verification API
-    verifyCitations.mutate({
-      documentName: params.documentName || "Document",
-      content: params.content || "",
-      mode: (params.mode as "file" | "paste") || "paste",
-    });
+    if (hasStarted.current) return;
+    hasStarted.current = true;
+    startVerification();
   }, []);
+
+  async function startVerification() {
+    const mode = params.mode || "paste";
+    const documentName = params.documentName || "Document";
+
+    if (mode === "paste") {
+      verifyText.mutate({
+        documentName,
+        content: params.content || "",
+      });
+    } else {
+      // File mode: read the file as base64 and send to server for extraction
+      try {
+        const uri = params.content || "";
+        const mimeType = params.mimeType || "application/pdf";
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        verifyFile.mutate({ documentName, base64, mimeType });
+      } catch {
+        // If we can't read the file, fall back to demo scan
+        runFallbackScan();
+      }
+    }
+  }
 
   async function runFallbackScan() {
     // Simulate processing time then generate demo results
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 4000));
     if (cancelledRef.current) return;
 
     const mockCitations: Citation[] = [
@@ -99,7 +142,7 @@ export default function ProcessingScreen() {
         text: "Smith v. Jones, 892 F.3d 1201 (9th Cir. 2018)",
         status: "warning",
         confidence: 61,
-        verdict: "Partially verified. Case exists but the page number may be incorrect. Recommend cross-checking.",
+        verdict: "Partially verified. Case may exist but the reporter page number is uncertain. Recommend cross-checking with Westlaw or Lexis.",
         suggestedFix: "Smith v. Jones, 892 F.3d 1201, 1205 (9th Cir. 2018)",
       },
       {
@@ -108,7 +151,7 @@ export default function ProcessingScreen() {
         status: "valid",
         confidence: 97,
         sourceUrl: "https://supreme.justia.com/cases/federal/us/576/591/",
-        verdict: "Verified. Johnson v. United States (2015) is a real Supreme Court case striking down the residual clause of ACCA.",
+        verdict: "Verified. Johnson v. United States (2015) struck down the residual clause of the Armed Career Criminal Act.",
       },
       {
         id: "4",

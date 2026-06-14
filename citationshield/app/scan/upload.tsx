@@ -24,7 +24,7 @@ export default function UploadScreen() {
   const colors = useColors();
   const [mode, setMode] = useState<InputMode>("file");
   const [pastedText, setPastedText] = useState("");
-  const [selectedFile, setSelectedFile] = useState<{ name: string; uri: string; size?: number } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ name: string; uri: string; size?: number; mimeType?: string } | null>(null);
 
   async function handleFilePick() {
     try {
@@ -36,7 +36,7 @@ export default function UploadScreen() {
       });
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
-        setSelectedFile({ name: asset.name, uri: asset.uri, size: asset.size });
+        setSelectedFile({ name: asset.name, uri: asset.uri, size: asset.size, mimeType: asset.mimeType ?? "application/pdf" });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch {
@@ -71,6 +71,7 @@ export default function UploadScreen() {
         documentName,
         content,
         mode,
+        mimeType: mode === "file" ? (selectedFile!.mimeType ?? "application/pdf") : "text/plain",
       },
     });
   }
