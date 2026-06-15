@@ -9,7 +9,7 @@ const env = {
   logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663747676936/RRyRR2r653oYHaMMETFRjb/citation-shield-icon-MMsV4qceNhZv3R45Laefye.png",
   scheme: "citationshield",
   iosBundleId: "com.citationshield.app",
-  androidPackage: "com.citationshield.app",
+  androidPackage: "io.citationshield.app",
 };
 
 const config: ExpoConfig = {
