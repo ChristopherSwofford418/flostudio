@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Pressable,
   StyleSheet,
@@ -11,7 +12,7 @@ import * as Haptics from "expo-haptics";
 import * as FileSystem from "expo-file-system/legacy";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { incrementUsage, saveScan, type ScanResult, type Citation } from "@/lib/scan-store";
+import { incrementUsage, saveScan, type ScanResult } from "@/lib/scan-store";
 import { trpc } from "@/lib/trpc";
 
 const STAGES = [
@@ -64,6 +65,16 @@ export default function ProcessingScreen() {
     }).start();
   }, [stage]);
 
+  function handleError(message?: string) {
+    if (cancelledRef.current) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Alert.alert(
+      "Verification Failed",
+      message || "Could not verify citations. Please check your internet connection and try again.",
+      [{ text: "OK", onPress: () => router.back() }]
+    );
+  }
+
   const verifyText = trpc.citations.verifyText.useMutation({
     onSuccess: async (data: ScanResult) => {
       if (cancelledRef.current) return;
@@ -72,9 +83,9 @@ export default function ProcessingScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace({ pathname: "/scan/results", params: { scanId: data.id } });
     },
-    onError: () => {
+    onError: (err) => {
       if (cancelledRef.current) return;
-      runFallbackScan();
+      handleError(err?.message);
     },
   });
 
@@ -86,9 +97,9 @@ export default function ProcessingScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace({ pathname: "/scan/results", params: { scanId: data.id } });
     },
-    onError: () => {
+    onError: (err) => {
       if (cancelledRef.current) return;
-      runFallbackScan();
+      handleError(err?.message);
     },
   });
 
@@ -117,75 +128,9 @@ export default function ProcessingScreen() {
         });
         verifyFile.mutate({ documentName, base64, mimeType });
       } catch {
-        // If we can't read the file, fall back to demo scan
-        runFallbackScan();
+        handleError("Could not read the selected file. Please try again or paste the text directly.");
       }
     }
-  }
-
-  async function runFallbackScan() {
-    // Simulate processing time then generate demo results
-    await new Promise((r) => setTimeout(r, 4000));
-    if (cancelledRef.current) return;
-
-    const mockCitations: Citation[] = [
-      {
-        id: "1",
-        text: "Brown v. Board of Education, 347 U.S. 483 (1954)",
-        status: "valid",
-        confidence: 98,
-        sourceUrl: "https://supreme.justia.com/cases/federal/us/347/483/",
-        verdict: "Verified. This is a landmark U.S. Supreme Court case. Citation format is correct.",
-      },
-      {
-        id: "2",
-        text: "Smith v. Jones, 892 F.3d 1201 (9th Cir. 2018)",
-        status: "warning",
-        confidence: 61,
-        verdict: "Partially verified. Case may exist but the reporter page number is uncertain. Recommend cross-checking with Westlaw or Lexis.",
-        suggestedFix: "Smith v. Jones, 892 F.3d 1201, 1205 (9th Cir. 2018)",
-      },
-      {
-        id: "3",
-        text: "Johnson v. United States, 576 U.S. 591 (2015)",
-        status: "valid",
-        confidence: 97,
-        sourceUrl: "https://supreme.justia.com/cases/federal/us/576/591/",
-        verdict: "Verified. Johnson v. United States (2015) struck down the residual clause of the Armed Career Criminal Act.",
-      },
-      {
-        id: "4",
-        text: "Williams v. State, 2019 WL 9834521 (Tex. App. 2019)",
-        status: "invalid",
-        confidence: 12,
-        verdict: "Citation not found. This Westlaw citation does not appear to exist in the database. Likely AI-hallucinated.",
-        suggestedFix: "Verify this citation independently before filing.",
-      },
-      {
-        id: "5",
-        text: "Miranda v. Arizona, 384 U.S. 436 (1966)",
-        status: "valid",
-        confidence: 99,
-        sourceUrl: "https://supreme.justia.com/cases/federal/us/384/436/",
-        verdict: "Verified. Miranda v. Arizona is one of the most cited cases in U.S. law.",
-      },
-    ];
-
-    const scan: ScanResult = {
-      id: Date.now().toString(),
-      documentName: params.documentName || "Scanned Document",
-      createdAt: new Date().toISOString(),
-      citations: mockCitations,
-      totalCount: mockCitations.length,
-      validCount: mockCitations.filter((c) => c.status === "valid").length,
-      warningCount: mockCitations.filter((c) => c.status === "warning").length,
-      invalidCount: mockCitations.filter((c) => c.status === "invalid").length,
-    };
-
-    await incrementUsage();
-    await saveScan(scan);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace({ pathname: "/scan/results", params: { scanId: scan.id } });
   }
 
   function handleCancel() {

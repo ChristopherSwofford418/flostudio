@@ -9,7 +9,7 @@
  * ✅ Terms of Service link accessible
  * ✅ Cancellation instructions provided
  * ✅ No external payment links
- * ✅ IAP via StoreKit / RevenueCat (react-native-purchases)
+ * ✅ IAP via native Apple StoreKit 2 (expo-iap)
  */
 
 import { useEffect, useState } from "react";
@@ -25,24 +25,17 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Platform } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { setSubscription } from "@/lib/scan-store";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import {
   configurePurchases,
   getOfferings,
   purchasePackage,
   restorePurchases,
+  PRODUCT_IDS,
 } from "@/lib/purchases";
-
-// Product IDs must match exactly what's configured in App Store Connect
-// and RevenueCat dashboard
-const PRODUCT_IDS = {
-  pro: "com.citationshield.app.pro.monthly",
-  law_firm: "com.citationshield.app.lawfirm.monthly",
-};
+import type { ProductOrSubscription } from "expo-iap";
 
 type PlanId = "pro" | "law_firm";
 
@@ -98,19 +91,19 @@ const PLAN_DEFS: PlanDef[] = [
 function PlanCard({
   plan,
   selected,
-  storePackage,
+  storeProduct,
   onSelect,
 }: {
   plan: PlanDef;
   selected: boolean;
-  storePackage: any | null;
+  storeProduct: ProductOrSubscription | null;
   onSelect: () => void;
 }) {
   const colors = useColors();
   // Use live price from StoreKit if available, otherwise fall back to static
-  const displayPrice = storePackage?.product?.priceString ?? plan.price;
-  const displayBilling = storePackage
-    ? `${storePackage.product.priceString} per month, auto-renews monthly`
+  const displayPrice = (storeProduct as any)?.displayPrice ?? plan.price;
+  const displayBilling = storeProduct
+    ? `${(storeProduct as any).displayPrice} per month, auto-renews monthly`
     : plan.billingDescription;
 
   return (
@@ -164,7 +157,7 @@ export default function PaywallScreen() {
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("pro");
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [offerings, setOfferings] = useState<any | null>(null);
+  const [offerings, setOfferings] = useState<ProductOrSubscription[] | null>(null);
   const [loadingOfferings, setLoadingOfferings] = useState(true);
 
   useEffect(() => {
@@ -175,8 +168,8 @@ export default function PaywallScreen() {
     setLoadingOfferings(true);
     try {
       await configurePurchases();
-      const offering = await getOfferings();
-      setOfferings(offering);
+      const products = await getOfferings();
+      setOfferings(products);
     } catch {
       // Silently fail — will use static prices
     } finally {
@@ -184,14 +177,10 @@ export default function PaywallScreen() {
     }
   }
 
-  function getPackageForPlan(planId: PlanId): any | null {
-    if (!offerings?.availablePackages) return null;
+  function getProductForPlan(planId: PlanId): ProductOrSubscription | null {
+    if (!offerings) return null;
     const productId = PRODUCT_IDS[planId];
-    return (
-      offerings.availablePackages.find(
-        (pkg: any) => pkg.product?.productIdentifier === productId
-      ) ?? null
-    );
+    return offerings.find((p) => p.id === productId) ?? null;
   }
 
   async function handleSubscribe() {
@@ -199,18 +188,12 @@ export default function PaywallScreen() {
     setLoading(true);
 
     try {
-      const pkg = getPackageForPlan(selectedPlan);
+      const productId = PRODUCT_IDS[selectedPlan];
+      const success = await purchasePackage(productId);
 
-      if (pkg && Platform.OS !== "web") {
-        // Real StoreKit purchase via RevenueCat
-        const success = await purchasePackage(pkg);
-        if (!success) {
-          setLoading(false);
-          return; // User cancelled — don't show error
-        }
-      } else {
-        // Fallback for web preview / simulator (no real IAP)
-        await setSubscription({ tier: selectedPlan });
+      if (!success) {
+        setLoading(false);
+        return; // User cancelled — don't show error
       }
 
       setLoading(false);
@@ -222,8 +205,12 @@ export default function PaywallScreen() {
       );
     } catch (err: any) {
       setLoading(false);
-      if (!err?.userCancelled) {
-        Alert.alert("Purchase Failed", "Something went wrong. Please try again.");
+      // Don't show error for user cancellation
+      if (err?.code !== "E_USER_CANCELLED" && !err?.userCancelled) {
+        Alert.alert(
+          "Purchase Failed",
+          err?.message || "Something went wrong. Please try again."
+        );
       }
     }
   }
@@ -249,9 +236,9 @@ export default function PaywallScreen() {
     }
   }
 
-  const selectedPkg = getPackageForPlan(selectedPlan);
+  const selectedProduct = getProductForPlan(selectedPlan) as any;
   const selectedDef = PLAN_DEFS.find((p) => p.id === selectedPlan)!;
-  const displayPrice = selectedPkg?.product?.priceString ?? selectedDef.price;
+  const displayPrice = (selectedProduct as any)?.displayPrice ?? selectedDef.price;
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
@@ -286,7 +273,7 @@ export default function PaywallScreen() {
               key={plan.id}
               plan={plan}
               selected={selectedPlan === plan.id}
-              storePackage={getPackageForPlan(plan.id)}
+              storeProduct={getProductForPlan(plan.id)}
               onSelect={() => setSelectedPlan(plan.id)}
             />
           ))
@@ -486,16 +473,16 @@ const styles = StyleSheet.create({
   },
   restoreButton: {
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 12,
   },
   restoreText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "500",
   },
   legalText: {
     fontSize: 11,
-    textAlign: "center",
     lineHeight: 17,
+    textAlign: "center",
   },
   legalLinks: {
     flexDirection: "row",
@@ -504,14 +491,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   legalLink: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "500",
   },
   legalSep: {
-    fontSize: 12,
+    fontSize: 13,
   },
   notNowText: {
     fontSize: 14,
-    fontWeight: "500",
+    paddingVertical: 8,
   },
 });

@@ -127,6 +127,7 @@ const config: ExpoConfig = {
         },
       },
     ],
+    "expo-iap",
     [
       "expo-build-properties",
       {
