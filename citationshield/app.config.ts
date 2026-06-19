@@ -24,6 +24,7 @@ const config: ExpoConfig = {
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
+    buildNumber: "5",
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       // Encryption: app uses standard HTTPS/TLS only, no custom encryption
