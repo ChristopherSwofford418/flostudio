@@ -13,7 +13,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { incrementUsage, saveScan, type ScanResult } from "@/lib/scan-store";
-import { trpc } from "@/lib/trpc";
+import { verifyCitationsFromText, verifyCitationsFromFile } from "@/lib/citation-service";
 
 const STAGES = [
   "Extracting citations…",
@@ -59,11 +59,11 @@ export default function ProcessingScreen() {
   // Progress bar
   useEffect(() => {
     Animated.timing(progressAnim, {
-      toValue: (stage + 1) / STAGES.length,
-      duration: 600,
+      toValue: 0.9,
+      duration: 10000,
       useNativeDriver: false,
     }).start();
-  }, [stage]);
+  }, []);
 
   function handleError(message?: string) {
     if (cancelledRef.current) return;
@@ -75,34 +75,6 @@ export default function ProcessingScreen() {
     );
   }
 
-  const verifyText = trpc.citations.verifyText.useMutation({
-    onSuccess: async (data: ScanResult) => {
-      if (cancelledRef.current) return;
-      await incrementUsage();
-      await saveScan(data);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace({ pathname: "/scan/results", params: { scanId: data.id } });
-    },
-    onError: (err) => {
-      if (cancelledRef.current) return;
-      handleError(err?.message);
-    },
-  });
-
-  const verifyFile = trpc.citations.verifyFile.useMutation({
-    onSuccess: async (data: ScanResult) => {
-      if (cancelledRef.current) return;
-      await incrementUsage();
-      await saveScan(data);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace({ pathname: "/scan/results", params: { scanId: data.id } });
-    },
-    onError: (err) => {
-      if (cancelledRef.current) return;
-      handleError(err?.message);
-    },
-  });
-
   useEffect(() => {
     if (hasStarted.current) return;
     hasStarted.current = true;
@@ -113,23 +85,30 @@ export default function ProcessingScreen() {
     const mode = params.mode || "paste";
     const documentName = params.documentName || "Document";
 
-    if (mode === "paste") {
-      verifyText.mutate({
-        documentName,
-        content: params.content || "",
-      });
-    } else {
-      // File mode: read the file as base64 and send to server for extraction
-      try {
+    try {
+      let result: ScanResult;
+
+      if (mode === "paste") {
+        result = await verifyCitationsFromText(params.content || "", documentName);
+      } else {
+        // File mode: read the file as base64 and verify client-side
         const uri = params.content || "";
         const mimeType = params.mimeType || "application/pdf";
         const base64 = await FileSystem.readAsStringAsync(uri, {
           encoding: FileSystem.EncodingType.Base64,
         });
-        verifyFile.mutate({ documentName, base64, mimeType });
-      } catch {
-        handleError("Could not read the selected file. Please try again or paste the text directly.");
+        result = await verifyCitationsFromFile(base64, mimeType, documentName);
       }
+
+      if (cancelledRef.current) return;
+
+      await incrementUsage();
+      await saveScan(result);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace({ pathname: "/scan/results", params: { scanId: result.id } });
+    } catch (err: any) {
+      if (cancelledRef.current) return;
+      handleError(err?.message);
     }
   }
 
