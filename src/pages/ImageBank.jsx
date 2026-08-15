@@ -108,18 +108,17 @@ export default function ImageBank() {
 
     try {
       const styleDesc = STYLE_PRESETS.find(s => s.id === stylePreset)?.desc || ''
-      // Do not append huge base64 data URLs to text prompt; pass clean reference indicator if URL is remote
-      const refNote = referenceImage && !referenceImage.startsWith('data:') ? ` Incorporating reference asset URL.` : ''
       const textOverlayNote = brandOverlay ? ` Feature clear bold promotional text overlay: "${brandOverlay}".` : ''
       
-      const cleanPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${prompt.trim()}. Style guidelines: ${styleDesc}.${refNote}${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
+      const cleanPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${prompt.trim()}. Style guidelines: ${styleDesc}.${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
 
       const res = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: cleanPrompt,
-          aspectRatio: aspectRatio
+          aspectRatio: aspectRatio,
+          referenceImage: referenceImage
         })
       })
       const data = await res.json()
@@ -160,7 +159,8 @@ export default function ImageBank() {
           action: 'video',
           prompt: videoPrompt,
           voice: videoVoice,
-          captionStyle: videoCaptionStyle
+          captionStyle: videoCaptionStyle,
+          referenceImage: referenceImage
         })
       })
       const data = await res.json()

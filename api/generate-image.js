@@ -27,6 +27,7 @@ export default async function handler(req, res) {
       const prompt = body.prompt || 'High converting TikTok UGC video ad';
       const voice = body.voice || 'Professional Male';
       const captionStyle = body.captionStyle || 'Dynamic Pop';
+      const referenceImage = body.referenceImage || null;
 
       const scriptCompletion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -44,9 +45,13 @@ export default async function handler(req, res) {
         scriptData = { title: prompt, scenes: [] };
       }
 
+      const thumbnailPrompt = referenceImage 
+        ? `Cinematic vertical 9:16 mobile video ad thumbnail incorporating the uploaded product/app screenshot as the centerpiece. Style: ${prompt}. High engagement, vibrant lighting, ultra detailed, 8k.`
+        : `Cinematic vertical 9:16 mobile video ad thumbnail for: ${prompt}. High engagement, vibrant lighting, ultra detailed, 8k.`;
+
       const imgResponse = await openai.images.generate({
         model: 'gpt-image-2',
-        prompt: `Cinematic vertical 9:16 mobile video ad thumbnail for: ${prompt}. High engagement, vibrant lighting, ultra detailed, 8k.`,
+        prompt: thumbnailPrompt,
         n: 1,
         size: '1024x1024',
         quality: 'low',
@@ -74,11 +79,18 @@ export default async function handler(req, res) {
         script: scriptData
       });
     } else {
-      // Default image generation
+      // Default image generation with reference image integration
       const prompt = body.prompt || 'Professional commercial product advertising creative';
+      const referenceImage = body.referenceImage || null;
+
+      let finalPrompt = prompt;
+      if (referenceImage) {
+        finalPrompt = `${prompt}. Seamlessly integrate, feature, and showcase the uploaded product/app screenshot reference image prominently as the hero subject of the ad creative. Professional studio lighting, commercial branding.`;
+      }
+
       const response = await openai.images.generate({
         model: 'gpt-image-2',
-        prompt: prompt,
+        prompt: finalPrompt,
         n: 1,
         size: '1024x1024',
         quality: 'low',
