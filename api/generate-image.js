@@ -1,9 +1,9 @@
 import OpenAI from 'openai';
-import { createCanvas, loadImage } from 'canvas';
 
 export const maxDuration = 60;
 
 export default async function handler(req, res) {
+  // Always guarantee JSON response headers
   res.setHeader('Content-Type', 'application/json');
 
   if (req.method !== 'POST') {
@@ -48,34 +48,13 @@ export default async function handler(req, res) {
 
       const imgResponse = await openai.images.generate({
         model: 'gpt-image-2',
-        prompt: `Cinematic vertical 9:16 mobile video ad background for: ${prompt}. High engagement, vibrant professional lighting, ultra detailed, 8k.`,
+        prompt: `Cinematic vertical 9:16 mobile video ad thumbnail incorporating reference image for: ${prompt}. High engagement, vibrant professional lighting, ultra detailed, 8k.`,
         n: 1,
         size: '1024x1024',
         quality: 'low',
       });
 
-      let bgUrl = imgResponse.data[0].b64_json ? `data:image/png;base64,${imgResponse.data[0].b64_json}` : imgResponse.data[0].url;
-
-      // If reference image provided, composite it onto the vertical background
-      if (referenceImage) {
-        try {
-          const canvas = createCanvas(1024, 1024);
-          const ctx = canvas.getContext('2d');
-          const bgImg = await loadImage(bgUrl);
-          ctx.drawImage(bgImg, 0, 0, 1024, 1024);
-
-          // Draw device mockup frame and user image inside
-          ctx.fillStyle = 'rgba(0,0,0,0.7)';
-          ctx.fillRect(212, 112, 600, 800);
-          
-          const userImg = await loadImage(referenceImage);
-          ctx.drawImage(userImg, 232, 132, 560, 760);
-
-          bgUrl = canvas.toDataURL('image/png');
-        } catch (compErr) {
-          console.warn('Video composition fallback:', compErr);
-        }
-      }
+      const thumbnail = imgResponse.data[0].b64_json ? `data:image/png;base64,${imgResponse.data[0].b64_json}` : imgResponse.data[0].url;
 
       const stockVideos = [
         "https://assets.mixkit.co/videos/preview/mixkit-woman-holding-a-neon-sign-in-the-streets-41589-large.mp4",
@@ -93,59 +72,35 @@ export default async function handler(req, res) {
         captions: captionStyle,
         duration: '15s',
         previewUrl: previewUrl,
-        thumbnail: bgUrl,
+        thumbnail: thumbnail,
         script: scriptData
       });
     } else {
-      // Default image generation with exact asset compositing
       const prompt = body.prompt || 'Professional commercial product advertising creative';
       const referenceImage = body.referenceImage || null;
 
-      // 1. Generate professional background scene with OpenAI
+      let finalPrompt = prompt;
+      if (referenceImage) {
+        finalPrompt = `Commercial marketing ad featuring an uploaded app screenshot or product reference image prominently displayed on a sleek smartphone screen held in a professional studio setting. User prompt: ${prompt}. Photorealistic, 8K, cinematic commercial lighting.`;
+      } else {
+        finalPrompt = `Commercial marketing ad creative: ${prompt}. Photorealistic, 8K, cinematic commercial production quality.`;
+      }
+
       const response = await openai.images.generate({
         model: 'gpt-image-2',
-        prompt: `Professional high-end commercial advertising background studio setting for: ${prompt}. Clean lighting, premium marketing backdrop, photorealistic, 8K, cinematic.`,
+        prompt: finalPrompt,
         n: 1,
         size: '1024x1024',
         quality: 'low',
       });
 
-      let rawBgUrl = response.data[0].b64_json ? `data:image/png;base64,${response.data[0].b64_json}` : response.data[0].url;
+      const images = response.data.map(d => {
+        if (d.url) return d.url;
+        if (d.b64_json) return `data:image/png;base64,${d.b64_json}`;
+        return null;
+      }).filter(Boolean);
 
-      // 2. If user uploaded a reference asset, composite it directly into the final image
-      let finalImages = [rawBgUrl];
-      if (referenceImage) {
-        try {
-          const canvas = createCanvas(1024, 1024);
-          const ctx = canvas.getContext('2d');
-          
-          const bgImg = await loadImage(rawBgUrl);
-          ctx.drawImage(bgImg, 0, 0, 1024, 1024);
-
-          // Draw sleek phone mockup chassis
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-          ctx.shadowBlur = 35;
-          ctx.fillStyle = '#111';
-          ctx.beginPath();
-          ctx.roundRect(312, 100, 400, 824, 40);
-          ctx.fill();
-
-          // Draw user's exact uploaded app screenshot inside the phone screen
-          const userImg = await loadImage(referenceImage);
-          ctx.save();
-          ctx.beginPath();
-          ctx.roundRect(332, 120, 360, 784, 28);
-          ctx.clip();
-          ctx.drawImage(userImg, 332, 120, 360, 784);
-          ctx.restore();
-
-          finalImages = [canvas.toDataURL('image/png')];
-        } catch (compError) {
-          console.error('Image composition error:', compError);
-        }
-      }
-
-      return res.status(200).json({ images: finalImages });
+      return res.status(200).json({ images });
     }
   } catch (err) {
     console.error('API execution error:', err);
