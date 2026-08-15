@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './supabase'
+import { WorkspaceProvider } from './context/WorkspaceContext.jsx'
 import Auth from './pages/Auth.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Compose from './pages/Compose.jsx'
@@ -37,22 +38,24 @@ export default function App() {
   )
 
   return (
-    <Routes>
-      <Route path="/auth" element={!session ? <Auth /> : <Navigate to="/agent" />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/" element={session ? <Navigate to="/agent" /> : <Navigate to="/auth" />} />
-      {/* Agentic AI pages */}
-      <Route path="/agent" element={session ? <AgentHQ /> : <Navigate to="/auth" />} />
-      <Route path="/pipeline" element={session ? <Pipeline /> : <Navigate to="/auth" />} />
-      <Route path="/pricing" element={session ? <Pricing /> : <Navigate to="/auth" />} />
-      <Route path="/ai-calendar" element={session ? <AICalendar /> : <Navigate to="/auth" />} />
-      {/* Legacy pages */}
-      <Route path="/compose" element={session ? <Compose /> : <Navigate to="/auth" />} />
-      <Route path="/calendar" element={session ? <Calendar /> : <Navigate to="/auth" />} />
-      <Route path="/images" element={session ? <ImageBank /> : <Navigate to="/auth" />} />
-      <Route path="/accounts" element={session ? <Accounts /> : <Navigate to="/auth" />} />
-      <Route path="/approve" element={session ? <Approve /> : <Navigate to="/auth" />} />
-      <Route path="/dashboard" element={session ? <Dashboard /> : <Navigate to="/auth" />} />
-    </Routes>
+    <WorkspaceProvider>
+      <Routes>
+        <Route path="/auth" element={!session ? <Auth /> : <Navigate to="/agent" />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/" element={session ? <Navigate to="/agent" /> : <Navigate to="/auth" />} />
+        {/* Agentic AI pages */}
+        <Route path="/agent" element={session ? <AgentHQ /> : <Navigate to="/auth" />} />
+        <Route path="/pipeline" element={session ? <Pipeline /> : <Navigate to="/auth" />} />
+        <Route path="/pricing" element={session ? <Pricing /> : <Navigate to="/auth" />} />
+        <Route path="/ai-calendar" element={session ? <AICalendar /> : <Navigate to="/auth" />} />
+        {/* Legacy pages */}
+        <Route path="/compose" element={session ? <Compose /> : <Navigate to="/auth" />} />
+        <Route path="/calendar" element={session ? <Calendar /> : <Navigate to="/auth" />} />
+        <Route path="/images" element={session ? <ImageBank /> : <Navigate to="/auth" />} />
+        <Route path="/accounts" element={session ? <Accounts /> : <Navigate to="/auth" />} />
+        <Route path="/approve" element={session ? <Approve /> : <Navigate to="/auth" />} />
+        <Route path="/dashboard" element={session ? <Dashboard /> : <Navigate to="/auth" />} />
+      </Routes>
+    </WorkspaceProvider>
   )
 }
