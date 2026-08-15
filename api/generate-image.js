@@ -29,11 +29,31 @@ export default async function handler(req, res) {
       const captionStyle = body.captionStyle || 'Dynamic Pop';
       const referenceImage = body.referenceImage || null;
 
+      let imageMessageContent = [];
+      if (referenceImage) {
+        if (referenceImage.startsWith('data:')) {
+          imageMessageContent.push({ type: "image_url", image_url: { url: referenceImage } });
+        } else {
+          try {
+            const imgRes = await fetch(referenceImage);
+            const arrayBuffer = await imgRes.arrayBuffer();
+            const base64 = Buffer.from(arrayBuffer).toString('base64');
+            const mime = imgRes.headers.get('content-type') || 'image/png';
+            imageMessageContent.push({ type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } });
+          } catch (e) {
+            console.warn('Failed to fetch reference image for video:', e);
+          }
+        }
+      }
+
       const scriptCompletion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: 'You are a TikTok and Reels direct-response video ad director. Provide a 3-scene storyboard JSON with hook, middle, and call to action.' },
-          { role: 'user', content: `Create video ad script for: ${prompt}. Voice model: ${voice}. Caption style: ${captionStyle}.` }
+          { role: 'user', content: [
+            { type: 'text', text: `Create video ad script for: ${prompt}. Voice model: ${voice}. Caption style: ${captionStyle}. Integrate the provided uploaded app screenshot/product faithfully.` },
+            ...imageMessageContent
+          ] }
         ],
         response_format: { type: 'json_object' }
       });
@@ -45,13 +65,11 @@ export default async function handler(req, res) {
         scriptData = { title: prompt, scenes: [] };
       }
 
-      const thumbnailPrompt = referenceImage 
-        ? `Cinematic vertical 9:16 mobile video ad thumbnail incorporating the uploaded product/app screenshot as the centerpiece. Style: ${prompt}. High engagement, vibrant lighting, ultra detailed, 8k.`
-        : `Cinematic vertical 9:16 mobile video ad thumbnail for: ${prompt}. High engagement, vibrant lighting, ultra detailed, 8k.`;
+      let enhancedPrompt = `Cinematic vertical 9:16 mobile video ad thumbnail showcasing the exact uploaded app screenshot and UI interface prominently as the hero subject. Prompt: ${prompt}. High engagement, vibrant lighting, ultra detailed, 8k.`;
 
       const imgResponse = await openai.images.generate({
         model: 'gpt-image-2',
-        prompt: thumbnailPrompt,
+        prompt: enhancedPrompt,
         n: 1,
         size: '1024x1024',
         quality: 'low',
@@ -79,13 +97,15 @@ export default async function handler(req, res) {
         script: scriptData
       });
     } else {
-      // Default image generation with reference image integration
+      // Default image generation with precise image reference instruction
       const prompt = body.prompt || 'Professional commercial product advertising creative';
       const referenceImage = body.referenceImage || null;
 
       let finalPrompt = prompt;
       if (referenceImage) {
-        finalPrompt = `${prompt}. Seamlessly integrate, feature, and showcase the uploaded product/app screenshot reference image prominently as the hero subject of the ad creative. Professional studio lighting, commercial branding.`;
+        finalPrompt = `Commercial marketing ad creative. The user has provided an uploaded app screenshot / product image as the exact visual reference. You MUST faithfully incorporate, feature, and showcase this exact uploaded app screen and interface inside the ad composition (e.g. displayed on a smartphone screen held by a person or floating in a studio). Additional instructions: ${prompt}. Professional studio lighting, commercial branding, photorealistic, 8K.`;
+      } else {
+        finalPrompt = `Commercial marketing ad creative: ${prompt}. Photorealistic, 8K, cinematic commercial production quality.`;
       }
 
       const response = await openai.images.generate({
