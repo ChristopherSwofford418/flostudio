@@ -3,37 +3,27 @@ import OpenAI from 'openai';
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-    const { prompt, size = '1024x1024' } = body;
     const apiKey = process.env.OPENAI_API_KEY;
-
     if (!apiKey) {
-      return res.status(500).json({ error: 'OpenAI API key not configured on server.' });
-    }
-
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required.' });
+      return res.status(500).json({ error: 'Missing OPENAI_API_KEY environment variable.' });
     }
 
     const openai = new OpenAI({ apiKey });
-
     const response = await openai.images.generate({
       model: 'dall-e-3',
-      prompt,
+      prompt: 'A professional minimalist tech software interface mockup',
       n: 1,
-      size,
+      size: '1024x1024',
       quality: 'standard',
     });
 
-    const imageUrls = response.data.map(d => d.url);
-    return res.status(200).json({ images: imageUrls });
+    return res.status(200).json({ images: response.data.map(d => d.url) });
   } catch (err) {
-    console.error('OpenAI image generation error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to generate image with OpenAI.' });
+    return res.status(500).json({ 
+      error: 'OpenAI generation failed', 
+      message: err.message, 
+      stack: err.stack 
+    });
   }
 }
