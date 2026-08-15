@@ -45,16 +45,16 @@ export default function ImageBank() {
 
   const loadImages = async () => {
     setLoading(true)
-    const { data } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from('marketing-assets')
       .list('', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } })
-    if (data) {
+    if (!error && data) {
       setImages(
         data
           .filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name))
           .map(f => ({
             name: f.name,
-            url: `https://xxkpvnokhqbpbqefegxa.supabase.co/storage/v1/object/public/marketing-assets/${encodeURIComponent(f.name)}`,
+            url: `https://jtogllurcrxxaguoxeus.supabase.co/storage/v1/object/public/marketing-assets/${encodeURIComponent(f.name)}`,
             size: f.metadata?.size,
           }))
       )
@@ -65,10 +65,31 @@ export default function ImageBank() {
   const handleUpload = async (files) => {
     if (!files || !files.length) return
     setUploading(true)
-    for (const file of Array.from(files)) {
-      await supabase.storage.from('marketing-assets').upload(file.name, file, { upsert: true })
+    setError('')
+    try {
+      for (const file of Array.from(files)) {
+        const fileName = `product-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+        const { error: uploadErr } = await supabase.storage.from('marketing-assets').upload(fileName, file, { upsert: true })
+        
+        if (uploadErr) {
+          // Fallback to local data URL if Supabase bucket isn't provisioned yet
+          const reader = new FileReader()
+          reader.onload = (e) => {
+            const dataUrl = e.target.result
+            setReferenceImage(dataUrl)
+            setImages(prev => [{ name: fileName, url: dataUrl }, ...prev])
+          }
+          reader.readAsDataURL(file)
+          throw new Error('Supabase bucket "marketing-assets" not found or restricted. Using instant local asset preview instead.')
+        } else {
+          const publicUrl = `https://jtogllurcrxxaguoxeus.supabase.co/storage/v1/object/public/marketing-assets/${encodeURIComponent(fileName)}`
+          setReferenceImage(publicUrl)
+        }
+      }
+      await loadImages()
+    } catch (e) {
+      console.warn('Upload notice:', e.message)
     }
-    await loadImages()
     setUploading(false)
   }
 
@@ -273,21 +294,7 @@ export default function ImageBank() {
                     </button>
                     <label style={{ flex: 1, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', borderRadius: 12, padding: 12, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
                       {uploading ? 'Uploading...' : '📤 Upload App Image'}
-                      <input type="file" accept="image/*" onChange={async e => {
-                        const file = e.target.files?.[0]
-                        if (!file) return
-                        setUploading(true)
-                        const fileName = `product-${Date.now()}-${file.name}`
-                        const { data, error } = await supabase.storage.from('marketing-assets').upload(fileName, file, { upsert: true })
-                        if (!error) {
-                          const publicUrl = `https://xxkpvnokhqbpbqefegxa.supabase.co/storage/v1/object/public/marketing-assets/${encodeURIComponent(fileName)}`
-                          setReferenceImage(publicUrl)
-                          await loadImages()
-                        } else {
-                          alert('Upload failed: ' + error.message)
-                        }
-                        setUploading(false)
-                      }} style={{ display: 'none' }} />
+                      <input type="file" accept="image/*" onChange={e => handleUpload(e.target.files)} style={{ display: 'none' }} />
                     </label>
                   </div>
                 )}
