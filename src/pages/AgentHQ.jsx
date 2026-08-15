@@ -158,7 +158,9 @@ export default function AgentHQ() {
           created_at: new Date().toISOString(),
         }
         const { error: insertErr } = await supabase.from('posts').insert([postRow])
-        await supabase.from('flo_posts').insert([postRow]).catch(() => {})
+        try {
+          await supabase.from('flo_posts').insert([postRow])
+        } catch (_) {}
         if (!insertErr) saved++
       }
       setSavedCount(saved)

@@ -96,7 +96,9 @@ export default function AICalendar() {
           created_at: new Date().toISOString()
         }
         await supabase.from('posts').insert([postRow])
-        await supabase.from('flo_posts').insert([postRow]).catch(() => {})
+        try {
+          await supabase.from('flo_posts').insert([postRow])
+        } catch (_) {}
       }
       await loadPosts()
     } catch (e) {
