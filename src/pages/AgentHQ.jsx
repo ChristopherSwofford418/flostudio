@@ -149,14 +149,16 @@ export default function AgentHQ() {
       const { data: { user } } = await supabase.auth.getUser()
       let saved = 0
       for (const post of scheduledPosts) {
-        const { error: insertErr } = await supabase.from('posts').insert([{
-          user_id: user?.id,
+        const postRow = {
+          user_id: user?.id || null,
           platform: post.platform,
           content: `${post.content}${post.hashtags ? '\n\n' + post.hashtags : ''}`,
           status: 'pending',
           scheduled_at: post.scheduled_at,
           created_at: new Date().toISOString(),
-        }])
+        }
+        const { error: insertErr } = await supabase.from('posts').insert([postRow])
+        await supabase.from('flo_posts').insert([postRow]).catch(() => {})
         if (!insertErr) saved++
       }
       setSavedCount(saved)

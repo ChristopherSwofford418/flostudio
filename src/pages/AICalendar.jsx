@@ -87,14 +87,16 @@ export default function AICalendar() {
         const d = new Date(year, month, dayNum)
         const hour = post.platform === 'linkedin' ? 8 : post.platform === 'instagram' ? 9 : post.platform === 'twitter' ? 12 : 10
         d.setHours(hour, 0, 0, 0)
-        await supabase.from('posts').insert([{
+        const postRow = {
           user_id: user?.id || null,
           platform: post.platform || 'instagram',
           content: `${post.content || ''}${post.hashtags ? '\n\n' + post.hashtags : ''}`,
           status: 'pending',
           scheduled_at: d.toISOString(),
           created_at: new Date().toISOString()
-        }])
+        }
+        await supabase.from('posts').insert([postRow])
+        await supabase.from('flo_posts').insert([postRow]).catch(() => {})
       }
       await loadPosts()
     } catch (e) {
