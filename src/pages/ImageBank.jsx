@@ -107,18 +107,29 @@ export default function ImageBank() {
         if (urlMatches) imgs = urlMatches
       }
 
-      // Robust multi-source AI ad creative generation matching exact prompt keywords
-      const count = Number(variationsCount) || 1
-      const keywords = prompt.replace(/[^a-zA-Z0-9 ]/g, '').split(' ').slice(0, 5).join(',')
-      const generated = []
-      
-      for (let i = 0; i < count; i++) {
-        const seed = Math.floor(Math.random() * 100000) + i
-        // Use high-end commercial photo generation source with unique seed & keyword matching
-        const imageUrl = `https://picsum.photos/seed/${encodeURIComponent(keywords || 'marketing')}-${seed}/${selectedAspect.width}/${selectedAspect.height}`
-        generated.push(imageUrl)
+      // Real OpenAI DALL-E 3 Generation via secure backend proxy
+      const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ANON}`,
+          'apikey': ANON
+        },
+        body: JSON.stringify({
+          prompt: fullPrompt,
+          n: 1,
+          size: aspectRatio === '9:16' ? '1024x1792' : aspectRatio === '16:9' ? '1792x1024' : '1024x1024'
+        })
+      })
+      const data = await res.json()
+      if (data.error) {
+        throw new Error(data.error.message || JSON.stringify(data.error))
       }
-      setGeneratedResults(generated)
+      const imgs = data.images || (data.data ? data.data.map(d => d.url) : [])
+      if (!imgs.length) {
+        throw new Error('No image returned from generation service.')
+      }
+      setGeneratedResults(imgs)
     } catch (e) {
       setError('Generation failed: ' + e.message)
     }
