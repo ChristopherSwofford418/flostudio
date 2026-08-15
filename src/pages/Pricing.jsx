@@ -14,7 +14,7 @@ export default function Pricing() {
     try {
       await initiateStripeCheckout(tier.id, tier.price, tier.tokens)
       addTokens(tier.tokens)
-      alert(`🎉 Successfully subscribed to ${tier.name}! Added ${tier.tokens} tokens to your FloStudio account via Stripe.`)
+      alert(`Successfully subscribed to ${tier.name}. Added ${tier.tokens} tokens to your FloStudio account via Stripe.`)
     } catch (err) {
       alert(`Payment error: ${err.message}`)
     } finally {
@@ -27,14 +27,13 @@ export default function Pricing() {
       <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 80, animation: 'fadeIn 0.4s ease' }}>
         <style>{`
           @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-          @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 30px rgba(99,102,241,0.3); } 50% { box-shadow: 0 0 50px rgba(236,72,153,0.5); } }
         `}</style>
 
         {/* Top Header Navigation */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40, background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.1))', padding: '20px 28px', borderRadius: 20, border: '1px solid rgba(99,102,241,0.3)', backdropFilter: 'blur(12px)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
           <div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: 'rgba(236,72,153,0.15)', border: '1px solid rgba(236,72,153,0.3)', borderRadius: 20, fontSize: 11, fontWeight: 700, color: '#f472b6', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-              <span>✨</span> Creatify & Holo AI Competitor Grade
+              Creatify & Holo AI Competitor Grade
             </div>
             <h1 style={{ fontSize: 28, fontWeight: 900, color: '#ffffff', letterSpacing: '-0.5px' }}>Token Economy & Subscription Tiers</h1>
           </div>
@@ -64,7 +63,7 @@ export default function Pricing() {
               
               {tier.popular && (
                 <div style={{ position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)', color: '#fff', fontSize: 11, fontWeight: 800, padding: '6px 18px', borderRadius: 20, letterSpacing: 0.8, boxShadow: '0 6px 20px rgba(236,72,153,0.5)', textTransform: 'uppercase' }}>
-                  🔥 Most Popular For Growth
+                  Most Popular For Growth
                 </div>
               )}
 
@@ -75,7 +74,7 @@ export default function Pricing() {
                   <span style={{ fontSize: 14, color: '#94a3b8', fontWeight: 500 }}>/ month</span>
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: tier.popular ? 'rgba(236,72,153,0.15)' : 'rgba(99,102,241,0.15)', border: tier.popular ? '1px solid rgba(236,72,153,0.3)' : '1px solid rgba(99,102,241,0.3)', borderRadius: 10, fontSize: 13, fontWeight: 700, color: tier.popular ? '#f472b6' : '#a5b4fc' }}>
-                  <span>⚡</span> {tier.tokens} Tokens included
+                  <span>Tokens:</span> {tier.tokens} included
                 </div>
               </div>
 
@@ -101,8 +100,8 @@ export default function Pricing() {
 
         {/* FAQ & Progressive Overage Section */}
         <div style={{ background: 'linear-gradient(180deg, rgba(15,23,42,0.8) 0%, rgba(8,12,22,0.95) 100%)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 28, padding: 40, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span>💡</span> Frequently Asked Questions & Token Rules
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', marginBottom: 24 }}>
+            Frequently Asked Questions & Token Rules
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 28 }}>
             <div>
