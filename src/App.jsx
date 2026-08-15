@@ -12,6 +12,7 @@ import AgentHQ from './pages/AgentHQ.jsx'
 import AICalendar from './pages/AICalendar.jsx'
 import Pipeline from './pages/Pipeline.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
+import Pricing from './pages/Pricing.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -43,6 +44,7 @@ export default function App() {
       {/* Agentic AI pages */}
       <Route path="/agent" element={session ? <AgentHQ /> : <Navigate to="/auth" />} />
       <Route path="/pipeline" element={session ? <Pipeline /> : <Navigate to="/auth" />} />
+      <Route path="/pricing" element={session ? <Pricing /> : <Navigate to="/auth" />} />
       <Route path="/ai-calendar" element={session ? <AICalendar /> : <Navigate to="/auth" />} />
       {/* Legacy pages */}
       <Route path="/compose" element={session ? <Compose /> : <Navigate to="/auth" />} />
