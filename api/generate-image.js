@@ -117,8 +117,8 @@ export default async function handler(req, res) {
       const img1 = response1.data[0].b64_json ? `data:image/png;base64,${response1.data[0].b64_json}` : response1.data[0].url;
       const img2 = response2.data[0].b64_json ? `data:image/png;base64,${response2.data[0].b64_json}` : response2.data[0].url;
 
-      // If reference image provided, return both AI ad backgrounds alongside the uploaded user app screenshot so users can instantly compare or save
-      const images = referenceImage ? [referenceImage, img1, img2] : [img1, img2];
+      // Return ONLY newly generated AI ad creatives
+      const images = [img1, img2];
 
       return res.status(200).json({ images });
     }
