@@ -106,23 +106,15 @@ export default function Accounts() {
         accountHandle = `ID: ${pageId}`
         accountName = `Facebook Page ${pageId}`
 
-        // Directly save connected account to Supabase with verified token
-        const { error } = await supabase.from('connected_accounts').insert({
-          user_id: user.id,
-          platform: 'facebook',
-          account_name: accountName,
-          account_handle: accountHandle,
-          access_token: 'meta_graph_page_token_' + Math.random().toString(36).substring(7),
-          status: 'connected',
-        })
-
-        if (error) throw error
-
-        alert(`Successfully authorized and connected Facebook Page (${accountHandle}) via Meta Graph API!`)
-        setModalPlatform(null)
-        setPageUrlInput('')
-        await fetchConnectedAccounts()
-        setConnecting(null)
+        // Trigger real Meta OAuth dialog redirect
+        const clientId = '922484393433555' // FloStudio Meta App ID
+        const redirectUri = window.location.origin + '/accounts'
+        const scope = 'pages_show_list,pages_manage_posts,pages_read_engagement'
+        
+        const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=flostudio_fb_${pageId}`
+        
+        localStorage.setItem('pending_fb_connection', JSON.stringify({ userId: user.id, pageId, accountName, accountHandle }))
+        window.location.href = oauthUrl
         return
       }
 
