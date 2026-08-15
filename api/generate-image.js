@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: 'Missing OPENAI_API_KEY environment variable.' });
+      return res.status(500).json({ error: 'OpenAI API key is missing on Vercel environment variables.' });
     }
 
     let body = req.body;
@@ -22,16 +22,15 @@ export default async function handler(req, res) {
 
     const openai = new OpenAI({ apiKey });
 
-    // Use DALL-E 3 as the primary active image model
+    // Use current OpenAI gpt-image-2 model
     const response = await openai.images.generate({
-      model: 'dall-e-3',
+      model: 'gpt-image-2',
       prompt: prompt,
       n: 1,
       size: '1024x1024',
-      quality: 'standard',
     });
 
-    const imageUrls = response.data.map(d => d.url);
+    const imageUrls = response.data.map(d => d.url || d.b64_json);
     return res.status(200).json({ images: imageUrls });
   } catch (err) {
     console.error('OpenAI generation error:', err);
