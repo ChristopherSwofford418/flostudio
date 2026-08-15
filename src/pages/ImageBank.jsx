@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
 
-const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIicucm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
-
 const STYLE_PRESETS = [
   { id: 'professional', label: 'Corporate & Studio', desc: 'Clean, professional lighting for business & B2B' },
   { id: 'social', label: 'Social UGC / Lifestyle', desc: 'Vibrant, authentic, mobile-first aesthetic' },
@@ -23,7 +21,6 @@ export default function ImageBank() {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
-  const [copied, setCopied] = useState('')
 
   // Generator State
   const [prompt, setPrompt] = useState('')
@@ -88,9 +85,8 @@ export default function ImageBank() {
     setGeneratedResults([])
 
     try {
-      const selectedAspect = ASPECT_RATIOS.find(a => a.id === aspectRatio) || ASPECT_RATIOS[0]
       const styleDesc = STYLE_PRESETS.find(s => s.id === stylePreset)?.desc || ''
-      const refNote = referenceImage ? ` Inorporating reference brand/app asset image from URL ${referenceImage}.` : ''
+      const refNote = referenceImage ? ` Incorporating reference app/product image URL ${referenceImage}.` : ''
       const textOverlayNote = brandOverlay ? ` Feature clear bold promotional text overlay: "${brandOverlay}".` : ''
       
       const fullPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${prompt}. Style guidelines: ${styleDesc}. ${refNote}${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
@@ -263,11 +259,11 @@ export default function ImageBank() {
 
               {/* Reference Image Picker & Direct Upload */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>REFERENCE BRAND IMAGE / APP SCREENSHOT</label>
+                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>UPLOAD APP SCREENSHOT OR PRODUCT IMAGE</label>
                 {referenceImage ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 12, padding: 10 }}>
                     <img src={referenceImage} alt="Ref" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }} />
-                    <div style={{ flex: 1, fontSize: 13, color: '#fff', fontWeight: 500 }}>Reference Asset Included</div>
+                    <div style={{ flex: 1, fontSize: 13, color: '#fff', fontWeight: 500 }}>Reference Asset Included in Ad</div>
                     <button onClick={() => setReferenceImage(null)} style={{ background: 'rgba(239,68,68,0.2)', border: 'none', color: '#f87171', borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}>Remove</button>
                   </div>
                 ) : (
