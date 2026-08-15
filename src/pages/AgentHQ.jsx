@@ -157,15 +157,12 @@ export default function AgentHQ() {
           scheduled_at: post.scheduled_at,
           created_at: new Date().toISOString(),
         }
-        const { error: insertErr } = await supabase.from('posts').insert([postRow])
+        const { error: insertErr } = await supabase.from('campaign_posts').insert([postRow])
         if (insertErr) {
-          addLog(`Insert error (posts): ${insertErr.message}`, 'error')
+          addLog(`Insert error (campaign_posts): ${insertErr.message}`, 'error')
         }
-        const { error: floErr } = await supabase.from('flo_posts').insert([postRow])
-        if (floErr) {
-          addLog(`Insert error (flo_posts): ${floErr.message}`, 'error')
-        }
-        if (!insertErr || !floErr) saved++
+        await supabase.from('posts').insert([postRow]).catch(() => {})
+        if (!insertErr) saved++
       }
       setSavedCount(saved)
       addLog(`✅ Campaign complete! ${saved} posts saved to your pipeline`, 'success')

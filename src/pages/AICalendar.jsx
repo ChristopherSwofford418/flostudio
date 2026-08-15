@@ -95,10 +95,11 @@ export default function AICalendar() {
           scheduled_at: d.toISOString(),
           created_at: new Date().toISOString()
         }
-        await supabase.from('posts').insert([postRow])
-        try {
-          await supabase.from('flo_posts').insert([postRow])
-        } catch (_) {}
+        const { error: insertErr } = await supabase.from('campaign_posts').insert([postRow])
+        if (insertErr) {
+          console.error('Calendar insert error:', insertErr.message)
+        }
+        await supabase.from('posts').insert([postRow]).catch(() => {})
       }
       await loadPosts()
     } catch (e) {

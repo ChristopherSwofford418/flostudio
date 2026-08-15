@@ -48,12 +48,21 @@ export default function Approve() {
 
   const loadPending = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('flo_posts')
+    const { data, error } = await supabase
+      .from('campaign_posts')
       .select('*')
       .in('status', ['pending', 'draft'])
       .order('created_at', { ascending: false })
-    setPosts(data || [])
+    if (error || !data || data.length === 0) {
+      const { data: data2 } = await supabase
+        .from('flo_posts')
+        .select('*')
+        .in('status', ['pending', 'draft'])
+        .order('created_at', { ascending: false })
+      setPosts(data2 || [])
+    } else {
+      setPosts(data || [])
+    }
     setLoading(false)
   }
 

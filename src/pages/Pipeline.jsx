@@ -32,10 +32,18 @@ export default function Pipeline() {
 
   const loadPosts = async () => {
     setLoading(true)
-    let q = supabase.from('posts').select('*').order('scheduled_at', { ascending: true })
+    let q = supabase.from('campaign_posts').select('*').order('scheduled_at', { ascending: true })
     if (activeTab !== 'all') q = q.eq('status', activeTab)
-    const { data } = await q
-    setPosts(data || [])
+    const { data, error } = await q
+    if (error) {
+      // fallback to posts
+      let q2 = supabase.from('posts').select('*').order('scheduled_at', { ascending: true })
+      if (activeTab !== 'all') q2 = q2.eq('status', activeTab)
+      const { data: data2 } = await q2
+      setPosts(data2 || [])
+    } else {
+      setPosts(data || [])
+    }
     setLoading(false)
   }
 
