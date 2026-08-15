@@ -101,7 +101,9 @@ export default function ImageBank() {
   }
 
   const generateAI = async () => {
-    if (!prompt.trim()) return
+    const activePrompt = prompt.trim() || (referenceImage ? 'High converting commercial marketing ad featuring uploaded app screenshot' : '')
+    if (!activePrompt && !referenceImage) return
+
     setGenerating(true)
     setError('')
     setGeneratedResults([])
@@ -110,7 +112,7 @@ export default function ImageBank() {
       const styleDesc = STYLE_PRESETS.find(s => s.id === stylePreset)?.desc || ''
       const textOverlayNote = brandOverlay ? ` Feature clear bold promotional text overlay: "${brandOverlay}".` : ''
       
-      const cleanPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${prompt.trim()}. Style guidelines: ${styleDesc}.${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
+      const cleanPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${activePrompt}. Style guidelines: ${styleDesc}.${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
 
       const res = await fetch('/api/generate-image', {
         method: 'POST',
@@ -146,7 +148,9 @@ export default function ImageBank() {
   }
 
   const generateAIVideo = async () => {
-    if (!videoPrompt.trim()) return
+    const activeVideoPrompt = videoPrompt.trim() || (referenceImage ? 'High converting app promotion video ad' : '')
+    if (!activeVideoPrompt && !referenceImage) return
+
     setGeneratingVideo(true)
     setError('')
     setGeneratedVideo(null)
@@ -157,7 +161,7 @@ export default function ImageBank() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'video',
-          prompt: videoPrompt,
+          prompt: activeVideoPrompt,
           voice: videoVoice,
           captionStyle: videoCaptionStyle,
           referenceImage: referenceImage
@@ -168,7 +172,7 @@ export default function ImageBank() {
         throw new Error(data.error || 'Failed to generate AI video ad.')
       }
       setGeneratedVideo({
-        title: data.title || videoPrompt,
+        title: data.title || activeVideoPrompt,
         voice: data.voice || videoVoice,
         captions: data.captions || videoCaptionStyle,
         duration: data.duration || '15s',
@@ -181,6 +185,8 @@ export default function ImageBank() {
     }
     setGeneratingVideo(false)
   }
+
+  const canGenerate = prompt.trim().length > 0 || referenceImage !== null
 
   return (
     <Layout title="AI Image & Video Studio">
@@ -213,12 +219,12 @@ export default function ImageBank() {
             {/* Left Controls */}
             <div style={{ background: 'linear-gradient(135deg, #0d1526, #111827)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: 28 }}>
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8, letterSpacing: '0.05em' }}>AD CREATIVE PROMPT</label>
+                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8, letterSpacing: '0.05em' }}>AD CREATIVE PROMPT (OPTIONAL IF IMAGE UPLOADED)</label>
                 <textarea
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
-                  placeholder="Describe your ad creative in detail (e.g. Modern app mockup floating in minimalist studio with neon lighting...)"
-                  rows={4}
+                  placeholder="Describe your ad creative or just upload your app screenshot below..."
+                  rows={3}
                   style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, color: '#fff', fontSize: 14, outline: 'none', resize: 'vertical', lineHeight: 1.5 }}
                 />
               </div>
@@ -303,8 +309,8 @@ export default function ImageBank() {
 
               <button
                 onClick={generateAI}
-                disabled={generating || !prompt.trim()}
-                style={{ width: '100%', background: prompt.trim() ? 'linear-gradient(135deg, #6366f1, #ec4899)' : '#1e293b', color: prompt.trim() ? '#fff' : '#475569', border: 'none', borderRadius: 14, padding: 16, fontWeight: 800, fontSize: 15, cursor: prompt.trim() ? 'pointer' : 'not-allowed', boxShadow: prompt.trim() ? '0 4px 25px rgba(236,72,153,0.3)' : 'none', transition: 'all 0.2s' }}
+                disabled={generating || !canGenerate}
+                style={{ width: '100%', background: canGenerate ? 'linear-gradient(135deg, #6366f1, #ec4899)' : '#1e293b', color: canGenerate ? '#fff' : '#475569', border: 'none', borderRadius: 14, padding: 16, fontWeight: 800, fontSize: 15, cursor: canGenerate ? 'pointer' : 'not-allowed', boxShadow: canGenerate ? '0 4px 25px rgba(236,72,153,0.3)' : 'none', transition: 'all 0.2s' }}
               >
                 {generating ? '✨ Generating Commercial Assets...' : '✨ Generate Ad Creatives (Cost: 10 Tokens)'}
               </button>
@@ -342,7 +348,7 @@ export default function ImageBank() {
                   <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, fontSize: 24 }}>🚀</div>
                   <h4 style={{ color: '#fff', fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Ready for High-Converting Ad Generation</h4>
                   <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5, maxWidth: 280 }}>
-                    Enter your prompt on the left, upload your app screenshot or product photo, and generate professional marketing creatives instantly.
+                    Upload your app screenshot or product photo (prompt optional) and generate professional marketing creatives instantly.
                   </p>
                 </div>
               )}
@@ -359,11 +365,11 @@ export default function ImageBank() {
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>PRODUCT / OFFER DESCRIPTION</label>
+              <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>PRODUCT / OFFER DESCRIPTION (OPTIONAL IF IMAGE UPLOADED)</label>
               <textarea
                 value={videoPrompt}
                 onChange={e => setVideoPrompt(e.target.value)}
-                placeholder="e.g. 15-second UGC ad for ClearPass travel nurse compliance app..."
+                placeholder="e.g. 15-second UGC ad or just upload your app screenshot above..."
                 rows={3}
                 style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, color: '#fff', fontSize: 14, outline: 'none' }}
               />
@@ -393,8 +399,8 @@ export default function ImageBank() {
 
             <button
               onClick={generateAIVideo}
-              disabled={generatingVideo || !videoPrompt.trim()}
-              style={{ width: '100%', background: videoPrompt.trim() ? 'linear-gradient(135deg, #ec4899, #6366f1)' : '#1e293b', color: videoPrompt.trim() ? '#fff' : '#475569', border: 'none', borderRadius: 14, padding: 16, fontWeight: 800, fontSize: 15, cursor: videoPrompt.trim() ? 'pointer' : 'not-allowed', boxShadow: videoPrompt.trim() ? '0 4px 25px rgba(236,72,153,0.3)' : 'none' }}
+              disabled={generatingVideo || (!videoPrompt.trim() && !referenceImage)}
+              style={{ width: '100%', background: (videoPrompt.trim() || referenceImage) ? 'linear-gradient(135deg, #ec4899, #6366f1)' : '#1e293b', color: (videoPrompt.trim() || referenceImage) ? '#fff' : '#475569', border: 'none', borderRadius: 14, padding: 16, fontWeight: 800, fontSize: 15, cursor: (videoPrompt.trim() || referenceImage) ? 'pointer' : 'not-allowed', boxShadow: (videoPrompt.trim() || referenceImage) ? '0 4px 25px rgba(236,72,153,0.3)' : 'none' }}
             >
               {generatingVideo ? '🎬 Rendering Video & Synced Captions (30s)...' : '🎬 Generate AI Video Ad (Cost: 25 Tokens)'}
             </button>
