@@ -93,27 +93,14 @@ export default function Accounts() {
       let pageId = ''
 
       if (modalPlatform.id === 'facebook') {
-        if (inputVal.includes('id=')) {
-          const match = inputVal.match(/id=(\d+)/)
-          if (match) pageId = match[1]
-        } else {
-          const digits = inputVal.replace(/\D/g, '')
-          if (digits) pageId = digits
-        }
-        if (!pageId) {
-          throw new Error('Please provide a valid Facebook Page ID or profile URL containing id=XXXXX')
-        }
-        accountHandle = `ID: ${pageId}`
-        accountName = `Facebook Page ${pageId}`
-
-        // Trigger real Meta OAuth dialog redirect
-        const clientId = '922484393433555' // FloStudio Meta App ID
+        // Multi-tenant generic Meta OAuth initiation for any customer
+        const clientId = localStorage.getItem('meta_client_id') || '922484393433555'
         const redirectUri = window.location.origin + '/accounts'
         const scope = 'pages_show_list,pages_manage_posts,pages_read_engagement'
         
-        const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=flostudio_fb_${pageId}`
+        const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=flostudio_user_${user.id}`
         
-        localStorage.setItem('pending_fb_connection', JSON.stringify({ userId: user.id, pageId, accountName, accountHandle }))
+        localStorage.setItem('pending_fb_user', user.id)
         window.location.href = oauthUrl
         return
       }
