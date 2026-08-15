@@ -9,13 +9,16 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Missing OPENAI_API_KEY environment variable.' });
     }
 
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const prompt = body.prompt || 'Professional modern SaaS software interface mockup';
+    const size = body.size === '1024x1792' || body.size === '1792x1024' ? '1024x1024' : (body.size || '1024x1024');
+
     const openai = new OpenAI({ apiKey });
     const response = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: 'A professional minimalist tech software interface mockup',
+      model: 'dall-e-2',
+      prompt,
       n: 1,
-      size: '1024x1024',
-      quality: 'standard',
+      size,
     });
 
     return res.status(200).json({ images: response.data.map(d => d.url) });
