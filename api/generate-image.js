@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { createCanvas, loadImage } from 'canvas';
 
 export const maxDuration = 60;
 
@@ -29,31 +30,11 @@ export default async function handler(req, res) {
       const captionStyle = body.captionStyle || 'Dynamic Pop';
       const referenceImage = body.referenceImage || null;
 
-      let imageMessageContent = [];
-      if (referenceImage) {
-        if (referenceImage.startsWith('data:')) {
-          imageMessageContent.push({ type: "image_url", image_url: { url: referenceImage } });
-        } else {
-          try {
-            const imgRes = await fetch(referenceImage);
-            const arrayBuffer = await imgRes.arrayBuffer();
-            const base64 = Buffer.from(arrayBuffer).toString('base64');
-            const mime = imgRes.headers.get('content-type') || 'image/png';
-            imageMessageContent.push({ type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } });
-          } catch (e) {
-            console.warn('Failed to fetch reference image for video:', e);
-          }
-        }
-      }
-
       const scriptCompletion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: 'You are a TikTok and Reels direct-response video ad director. Provide a 3-scene storyboard JSON with hook, middle, and call to action.' },
-          { role: 'user', content: [
-            { type: 'text', text: `Create video ad script for: ${prompt}. Voice model: ${voice}. Caption style: ${captionStyle}. Integrate the provided uploaded app screenshot/product faithfully.` },
-            ...imageMessageContent
-          ] }
+          { role: 'user', content: `Create video ad script for: ${prompt}. Voice model: ${voice}. Caption style: ${captionStyle}.` }
         ],
         response_format: { type: 'json_object' }
       });
@@ -65,17 +46,36 @@ export default async function handler(req, res) {
         scriptData = { title: prompt, scenes: [] };
       }
 
-      let enhancedPrompt = `Cinematic vertical 9:16 mobile video ad thumbnail showcasing the exact uploaded app screenshot and UI interface prominently as the hero subject. Prompt: ${prompt}. High engagement, vibrant lighting, ultra detailed, 8k.`;
-
       const imgResponse = await openai.images.generate({
         model: 'gpt-image-2',
-        prompt: enhancedPrompt,
+        prompt: `Cinematic vertical 9:16 mobile video ad background for: ${prompt}. High engagement, vibrant professional lighting, ultra detailed, 8k.`,
         n: 1,
         size: '1024x1024',
         quality: 'low',
       });
 
-      const thumbnail = imgResponse.data[0].b64_json ? `data:image/png;base64,${imgResponse.data[0].b64_json}` : imgResponse.data[0].url;
+      let bgUrl = imgResponse.data[0].b64_json ? `data:image/png;base64,${imgResponse.data[0].b64_json}` : imgResponse.data[0].url;
+
+      // If reference image provided, composite it onto the vertical background
+      if (referenceImage) {
+        try {
+          const canvas = createCanvas(1024, 1024);
+          const ctx = canvas.getContext('2d');
+          const bgImg = await loadImage(bgUrl);
+          ctx.drawImage(bgImg, 0, 0, 1024, 1024);
+
+          // Draw device mockup frame and user image inside
+          ctx.fillStyle = 'rgba(0,0,0,0.7)';
+          ctx.fillRect(212, 112, 600, 800);
+          
+          const userImg = await loadImage(referenceImage);
+          ctx.drawImage(userImg, 232, 132, 560, 760);
+
+          bgUrl = canvas.toDataURL('image/png');
+        } catch (compErr) {
+          console.warn('Video composition fallback:', compErr);
+        }
+      }
 
       const stockVideos = [
         "https://assets.mixkit.co/videos/preview/mixkit-woman-holding-a-neon-sign-in-the-streets-41589-large.mp4",
@@ -93,36 +93,59 @@ export default async function handler(req, res) {
         captions: captionStyle,
         duration: '15s',
         previewUrl: previewUrl,
-        thumbnail: thumbnail,
+        thumbnail: bgUrl,
         script: scriptData
       });
     } else {
-      // Default image generation with precise image reference instruction
+      // Default image generation with exact asset compositing
       const prompt = body.prompt || 'Professional commercial product advertising creative';
       const referenceImage = body.referenceImage || null;
 
-      let finalPrompt = prompt;
-      if (referenceImage) {
-        finalPrompt = `Commercial marketing ad creative. The user has provided an uploaded app screenshot / product image as the exact visual reference. You MUST faithfully incorporate, feature, and showcase this exact uploaded app screen and interface inside the ad composition (e.g. displayed on a smartphone screen held by a person or floating in a studio). Additional instructions: ${prompt}. Professional studio lighting, commercial branding, photorealistic, 8K.`;
-      } else {
-        finalPrompt = `Commercial marketing ad creative: ${prompt}. Photorealistic, 8K, cinematic commercial production quality.`;
-      }
-
+      // 1. Generate professional background scene with OpenAI
       const response = await openai.images.generate({
         model: 'gpt-image-2',
-        prompt: finalPrompt,
+        prompt: `Professional high-end commercial advertising background studio setting for: ${prompt}. Clean lighting, premium marketing backdrop, photorealistic, 8K, cinematic.`,
         n: 1,
         size: '1024x1024',
         quality: 'low',
       });
 
-      const images = response.data.map(d => {
-        if (d.url) return d.url;
-        if (d.b64_json) return `data:image/png;base64,${d.b64_json}`;
-        return null;
-      }).filter(Boolean);
+      let rawBgUrl = response.data[0].b64_json ? `data:image/png;base64,${response.data[0].b64_json}` : response.data[0].url;
 
-      return res.status(200).json({ images });
+      // 2. If user uploaded a reference asset, composite it directly into the final image
+      let finalImages = [rawBgUrl];
+      if (referenceImage) {
+        try {
+          const canvas = createCanvas(1024, 1024);
+          const ctx = canvas.getContext('2d');
+          
+          const bgImg = await loadImage(rawBgUrl);
+          ctx.drawImage(bgImg, 0, 0, 1024, 1024);
+
+          // Draw sleek phone mockup chassis
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+          ctx.shadowBlur = 35;
+          ctx.fillStyle = '#111';
+          ctx.beginPath();
+          ctx.roundRect(312, 100, 400, 824, 40);
+          ctx.fill();
+
+          // Draw user's exact uploaded app screenshot inside the phone screen
+          const userImg = await loadImage(referenceImage);
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(332, 120, 360, 784, 28);
+          ctx.clip();
+          ctx.drawImage(userImg, 332, 120, 360, 784);
+          ctx.restore();
+
+          finalImages = [canvas.toDataURL('image/png')];
+        } catch (compError) {
+          console.error('Image composition error:', compError);
+        }
+      }
+
+      return res.status(200).json({ images: finalImages });
     }
   } catch (err) {
     console.error('API execution error:', err);
