@@ -72,22 +72,22 @@ export default function ImageBank() {
           throw new Error('Image file is too large. Please select an image under 5MB.')
         }
         const fileName = `product-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-        const { error: uploadErr } = await supabase.storage.from('marketing-assets').upload(fileName, file, { upsert: true })
         
-        if (uploadErr) {
+        // Always read as local base64 data URL for instant, infallible rendering in browser
+        await new Promise((resolve) => {
           const reader = new FileReader()
           reader.onload = (e) => {
             const dataUrl = e.target.result
             setReferenceImage(dataUrl)
             setImages(prev => [{ name: fileName, url: dataUrl }, ...prev])
+            resolve()
           }
           reader.readAsDataURL(file)
-        } else {
-          const publicUrl = `https://jtogllurcrxxaguoxeus.supabase.co/storage/v1/object/public/marketing-assets/${encodeURIComponent(fileName)}`
-          setReferenceImage(publicUrl)
-        }
+        })
+
+        // Also upload to Supabase storage in background for persistence
+        supabase.storage.from('marketing-assets').upload(fileName, file, { upsert: true }).catch(() => {})
       }
-      await loadImages()
     } catch (e) {
       setError(e.message)
     }
