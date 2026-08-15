@@ -16,7 +16,7 @@ export default function Accounts() {
   const [modalPlatform, setModalPlatform] = useState(null)
   const [pageUrlInput, setPageUrlInput] = useState('')
   // Platform Meta App ID for FloStudio SaaS
-  const META_APP_ID = '1134974716372872' // Verified from user's business page asset settings
+  const META_APP_ID = localStorage.getItem('meta_client_id') || ''
 
   useEffect(() => {
     fetchConnectedAccounts()
@@ -95,10 +95,20 @@ export default function Accounts() {
       let pageId = ''
 
       if (modalPlatform.id === 'facebook') {
+        const appId = META_APP_ID.trim()
+        if (!appId) {
+          const inputId = prompt('Please enter your Meta App ID from developers.facebook.com (Settings -> Basic):')
+          if (!inputId || !inputId.trim()) {
+            setConnecting(null)
+            return
+          }
+          localStorage.setItem('meta_client_id', inputId.trim())
+          window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${inputId.trim()}&redirect_uri=${encodeURIComponent(window.location.origin + '/accounts')}&scope=pages_show_list,pages_manage_posts,pages_read_engagement&state=flostudio_user_${user.id}`
+          return
+        }
         const redirectUri = window.location.origin + '/accounts'
         const scope = 'pages_show_list,pages_manage_posts,pages_read_engagement'
-        
-        const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=flostudio_user_${user.id}`
+        const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=flostudio_user_${user.id}`
         
         localStorage.setItem('pending_fb_user', user.id)
         window.location.href = oauthUrl
