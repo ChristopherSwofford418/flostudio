@@ -160,9 +160,9 @@ export default function AgentHQ() {
         const { error: insertErr } = await supabase.from('campaign_posts').insert([postRow])
         if (insertErr) {
           addLog(`Insert error (campaign_posts): ${insertErr.message}`, 'error')
+        } else {
+          saved++
         }
-        await supabase.from('posts').insert([postRow]).catch(() => {})
-        if (!insertErr) saved++
       }
       setSavedCount(saved)
       addLog(`✅ Campaign complete! ${saved} posts saved to your pipeline`, 'success')

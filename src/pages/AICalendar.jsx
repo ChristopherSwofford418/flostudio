@@ -39,7 +39,7 @@ export default function AICalendar() {
     setLoading(true)
     const start = new Date(year, month, 1).toISOString()
     const end = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
-    const { data } = await supabase.from('posts').select('*').gte('scheduled_at', start).lte('scheduled_at', end).order('scheduled_at')
+    const { data } = await supabase.from('campaign_posts').select('*').gte('scheduled_at', start).lte('scheduled_at', end).order('scheduled_at')
     setPosts(data || [])
     setLoading(false)
   }
@@ -99,7 +99,6 @@ export default function AICalendar() {
         if (insertErr) {
           console.error('Calendar insert error:', insertErr.message)
         }
-        await supabase.from('posts').insert([postRow]).catch(() => {})
       }
       await loadPosts()
     } catch (e) {
@@ -110,13 +109,13 @@ export default function AICalendar() {
   }
 
   const deletePost = async (id) => {
-    await supabase.from('posts').delete().eq('id', id)
+    await supabase.from('campaign_posts').delete().eq('id', id)
     setSelectedPost(null)
     await loadPosts()
   }
 
   const approvePost = async (id) => {
-    await supabase.from('posts').update({ status: 'approved' }).eq('id', id)
+    await supabase.from('campaign_posts').update({ status: 'approved' }).eq('id', id)
     setSelectedPost(null)
     await loadPosts()
   }
