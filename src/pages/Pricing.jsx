@@ -2,10 +2,12 @@ import { useState } from 'react'
 import Layout from '../components/Layout'
 import { PRICING_TIERS, initiateStripeCheckout } from '../lib/billing'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { useNavigate } from 'react-router-dom'
 
 export default function Pricing() {
   const [loadingTier, setLoadingTier] = useState(null)
   const { addTokens } = useWorkspace()
+  const navigate = useNavigate()
 
   const handleSubscribe = async (tier) => {
     setLoadingTier(tier.id)
@@ -23,17 +25,15 @@ export default function Pricing() {
   return (
     <Layout title="Pricing & Token Economy">
       <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60 }}>
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 20, fontSize: 12, fontWeight: 600, color: '#a5b4fc', marginBottom: 16 }}>
-            <span>⚡</span> Creatify AI & Holo AI Competitor Model
+        {/* Top Navigation Bar inside view */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32, background: 'rgba(99,102,241,0.08)', padding: '16px 24px', borderRadius: 16, border: '1px solid rgba(99,102,241,0.2)' }}>
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: 1 }}>Token Economy & Billing</span>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', marginTop: 4 }}>Choose Your Growth Plan</h2>
           </div>
-          <h1 style={{ fontSize: 36, fontWeight: 800, color: '#f1f5f9', marginBottom: 12, letterSpacing: '-0.5px' }}>
-            Flexible Token-Based Pricing for All Your Apps
-          </h1>
-          <p style={{ fontSize: 15, color: '#94a3b8', maxWidth: 640, margin: '0 auto', lineHeight: 1.6 }}>
-            Generate high-converting ad scripts, AI product images, and automated social campaigns across your entire app portfolio. Pay only for what you use, with progressive overage protection.
-          </p>
+          <button onClick={() => navigate('/agent')} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 10, fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(99,102,241,0.3)' }}>
+            <span>←</span> Back to Dashboard / Agent HQ
+          </button>
         </div>
 
         {/* Pricing Cards */}
@@ -65,38 +65,11 @@ export default function Pricing() {
                 ))}
               </div>
 
-              <button onClick={() => handleSubscribe(tier)} disabled={loadingTier === tier.id} style={{ width: '100%', padding: '12px 20px', borderRadius: 12, border: 'none', background: tier.popular ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.08)', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', boxShadow: tier.popular ? '0 4px 16px rgba(99,102,241,0.4)' : 'none', transition: 'all 0.2s' }}
-                onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-1px)'}}
-                onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)'}}>
-                {loadingTier === tier.id ? 'Processing Stripe Checkout...' : 'Select Plan'}
+              <button onClick={() => handleSubscribe(tier)} disabled={loadingTier === tier.id} style={{ width: '100%', padding: '14px 20px', borderRadius: 12, border: 'none', background: tier.popular ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', boxShadow: tier.popular ? '0 4px 16px rgba(99,102,241,0.4)' : 'none', transition: 'all 0.2s' }}>
+                {loadingTier === tier.id ? 'Connecting to Stripe...' : `Get ${tier.name}`}
               </button>
             </div>
           ))}
-        </div>
-
-        {/* FAQ & Progressive Overage Section */}
-        <div style={{ background: '#0a0f1e', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: 32 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#f1f5f9', marginBottom: 16 }}>Frequently Asked Questions & Token Rules</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
-            <div>
-              <h4 style={{ fontSize: 14, fontWeight: 600, color: '#a5b4fc', marginBottom: 6 }}>How does progressive overage work?</h4>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
-                If your monthly token credit drops below 50 tokens or runs out during an active campaign, FloStudio pauses right before completion and prompts a 1-click token reload or progressive tier upgrade so you never lose work.
-              </p>
-            </div>
-            <div>
-              <h4 style={{ fontSize: 14, fontWeight: 600, color: '#a5b4fc', marginBottom: 6 }}>How are tokens consumed?</h4>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
-                Social posts consume 1 token, AI image studio generations consume 5 tokens, and full multi-app campaign packs consume 15 tokens. All tracked securely in your Supabase ledger.
-              </p>
-            </div>
-            <div>
-              <h4 style={{ fontSize: 14, fontWeight: 600, color: '#a5b4fc', marginBottom: 6 }}>Can I manage multiple apps?</h4>
-              <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.5 }}>
-                Yes! Switch seamlessly between BoothProfit, DailyPromise, PocketLawyer, GymGuard, and Syllabus Agent using the sidebar app selector.
-              </p>
-            </div>
-          </div>
         </div>
       </div>
     </Layout>
