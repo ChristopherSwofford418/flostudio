@@ -22,13 +22,28 @@ export default async function handler(req, res) {
 
     const openai = new OpenAI({ apiKey });
 
-    // Strictly call OpenAI DALL-E 2 with no hardcoded or random stock fallback
-    const response = await openai.images.generate({
-      model: 'dall-e-2',
-      prompt: prompt,
-      n: 1,
-      size: '1024x1024',
-    });
+    // Try dall-e-3, then dall-e-2
+    let response;
+    let lastError = null;
+
+    for (const model of ['dall-e-3', 'dall-e-2']) {
+      try {
+        response = await openai.images.generate({
+          model: model,
+          prompt: prompt,
+          n: 1,
+          size: '1024x1024',
+          ...(model === 'dall-e-3' ? { quality: 'standard' } : {})
+        });
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!response || !response.data) {
+      throw new Error(lastError?.message || 'Your OpenAI project key does not have access to DALL-E image generation models (dall-e-3 / dall-e-2). Please verify your OpenAI billing and model permissions.');
+    }
 
     const imageUrls = response.data.map(d => d.url);
     return res.status(200).json({ images: imageUrls });
