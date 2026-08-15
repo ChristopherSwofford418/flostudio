@@ -95,41 +95,20 @@ export default function ImageBank() {
       
       const fullPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${prompt}. Style guidelines: ${styleDesc}. ${refNote}${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
 
-      const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
+      const dalleSize = aspectRatio === '9:16' ? '1024x1792' : aspectRatio === '16:9' ? '1792x1024' : '1024x1024'
+      const res = await fetch('/api/generate-image', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ANON}`, 'apikey': ANON },
-        body: JSON.stringify({ prompt: fullPrompt, n: Number(variationsCount), size: `${selectedAspect.width}x${selectedAspect.height}` })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: fullPrompt, size: dalleSize })
       })
       const data = await res.json()
-      let imgs = data.images || []
-      if (!imgs.length && data.choices?.[0]?.message?.content) {
-        const urlMatches = data.choices[0].message.content.match(/https?:\/\/[^\s"]+/g)
-        if (urlMatches) imgs = urlMatches
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to generate image')
       }
-
-      // Real OpenAI DALL-E 3 Generation via secure backend proxy
-      const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/generate-image', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ANON}`,
-          'apikey': ANON
-        },
-        body: JSON.stringify({
-          prompt: fullPrompt,
-          n: 1,
-          size: aspectRatio === '9:16' ? '1024x1792' : aspectRatio === '16:9' ? '1792x1024' : '1024x1024'
-        })
-      })
-      const data = await res.json()
-      if (data.error) {
-        throw new Error(data.error.message || JSON.stringify(data.error))
+      if (!data.images || !data.images.length) {
+        throw new Error('No image returned from OpenAI DALL-E 3.')
       }
-      const imgs = data.images || (data.data ? data.data.map(d => d.url) : [])
-      if (!imgs.length) {
-        throw new Error('No image returned from generation service.')
-      }
-      setGeneratedResults(imgs)
+      setGeneratedResults(data.images)
     } catch (e) {
       setError('Generation failed: ' + e.message)
     }
