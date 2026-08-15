@@ -15,6 +15,7 @@ export default function Accounts() {
   const [connecting, setConnecting] = useState(null)
   const [modalPlatform, setModalPlatform] = useState(null)
   const [pageUrlInput, setPageUrlInput] = useState('')
+  const [metaAppIdInput, setMetaAppIdInput] = useState(localStorage.getItem('meta_client_id') || '')
 
   useEffect(() => {
     fetchConnectedAccounts()
@@ -93,8 +94,13 @@ export default function Accounts() {
       let pageId = ''
 
       if (modalPlatform.id === 'facebook') {
-        // Multi-tenant generic Meta OAuth initiation for any customer
-        const clientId = localStorage.getItem('meta_client_id') || '922484393433555'
+        const clientId = metaAppIdInput.trim()
+        if (!clientId) {
+          alert('Please enter your Meta App ID from developers.facebook.com')
+          setConnecting(null)
+          return
+        }
+        localStorage.setItem('meta_client_id', clientId)
         const redirectUri = window.location.origin + '/accounts'
         const scope = 'pages_show_list,pages_manage_posts,pages_read_engagement'
         
@@ -232,15 +238,22 @@ export default function Accounts() {
               </p>
               
               {modalPlatform.id === 'facebook' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <form onSubmit={handleConnectSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div style={{ background: 'rgba(24,119,242,0.1)', border: '1px solid rgba(24,119,242,0.3)', borderRadius: 12, padding: 16, color: '#93c5fd', fontSize: 13, lineHeight: 1.5 }}>
-                    Standard Meta flow: Click below to authorize with Facebook, select your business Page from your managed list, and FloStudio will instantly connect it.
+                    Enter your Meta Developer App ID below (from developers.facebook.com) to connect your Facebook Pages via official Meta OAuth.
                   </div>
-                  <button onClick={handleConnectSubmit} style={{ width: '100%', padding: '14px', borderRadius: 12, background: '#1877f2', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: '0 4px 15px rgba(24,119,242,0.4)' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                    Continue with Facebook
-                  </button>
-                </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#cbd5e1', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Meta App ID (Client ID)</label>
+                    <input type="text" value={metaAppIdInput} onChange={e=>setMetaAppIdInput(e.target.value)} placeholder="e.g. 123456789012345" required style={{ width: '100%', background: '#070b19', border: '1px solid rgba(24,119,242,0.3)', borderRadius: 10, padding: '12px 16px', color: '#f8fafc', fontSize: 13.5, fontFamily: 'inherit' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+                    <button type="button" onClick={()=>setModalPlatform(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', color: '#94a3b8', fontWeight: 700, border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                    <button type="submit" style={{ flex: 1, padding: '12px', borderRadius: 10, background: '#1877f2', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(24,119,242,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                      Continue with Facebook
+                    </button>
+                  </div>
+                </form>
               ) : (
                 <form onSubmit={handleConnectSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div>
