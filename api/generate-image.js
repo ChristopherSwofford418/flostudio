@@ -15,17 +15,16 @@ export default async function handler(req, res) {
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const prompt = body.prompt || 'Professional commercial product advertising creative';
-    const size = body.size || '1024x1024';
+    const size = '1024x1024';
 
     const openai = new OpenAI({ apiKey });
     
-    // Using DALL-E 3 for high fidelity marketing assets
+    // Use dall-e-2 which is universally available on all OpenAI project keys
     const response = await openai.images.generate({
-      model: 'dall-e-3',
+      model: 'dall-e-2',
       prompt: prompt,
       n: 1,
       size: size,
-      quality: 'standard',
     });
 
     const imageUrls = response.data.map(d => d.url);
@@ -33,7 +32,7 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('OpenAI image generation error:', err);
     return res.status(500).json({ 
-      error: err.message || 'Failed to generate image with OpenAI DALL-E 3.' 
+      error: err.message || 'Failed to generate image with OpenAI.' 
     });
   }
 }
