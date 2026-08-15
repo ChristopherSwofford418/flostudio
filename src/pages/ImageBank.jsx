@@ -107,17 +107,15 @@ export default function ImageBank() {
         if (urlMatches) imgs = urlMatches
       }
 
-      if (imgs.length) {
-        setGeneratedResults(imgs)
-      } else {
-        // High quality production mock results matching prompt aspect ratio
-        const q = encodeURIComponent(prompt.substring(0, 40))
-        setGeneratedResults([
-          `https://images.unsplash.com/photo-1557804506-669a67965ba0?w=${selectedAspect.width}&h=${selectedAspect.height}&fit=crop&q=80`,
-          `https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=${selectedAspect.width}&h=${selectedAspect.height}&fit=crop&q=80`,
-          `https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=${selectedAspect.width}&h=${selectedAspect.height}&fit=crop&q=80`,
-        ].slice(0, Number(variationsCount)))
+      // Direct prompt-conditioned AI generation via pollinations.ai
+      const count = Number(variationsCount) || 1
+      const generated = []
+      for (let i = 0; i < count; i++) {
+        const seed = Math.floor(Math.random() * 1000000) + i
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=${selectedAspect.width}&height=${selectedAspect.height}&seed=${seed}&nologo=true`
+        generated.push(imageUrl)
       }
+      setGeneratedResults(generated)
     } catch (e) {
       setError('Generation failed: ' + e.message)
     }
