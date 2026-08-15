@@ -153,7 +153,9 @@ async function executeTool(toolName, args, onProgress) {
 
 async function toolCreatePosts({ posts }, onProgress) {
   onProgress?.(`Creating ${posts.length} post${posts.length > 1 ? 's' : ''}...`)
+  const { data: { user } } = await supabase.auth.getUser()
   const rows = posts.map(p => ({
+    user_id: user?.id || null,
     platform: p.platform,
     content: p.content,
     scheduled_at: p.scheduled_at || null,
@@ -198,6 +200,10 @@ Make each post platform-appropriate (Instagram: visual/hashtags, Twitter: concis
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
     body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], max_tokens: 4000 }),
   })
+  if (!res.ok) {
+    const errText = await res.text()
+    return { success: false, error: `AI Proxy error (${res.status}): ${errText}` }
+  }
   const aiData = await res.json()
   const raw = aiData?.content || aiData?.choices?.[0]?.message?.content || '[]'
 
@@ -227,7 +233,9 @@ Make each post platform-appropriate (Instagram: visual/hashtags, Twitter: concis
     }
   })
 
-  const { data, error } = await supabase.from('posts').insert(rows).select()
+  const { data: { user } } = await supabase.auth.getUser()
+  const rowsWithUser = rows.map(r => ({ ...r, user_id: user?.id || null }))
+  const { data, error } = await supabase.from('posts').insert(rowsWithUser).select()
   if (error) return { success: false, error: error.message }
 
   return {
@@ -367,6 +375,10 @@ Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
     body: JSON.stringify({ model: 'gpt-4o', messages, tools: FLO_TOOLS, tool_choice: 'auto', max_tokens: 1000 }),
   })
+  if (!res.ok) {
+    const errText = await res.text()
+    return { reply: `AI Agent encountered a gateway error (${res.status}): ${errText}`, actions: [] }
+  }
   const data = await res.json()
   const assistantMsg = data?.choices?.[0]?.message || data
 
