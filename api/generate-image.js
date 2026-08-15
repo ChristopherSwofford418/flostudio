@@ -1,5 +1,7 @@
 import OpenAI from 'openai';
 
+export const maxDuration = 60;
+
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
 
@@ -27,6 +29,7 @@ export default async function handler(req, res) {
       prompt: prompt,
       n: 1,
       size: '1024x1024',
+      quality: 'low',
     });
 
     const images = response.data.map(d => {
