@@ -5,10 +5,11 @@
     setGeneratedVideo(null)
 
     try {
-      const res = await fetch('/api/generate-video', {
+      const res = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'video',
           prompt: videoPrompt,
           voice: videoVoice,
           captionStyle: videoCaptionStyle
@@ -28,7 +29,6 @@
         script: data.script
       })
       
-      // Deduct tokens if token balance available
       if (tokenBalance >= 25) {
         setTokenBalance(prev => Math.max(0, prev - 25))
       }
