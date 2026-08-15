@@ -68,11 +68,13 @@ export default function ImageBank() {
     setError('')
     try {
       for (const file of Array.from(files)) {
+        if (file.size > 5 * 1024 * 1024) {
+          throw new Error('Image file is too large. Please select an image under 5MB.')
+        }
         const fileName = `product-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
         const { error: uploadErr } = await supabase.storage.from('marketing-assets').upload(fileName, file, { upsert: true })
         
         if (uploadErr) {
-          // Fallback to local data URL if Supabase bucket isn't provisioned yet
           const reader = new FileReader()
           reader.onload = (e) => {
             const dataUrl = e.target.result
@@ -80,7 +82,6 @@ export default function ImageBank() {
             setImages(prev => [{ name: fileName, url: dataUrl }, ...prev])
           }
           reader.readAsDataURL(file)
-          throw new Error('Supabase bucket "marketing-assets" not found or restricted. Using instant local asset preview instead.')
         } else {
           const publicUrl = `https://jtogllurcrxxaguoxeus.supabase.co/storage/v1/object/public/marketing-assets/${encodeURIComponent(fileName)}`
           setReferenceImage(publicUrl)
@@ -88,7 +89,7 @@ export default function ImageBank() {
       }
       await loadImages()
     } catch (e) {
-      console.warn('Upload notice:', e.message)
+      setError(e.message)
     }
     setUploading(false)
   }
@@ -107,16 +108,17 @@ export default function ImageBank() {
 
     try {
       const styleDesc = STYLE_PRESETS.find(s => s.id === stylePreset)?.desc || ''
-      const refNote = referenceImage ? ` Incorporating reference app/product image URL ${referenceImage}.` : ''
+      // Do not append huge base64 data URLs to text prompt; pass clean reference indicator if URL is remote
+      const refNote = referenceImage && !referenceImage.startsWith('data:') ? ` Incorporating reference asset URL.` : ''
       const textOverlayNote = brandOverlay ? ` Feature clear bold promotional text overlay: "${brandOverlay}".` : ''
       
-      const fullPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${prompt}. Style guidelines: ${styleDesc}. ${refNote}${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
+      const cleanPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${prompt.trim()}. Style guidelines: ${styleDesc}.${refNote}${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
 
       const res = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: fullPrompt,
+          prompt: cleanPrompt,
           aspectRatio: aspectRatio
         })
       })
@@ -158,8 +160,7 @@ export default function ImageBank() {
           action: 'video',
           prompt: videoPrompt,
           voice: videoVoice,
-          captionStyle: videoCaptionStyle,
-          referenceImage: referenceImage
+          captionStyle: videoCaptionStyle
         })
       })
       const data = await res.json()
