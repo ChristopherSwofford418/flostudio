@@ -28,8 +28,7 @@ function AgentPanel({ onClose }) {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [progressMsg, setProgressMsg] = useState('')
-  const [lastActions, setLastActions] = useState([])
+  const [activitySteps, setActivitySteps] = useState([])
   const bottomRef = useRef()
   const conversationRef = useRef([])
 
@@ -40,7 +39,7 @@ function AgentPanel({ onClose }) {
     "Show me my pipeline stats",
   ]
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, loading])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, loading, activitySteps])
 
   const renderContent = (content) => content
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -52,34 +51,35 @@ function AgentPanel({ onClose }) {
     const msg = text || input.trim()
     if (!msg || loading) return
     setInput('')
-    setLastActions([])
+    setActivitySteps([])
     const userMsg = { role: 'user', content: msg }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
-    setProgressMsg('Flo is thinking...')
+    setActivitySteps(['Analyzing your request...'])
+
     try {
       const history = conversationRef.current
       const { reply, actions } = await runFloAgent(
         history,
         msg,
-        (progress) => setProgressMsg(progress),
-        (action) => setLastActions(prev => [...prev, action])
+        (progress) => setActivitySteps(prev => [...prev, progress]),
+        (action) => setActivitySteps(prev => [...prev, `Completed: ${action.tool.replace(/_/g, ' ')}`])
       )
       conversationRef.current = [...history, { role: 'user', content: msg }, { role: 'assistant', content: reply }]
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, actions }])
+      setMessages(prev => [...prev, { role: 'assistant', content: reply, actions, steps: activitySteps }])
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message || 'Connection failed. Please try again.'}` }])
     }
     setLoading(false)
-    setProgressMsg('')
+    setActivitySteps([])
   }
 
   return (
     <div style={{ position:'fixed', right:0, top:0, bottom:0, width:400, background:'linear-gradient(180deg,#0f172a 0%,#070b19 100%)', borderLeft:'1px solid rgba(236,72,153,0.3)', display:'flex', flexDirection:'column', zIndex:1000, boxShadow:'-20px 0 60px rgba(0,0,0,0.6)', animation:'slideInRight 0.3s ease' }}>
       <style>{`
         @keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes bounceDot{0%,80%,100%{transform:scale(0);opacity:0.3}40%{transform:scale(1.0);opacity:1}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
       {/* Header */}
       <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(236,72,153,0.2)', display:'flex', alignItems:'center', gap:12 }}>
@@ -90,7 +90,7 @@ function AgentPanel({ onClose }) {
           <div style={{ fontWeight:800, fontSize:14, color:'#f8fafc' }}>Flo - Agentic AI</div>
           <div style={{ fontSize:11, color:'#10b981', display:'flex', alignItems:'center', gap:4 }}>
             <span style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', display:'inline-block' }}/>
-            Active · GPT-4o
+            Active · GPT-4o Live Stream
           </div>
         </div>
         <button onClick={onClose} style={{ background:'none', border:'none', color:'#94a3b8', cursor:'pointer', padding:4 }}>
@@ -101,7 +101,7 @@ function AgentPanel({ onClose }) {
       {/* Messages */}
       <div style={{ flex:1, overflowY:'auto', padding:'16px 16px 8px', display:'flex', flexDirection:'column', gap:12 }}>
         {messages.map((msg, i) => (
-          <div key={i}>
+          <div key={i} style={{ animation:'fadeIn 0.25s ease' }}>
             <div style={{ display:'flex', gap:10, alignItems:'flex-start', flexDirection:msg.role==='user'?'row-reverse':'row' }}>
               {msg.role==='assistant' && (
                 <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#ec4899,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
@@ -122,18 +122,27 @@ function AgentPanel({ onClose }) {
             )}
           </div>
         ))}
+
         {loading && (
-          <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+          <div style={{ display:'flex', gap:10, alignItems:'flex-start', animation:'fadeIn 0.2s ease' }}>
             <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#ec4899,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1-12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
             </div>
-            <div style={{ padding:'12px 16px', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(236,72,153,0.2)', borderRadius:'4px 14px 14px 14px', display:'flex', flexDirection:'column', gap:6 }}>
+            <div style={{ padding:'12px 16px', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(236,72,153,0.25)', borderRadius:'4px 14px 14px 14px', display:'flex', flexDirection:'column', gap:8, minWidth:240 }}>
               <div style={{ display:'flex', alignItems:'center', gap:5 }}>
                 <span style={{ width:7, height:7, borderRadius:'50%', background:'#ec4899', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both', animationDelay:'-0.32s' }} />
                 <span style={{ width:7, height:7, borderRadius:'50%', background:'#8b5cf6', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both', animationDelay:'-0.16s' }} />
                 <span style={{ width:7, height:7, borderRadius:'50%', background:'#6366f1', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both' }} />
+                <span style={{ fontSize:11.5, color:'#f472b6', fontWeight:700, marginLeft:4 }}>Flo is working live...</span>
               </div>
-              <div style={{ fontSize:11.5, color:'#f472b6', fontWeight:500 }}>{progressMsg || 'Flo is working on it...'}</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:4, borderLeft:'2px solid rgba(236,72,153,0.3)', paddingLeft:8, marginTop:2 }}>
+                {activitySteps.map((step, idx) => (
+                  <div key={idx} style={{ fontSize:11, color:idx === activitySteps.length - 1 ? '#38bdf8' : '#94a3b8', display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ width:4, height:4, borderRadius:'50%', background:idx === activitySteps.length - 1 ? '#38bdf8' : '#64748b' }} />
+                    {step}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -150,7 +159,7 @@ function AgentPanel({ onClose }) {
 
       <div style={{ padding:'12px 16px 16px', borderTop:'1px solid rgba(236,72,153,0.2)' }}>
         <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Tell Flo what to do..." rows={2} style={{ flex:1, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(236,72,153,0.25)', borderRadius:10, padding:'10px 14px', color:'#f8fafc', fontSize:13, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }} />
+          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Tell Flo what to do or ask a question..." rows={2} style={{ flex:1, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(236,72,153,0.25)', borderRadius:10, padding:'10px 14px', color:'#f8fafc', fontSize:13, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }} />
           <button onClick={()=>send()} disabled={!input.trim()||loading} style={{ width:40, height:40, borderRadius:10, flexShrink:0, background:input.trim()&&!loading?'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)':'rgba(255,255,255,0.06)', border:'none', cursor:input.trim()&&!loading?'pointer':'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:input.trim()&&!loading?'0 4px 15px rgba(236,72,153,0.4)':'none' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
