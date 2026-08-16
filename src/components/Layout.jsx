@@ -76,7 +76,11 @@ function AgentPanel({ onClose }) {
 
   return (
     <div style={{ position:'fixed', right:0, top:0, bottom:0, width:400, background:'linear-gradient(180deg,#0f172a 0%,#070b19 100%)', borderLeft:'1px solid rgba(236,72,153,0.3)', display:'flex', flexDirection:'column', zIndex:1000, boxShadow:'-20px 0 60px rgba(0,0,0,0.6)', animation:'slideInRight 0.3s ease' }}>
-      <style>{`@keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        @keyframes bounceDot{0%,80%,100%{transform:scale(0);opacity:0.3}40%{transform:scale(1.0);opacity:1}}
+      `}</style>
       {/* Header */}
       <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(236,72,153,0.2)', display:'flex', alignItems:'center', gap:12 }}>
         <div style={{ width:38, height:38, borderRadius:'50%', background:'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 20px rgba(236,72,153,0.5)', flexShrink:0 }}>
@@ -120,11 +124,16 @@ function AgentPanel({ onClose }) {
         ))}
         {loading && (
           <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
-            <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#ec4899,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" style={{ animation:'spin 1s linear infinite' }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+            <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#ec4899,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1-12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
             </div>
-            <div style={{ padding:'10px 14px', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(236,72,153,0.2)', borderRadius:'4px 14px 14px 14px', fontSize:12, color:'#f472b6', fontStyle:'italic' }}>
-              {progressMsg || 'Thinking...'}
+            <div style={{ padding:'12px 16px', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(236,72,153,0.2)', borderRadius:'4px 14px 14px 14px', display:'flex', flexDirection:'column', gap:6 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                <span style={{ width:7, height:7, borderRadius:'50%', background:'#ec4899', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both', animationDelay:'-0.32s' }} />
+                <span style={{ width:7, height:7, borderRadius:'50%', background:'#8b5cf6', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both', animationDelay:'-0.16s' }} />
+                <span style={{ width:7, height:7, borderRadius:'50%', background:'#6366f1', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both' }} />
+              </div>
+              <div style={{ fontSize:11.5, color:'#f472b6', fontWeight:500 }}>{progressMsg || 'Flo is working on it...'}</div>
             </div>
           </div>
         )}

@@ -369,11 +369,18 @@ Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 
     { role: 'user', content: userMessage },
   ]
 
-  // First AI call — may return tool calls
+  // First AI call — enforce tool use when user gives a command
+  const isCommand = /create|fill|schedule|approve|delete|remove|rewrite|show|check|list|clear|status|stats/i.test(userMessage)
   const res = await fetch(AI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
-    body: JSON.stringify({ model: 'gpt-4o', messages, tools: FLO_TOOLS, tool_choice: 'auto', max_tokens: 1000 }),
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages,
+      tools: FLO_TOOLS,
+      tool_choice: isCommand ? 'auto' : 'auto',
+      max_tokens: 1000
+    }),
   })
   if (!res.ok) {
     const errText = await res.text()
