@@ -1,7 +1,7 @@
 /**
  * Flo Agentic AI Engine
  * Fully open-ended conversational AI assistant with GPT-4o function calling.
- * Supports general marketing Q&A as well as real workspace actions (calendar fill, post creation, approvals, pipeline stats).
+ * Instantly executes workspace actions (creating posts, filling calendar, approving content) on command.
  */
 
 import { supabase } from '../supabase'
@@ -14,7 +14,7 @@ export const FLO_TOOLS = [
     type: 'function',
     function: {
       name: 'create_posts',
-      description: 'Create one or more social media posts and save them to the campaign pipeline. Use this when the user asks to create, write, generate, or schedule posts.',
+      description: 'Create social media posts and save them immediately to the campaign pipeline. Use this whenever the user asks to create, write, generate, or schedule posts.',
       parameters: {
         type: 'object',
         properties: {
@@ -113,7 +113,7 @@ async function executeTool(toolName, args, onProgress) {
 }
 
 async function toolCreatePosts({ posts }, onProgress) {
-  onProgress?.(`Creating ${posts.length} post${posts.length > 1 ? 's' : ''}...`)
+  onProgress?.(`Saving ${posts.length} post${posts.length > 1 ? 's' : ''} to pipeline...`)
   const { data: { user } } = await supabase.auth.getUser()
   const rows = posts.map(p => ({
     user_id: user?.id || null,
@@ -167,7 +167,6 @@ Return ONLY a valid JSON array with this exact structure (no markdown fences, no
     const match = cleanRaw.match(/\[[\s\S]*\]/)
     generatedPosts = match ? JSON.parse(match[0]) : JSON.parse(cleanRaw)
   } catch {
-    // Fallback posts if JSON fails
     generatedPosts = Array.from({ length: Math.min(totalPosts, 6) }, (_, i) => ({
       platform: platforms[i % platforms.length],
       content: `Check out our latest update for ${brand_description}! #Growth #FloStudio`,
@@ -252,7 +251,7 @@ async function toolGetAnalytics() {
 }
 
 /**
- * Run the Flo agent with full open-ended conversation and tool execution support.
+ * Run the Flo agent with full open-ended conversation and forced tool execution on commands.
  */
 export async function runFloAgent(conversationHistory, userMessage, onProgress, onAction) {
   const messages = [
@@ -261,20 +260,26 @@ export async function runFloAgent(conversationHistory, userMessage, onProgress, 
       content: `You are Flo, an expert AI marketing assistant and copilot for FloStudio. You can answer any questions about social media, growth hacking, copywriting, marketing strategy, SEO, and paid ads. 
       You ALSO have direct tools to execute actions inside the user's FloStudio workspace (creating posts, filling the calendar, approving content, viewing pipeline stats).
       
-      Guidelines:
-      - If the user asks a general question or marketing advice, answer helpfully and thoroughly as an expert marketer.
-      - If the user asks you to DO something in the app (e.g. "Create 5 posts", "Fill my calendar", "Approve all pending posts"), you MUST call the appropriate tool immediately to execute the action.
-      - Never claim you completed an action without actually calling the tool.
+      CRITICAL RULE: Whenever the user asks you to create, write, generate, schedule, or fill posts/calendar, you MUST call the 'create_posts' or 'fill_calendar' tool immediately in your very first response. DO NOT output drafts or ask the user to confirm with 'create'. Execute the tool right away and save the posts to the database!
+      
       Current date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
     },
     ...conversationHistory,
     { role: 'user', content: userMessage },
   ]
 
+  const isCommand = /create|fill|schedule|write|generate|posts|calendar|approve/i.test(userMessage)
+
   const res = await fetch(AI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
-    body: JSON.stringify({ model: 'gpt-4o', messages, tools: FLO_TOOLS, tool_choice: 'auto', max_tokens: 1500 }),
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages,
+      tools: FLO_TOOLS,
+      tool_choice: isCommand ? 'required' : 'auto',
+      max_tokens: 1500,
+    }),
   })
 
   if (!res.ok) {
@@ -287,7 +292,6 @@ export async function runFloAgent(conversationHistory, userMessage, onProgress, 
 
   const actions = []
 
-  // If GPT-4o decided to call tools
   if (assistantMsg?.tool_calls?.length > 0) {
     const toolCallResults = []
 
@@ -296,7 +300,6 @@ export async function runFloAgent(conversationHistory, userMessage, onProgress, 
       let args = {}
       try { args = JSON.parse(toolCall.function?.arguments || '{}') } catch {}
 
-      // Default arguments if missing
       if (toolName === 'fill_calendar' && !args.brand_description) {
         args.brand_description = userMessage
         args.platforms = args.platforms || ['instagram', 'linkedin']
@@ -319,7 +322,6 @@ export async function runFloAgent(conversationHistory, userMessage, onProgress, 
       })
     }
 
-    // Follow-up call to summarize tool results
     const followUpMessages = [
       ...messages,
       { role: 'assistant', content: assistantMsg.content || null, tool_calls: assistantMsg.tool_calls },
@@ -332,12 +334,11 @@ export async function runFloAgent(conversationHistory, userMessage, onProgress, 
       body: JSON.stringify({ model: 'gpt-4o', messages: followUpMessages, max_tokens: 800 }),
     })
     const followUpData = await followUpRes.json()
-    const reply = followUpData?.choices?.[0]?.message?.content || followUpData?.content || 'Done! I have updated your workspace successfully.'
+    const reply = followUpData?.choices?.[0]?.message?.content || followUpData?.content || 'Done! I have created and saved your posts to the pipeline.'
 
     return { reply, actions }
   }
 
-  // Pure conversational or informational response
   const reply = assistantMsg?.content || data?.content || 'I am here to help! Ask me anything about marketing or tell me what to automate.'
   return { reply, actions: [] }
 }
