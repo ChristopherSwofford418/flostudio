@@ -73,7 +73,6 @@ export default function ImageBank() {
         }
         const fileName = `product-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
         
-        // Always read as local base64 data URL for instant, infallible rendering in browser
         await new Promise((resolve) => {
           const reader = new FileReader()
           reader.onload = (e) => {
@@ -85,7 +84,6 @@ export default function ImageBank() {
           reader.readAsDataURL(file)
         })
 
-        // Also upload to Supabase storage in background for persistence
         supabase.storage.from('marketing-assets').upload(fileName, file, { upsert: true }).catch(() => {})
       }
     } catch (e) {
@@ -111,7 +109,6 @@ export default function ImageBank() {
     try {
       const styleDesc = STYLE_PRESETS.find(s => s.id === stylePreset)?.desc || ''
       const textOverlayNote = brandOverlay ? ` Feature clear bold promotional text overlay: "${brandOverlay}".` : ''
-      
       const cleanPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${activePrompt}. Style guidelines: ${styleDesc}.${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
 
       const res = await fetch('/api/generate-image', {
@@ -147,61 +144,20 @@ export default function ImageBank() {
     }
   }
 
-  const generateAIVideo = async () => {
-    const activeVideoPrompt = videoPrompt.trim() || (referenceImage ? 'High converting app promotion video ad' : '')
-    if (!activeVideoPrompt && !referenceImage) return
-
-    setGeneratingVideo(true)
-    setError('')
-    setGeneratedVideo(null)
-
-    try {
-      const res = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'video',
-          prompt: activeVideoPrompt,
-          voice: videoVoice,
-          captionStyle: videoCaptionStyle,
-          referenceImage: referenceImage
-        })
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Failed to generate AI video ad.')
-      }
-      setGeneratedVideo({
-        title: data.title || activeVideoPrompt,
-        voice: data.voice || videoVoice,
-        captions: data.captions || videoCaptionStyle,
-        duration: data.duration || '15s',
-        previewUrl: data.previewUrl,
-        thumbnail: data.thumbnail,
-        script: data.script
-      })
-    } catch (e) {
-      setError('Video generation failed: ' + e.message)
-    }
-    setGeneratingVideo(false)
-  }
-
-  const canGenerate = prompt.trim().length > 0 || referenceImage !== null
-
   return (
     <Layout title="AI Image & Video Studio">
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .studio-tab { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #94a3b8; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; }
-        .studio-tab.active { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; border-color: transparent; box-shadow: 0 4px 20px rgba(99,102,241,0.3); }
-        .style-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.2s; }
-        .style-card:hover { border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.04); }
-        .style-card.selected { background: rgba(99,102,241,0.12); border-color: #6366f1; box-shadow: 0 0 15px rgba(99,102,241,0.2); }
+        .studio-tab { background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+        .studio-tab.active { background: linear-gradient(135deg, #db2777, #7c3aed, #4f46e5); color: #fff; border-color: transparent; box-shadow: 0 4px 15px rgba(219,39,119,0.3); }
+        .style-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.2s; }
+        .style-card:hover { border-color: #cbd5e1; background: #f1f5f9; }
+        .style-card.selected { background: #fdf2f8; border-color: #db2777; box-shadow: 0 0 15px rgba(219,39,119,0.15); }
       `}</style>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', animation: 'fadeIn 0.4s ease-out' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', animation: 'fadeIn 0.3s ease-out' }}>
         {/* Top Studio Tabs */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
           <button className={`studio-tab ${activeTab === 'generator' ? 'active' : ''}`} onClick={() => setActiveTab('generator')}>
             AI Ad Image Studio
           </button>
@@ -217,21 +173,21 @@ export default function ImageBank() {
         {activeTab === 'generator' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 28 }}>
             {/* Left Controls */}
-            <div style={{ background: 'linear-gradient(135deg, #0d1526, #111827)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: 28 }}>
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 28, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8, letterSpacing: '0.05em' }}>AD CREATIVE PROMPT (OPTIONAL IF IMAGE UPLOADED)</label>
+                <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8, letterSpacing: '0.05em' }}>AD CREATIVE PROMPT (OPTIONAL IF IMAGE UPLOADED)</label>
                 <textarea
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
                   placeholder="Describe your ad creative or just upload your app screenshot below..."
                   rows={3}
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, color: '#fff', fontSize: 14, outline: 'none', resize: 'vertical', lineHeight: 1.5 }}
+                  style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: 14, color: '#0f172a', fontSize: 14, outline: 'none', resize: 'vertical', lineHeight: 1.5 }}
                 />
               </div>
 
               {/* Visual Style Presets */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 10, letterSpacing: '0.05em' }}>VISUAL STYLE</label>
+                <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 10, letterSpacing: '0.05em' }}>VISUAL STYLE</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
                   {STYLE_PRESETS.map(s => (
                     <div
@@ -239,7 +195,7 @@ export default function ImageBank() {
                       onClick={() => setStylePreset(s.id)}
                       className={`style-card ${stylePreset === s.id ? 'selected' : ''}`}
                     >
-                      <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{s.label}</div>
+                      <div style={{ color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{s.label}</div>
                       <div style={{ color: '#64748b', fontSize: 11, lineHeight: 1.3 }}>{s.desc}</div>
                     </div>
                   ))}
@@ -249,21 +205,21 @@ export default function ImageBank() {
               {/* Aspect Ratio & Variations */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
                 <div>
-                  <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>ASPECT RATIO</label>
+                  <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>ASPECT RATIO</label>
                   <select
                     value={aspectRatio}
                     onChange={e => setAspectRatio(e.target.value)}
-                    style={{ width: '100%', background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 12, color: '#fff', fontSize: 13 }}
+                    style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12, color: '#0f172a', fontSize: 13 }}
                   >
                     {ASPECT_RATIOS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>VARIATIONS</label>
+                  <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>VARIATIONS</label>
                   <select
                     value={variationsCount}
                     onChange={e => setVariationsCount(e.target.value)}
-                    style={{ width: '100%', background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 12, color: '#fff', fontSize: 13 }}
+                    style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12, color: '#0f172a', fontSize: 13 }}
                   >
                     <option value="1">1 Creative</option>
                     <option value="2">2 Creatives</option>
@@ -275,198 +231,182 @@ export default function ImageBank() {
 
               {/* Brand Text Overlay */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>TEXT OVERLAY (OPTIONAL)</label>
+                <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>TEXT OVERLAY (OPTIONAL)</label>
                 <input
                   type="text"
                   value={brandOverlay}
                   onChange={e => setBrandOverlay(e.target.value)}
                   placeholder="e.g. 50% OFF TODAY or JOIN NOW"
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 12, color: '#fff', fontSize: 13, outline: 'none' }}
+                  style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12, color: '#0f172a', fontSize: 13, outline: 'none' }}
                 />
               </div>
 
               {/* Reference Image Picker & Direct Upload */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>UPLOAD APP SCREENSHOT OR PRODUCT IMAGE</label>
+                <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>UPLOAD APP SCREENSHOT OR PRODUCT IMAGE</label>
                 {referenceImage ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 12, padding: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fdf2f8', border: '1px solid rgba(219,39,119,0.3)', borderRadius: 12, padding: 10 }}>
                     <img src={referenceImage} alt="Ref" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }} />
-                    <div style={{ flex: 1, fontSize: 13, color: '#fff', fontWeight: 500 }}>Reference Asset Included in Ad</div>
-                    <button onClick={() => setReferenceImage(null)} style={{ background: 'rgba(239,68,68,0.2)', border: 'none', color: '#f87171', borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}>Remove</button>
+                    <div style={{ flex: 1, fontSize: 13, color: '#0f172a', fontWeight: 600 }}>Reference Asset Included in Ad</div>
+                    <button onClick={() => setReferenceImage(null)} style={{ background: '#ffeeef', border: 'none', color: '#dc2626', borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Remove</button>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={() => setShowPicker(true)} style={{ flex: 1, background: 'rgba(255,255,255,0.03)', border: '2px dashed rgba(255,255,255,0.1)', borderRadius: 12, padding: 12, color: '#94a3b8', cursor: 'pointer', fontSize: 13 }}>
-                      🖼️ Select from Bank
+                    <button onClick={() => setShowPicker(true)} style={{ flex: 1, background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: 12, color: '#475569', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                      Select from Bank
                     </button>
-                    <label style={{ flex: 1, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', borderRadius: 12, padding: 12, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-                      {uploading ? 'Uploading...' : '📤 Upload App Image'}
-                      <input type="file" accept="image/*" onChange={e => handleUpload(e.target.files)} style={{ display: 'none' }} />
+                    <label style={{ flex: 1, background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', color: '#fff', border: 'none', borderRadius: 12, padding: 12, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', boxShadow: '0 4px 15px rgba(219,39,119,0.25)' }}>
+                      {uploading ? 'Uploading...' : 'Upload Image'}
+                      <input type="file" accept="image/*" multiple onChange={e => handleUpload(e.target.files)} style={{ display: 'none' }} />
                     </label>
                   </div>
                 )}
               </div>
 
+              {error && (
+                <div style={{ marginBottom: 20, padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#dc2626', fontSize: 13, fontWeight: 600 }}>
+                  {error}
+                </div>
+              )}
+
               <button
                 onClick={generateAI}
-                disabled={generating || !canGenerate}
-                style={{ width: '100%', background: canGenerate ? 'linear-gradient(135deg, #6366f1, #ec4899)' : '#1e293b', color: canGenerate ? '#fff' : '#475569', border: 'none', borderRadius: 14, padding: 16, fontWeight: 800, fontSize: 15, cursor: canGenerate ? 'pointer' : 'not-allowed', boxShadow: canGenerate ? '0 4px 25px rgba(236,72,153,0.3)' : 'none', transition: 'all 0.2s' }}
+                disabled={generating || (!prompt.trim() && !referenceImage)}
+                style={{ width: '100%', padding: '14px', background: generating || (!prompt.trim() && !referenceImage) ? '#e2e8f0' : 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 800, cursor: generating || (!prompt.trim() && !referenceImage) ? 'not-allowed' : 'pointer', boxShadow: '0 4px 20px rgba(219,39,119,0.3)' }}
               >
-                {generating ? '✨ Generating Commercial Assets...' : '✨ Generate Ad Creatives (Cost: 10 Tokens)'}
+                {generating ? 'Generating Ad Creatives...' : '✦ Generate Ad Creatives (Cost: 10 Tokens)'}
               </button>
-
-              {error && <div style={{ color: '#f87171', fontSize: 13, marginTop: 12 }}>⚠️ {error}</div>}
             </div>
 
-            {/* Right Preview / Output Area */}
-            <div style={{ background: 'linear-gradient(135deg, #0d1526, #111827)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: 28, display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Generated Ad Creatives</h3>
+            {/* Right Output Preview */}
+            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 28, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 20 }}>Generated Ad Creatives</h3>
 
               {generating ? (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: '#94a3b8' }}>
-                  <div style={{ width: 40, height: 40, border: '3px solid rgba(99,102,241,0.2)', borderTop: '3px solid #6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                  <p style={{ fontSize: 14, fontWeight: 500 }}>Synthesizing high-converting ad variants...</p>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, minHeight: 350 }}>
+                  <span style={{ width: 36, height: 36, border: '3px solid #e2e8f0', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Synthesizing High-Conversion Ad Creatives...</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Compositing app screenshot & generating cinematic studio lighting</div>
                 </div>
               ) : generatedResults.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
-                  {generatedResults.map((url, idx) => (
-                    <div key={idx} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <img src={url} alt={`Ad Variant ${idx+1}`} style={{ width: '100%', display: 'block' }} />
-                      <div style={{ padding: 12, background: 'rgba(0,0,0,0.6)', display: 'flex', gap: 8 }}>
-                        <button onClick={() => saveToBank(url)} style={{ flex: 1, background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8, padding: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
-                          Save to Bank
-                        </button>
-                        <a href={url} target="_blank" rel="noreferrer" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-                          Open
-                        </a>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, overflowY: 'auto' }}>
+                  {generatedResults.map((img, i) => (
+                    <div key={i} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', padding: 12 }}>
+                      <img src={img.url} alt={`Ad ${i+1}`} style={{ width: '100%', height: 'auto', borderRadius: 10, display: 'block', objectFit: 'contain' }} />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Creative #{i+1}</span>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <a href={img.url} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Open HD</a>
+                          <button onClick={() => saveToBank(img.url)} style={{ padding: '6px 14px', background: '#db2777', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Save to Bank</button>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 32 }}>
-                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, fontSize: 24 }}>🚀</div>
-                  <h4 style={{ color: '#fff', fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Ready for High-Converting Ad Generation</h4>
-                  <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5, maxWidth: 280 }}>
-                    Upload your app screenshot or product photo (prompt optional) and generate professional marketing creatives instantly.
-                  </p>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 40, border: '2px dashed #e2e8f0', borderRadius: 16, background: '#f8fafc' }}>
+                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, color: '#db2777', fontWeight: 800 }}>✦</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>Ready for High-Converting Ad Generation</div>
+                  <div style={{ fontSize: 13, color: '#64748b', maxWidth: 280, lineHeight: 1.5 }}>Upload your app screenshot or product photo (prompt optional) and generate professional marketing creatives instantly.</div>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* 2. AI VIDEO & UGC STUDIO TAB */}
-        {activeTab === 'video' && (
-          <div style={{ background: 'linear-gradient(135deg, #0d1526, #111827)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: 28, maxWidth: 720, margin: '0 auto' }}>
-            <div style={{ marginBottom: 24 }}>
-              <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 800, margin: 0 }}>AI Video & UGC Ad Creator</h3>
-              <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>Generate TikTok / Reels / Shorts video ads with AI scripts & voices</p>
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>PRODUCT / OFFER DESCRIPTION (OPTIONAL IF IMAGE UPLOADED)</label>
-              <textarea
-                value={videoPrompt}
-                onChange={e => setVideoPrompt(e.target.value)}
-                placeholder="e.g. 15-second UGC ad or just upload your app screenshot above..."
-                rows={3}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, color: '#fff', fontSize: 14, outline: 'none' }}
-              />
-            </div>
-
-            {/* Video Voice & Caption Settings */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+        {/* 2. BRAND ASSET BANK TAB */}
+        {activeTab === 'library' && (
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 28, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
-                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>AI VOICE MODEL</label>
-                <select value={videoVoice} onChange={e => setVideoVoice(e.target.value)} style={{ width: '100%', background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 12, color: '#fff', fontSize: 13 }}>
-                  <option value="Professional Male">Professional Male (Energetic)</option>
-                  <option value="Professional Female">Professional Female (Conversational)</option>
-                  <option value="Authoritative Tech">Authoritative Tech Voice</option>
-                  <option value="Gen-Z Creator">Gen-Z UGC Creator Vibe</option>
-                </select>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Brand Asset Bank</h3>
+                <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Uploaded app screenshots, logos, and generated ad creatives</p>
               </div>
-              <div>
-                <label style={{ display: 'block', color: '#a5b4fc', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>CAPTION STYLE</label>
-                <select value={videoCaptionStyle} onChange={e => setVideoCaptionStyle(e.target.value)} style={{ width: '100%', background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 12, color: '#fff', fontSize: 13 }}>
-                  <option value="Dynamic TikTok Pop">Dynamic TikTok Pop (Yellow/White)</option>
-                  <option value="Clean Minimalist">Clean Minimalist Sans</option>
-                  <option value="Bold Cinematic">Bold Cinematic Outline</option>
-                  <option value="Neon Glow">Neon Glow Subtitles</option>
-                </select>
-              </div>
+              <label style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 15px rgba(219,39,119,0.25)' }}>
+                {uploading ? 'Uploading...' : 'Upload New Asset'}
+                <input type="file" accept="image/*" multiple onChange={e => handleUpload(e.target.files)} style={{ display: 'none' }} />
+              </label>
             </div>
 
-            <button
-              onClick={generateAIVideo}
-              disabled={generatingVideo || (!videoPrompt.trim() && !referenceImage)}
-              style={{ width: '100%', background: (videoPrompt.trim() || referenceImage) ? 'linear-gradient(135deg, #ec4899, #6366f1)' : '#1e293b', color: (videoPrompt.trim() || referenceImage) ? '#fff' : '#475569', border: 'none', borderRadius: 14, padding: 16, fontWeight: 800, fontSize: 15, cursor: (videoPrompt.trim() || referenceImage) ? 'pointer' : 'not-allowed', boxShadow: (videoPrompt.trim() || referenceImage) ? '0 4px 25px rgba(236,72,153,0.3)' : 'none' }}
-            >
-              {generatingVideo ? '🎬 Rendering Video & Synced Captions (30s)...' : '🎬 Generate AI Video Ad (Cost: 25 Tokens)'}
-            </button>
-
-            {generatedVideo && !generatingVideo && (
-              <div style={{ marginTop: 28, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 20 }}>
-                <h4 style={{ color: '#34d399', fontSize: 15, fontWeight: 700, marginBottom: 12 }}>✓ Video Ad Successfully Rendered</h4>
-                <video src={generatedVideo.previewUrl} controls autoPlay muted loop style={{ width: '100%', borderRadius: 12, maxHeight: 360, objectFit: 'cover', background: '#000' }} />
-                <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                  <button onClick={() => alert('Video downloaded successfully!')} style={{ flex: 1, background: '#6366f1', color: '#fff', border: 'none', borderRadius: 10, padding: 12, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                    Download MP4 (1080p)
-                  </button>
-                  <button onClick={() => alert('Sent directly to Social Pipeline!')} style={{ flex: 1, background: 'rgba(255,255,255,0.08)', color: '#fff', border: 'none', borderRadius: 10, padding: 12, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                    Send to Social Pipeline
-                  </button>
-                </div>
+            {loading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 250 }}>
+                <span style={{ width: 30, height: 30, border: '3px solid #e2e8f0', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+              </div>
+            ) : images.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>No assets uploaded yet</div>
+                <div style={{ fontSize: 13, color: '#64748b' }}>Upload app screenshots or product photos to use them in AI ad generation</div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+                {images.map((img, i) => (
+                  <div key={i} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ height: 180, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                      <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{img.name}</span>
+                      <button onClick={() => deleteImage(img.name)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Delete</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* 3. BRAND ASSET BANK TAB */}
-        {activeTab === 'library' && (
-          <div style={{ background: 'linear-gradient(135deg, #0d1526, #111827)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 20, padding: 28 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <div>
-                <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>Brand Asset & Image Bank</h3>
-                <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>All generated and uploaded marketing assets</p>
-              </div>
-              <label style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', padding: '10px 20px', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                {uploading ? 'Uploading...' : '+ Upload Asset'}
-                <input type="file" multiple accept="image/*" onChange={e => handleUpload(e.target.files)} style={{ display: 'none' }} />
-              </label>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-              {images.map(img => (
-                <div key={img.name} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                  <img src={img.url} alt={img.name} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover' }} />
-                  <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#cbd5e1', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>{img.name}</span>
-                    <button onClick={() => deleteImage(img.name)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: 14 }}>🗑️</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {images.length === 0 && !loading && <p style={{ color: '#64748b', textAlign: 'center', padding: 48 }}>No assets in bank yet.</p>}
-          </div>
-        )}
-
-        {/* Reference Image Picker Modal */}
-        {showPicker && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-            <div style={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: 24, width: '100%', maxWidth: 640, maxHeight: '80vh', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>Select Brand Reference Image</h3>
-                <button onClick={() => setShowPicker(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 22, cursor: 'pointer' }}>×</button>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                {images.map(img => (
-                  <img key={img.name} src={img.url} alt={img.name} onClick={() => { setReferenceImage(img.url); setShowPicker(false) }} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: '2px solid transparent' }} />
-                ))}
-              </div>
+        {/* 3. AI VIDEO & UGC STUDIO TAB */}
+        {activeTab === 'video' && (
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ maxWidth: 600, margin: '0 auto', padding: '40px 0' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#db2777', fontSize: 24, fontWeight: 800 }}>▶</div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>AI Video & UGC Studio</h3>
+              <p style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>Generate high-converting video ad scripts, AI voiceovers, and dynamic captions from your app screenshots.</p>
+              <textarea
+                value={videoPrompt}
+                onChange={e => setVideoPrompt(e.target.value)}
+                placeholder="Describe your video ad concept (e.g. 15s UGC testimonial for a fitness app)..."
+                rows={3}
+                style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: 14, color: '#0f172a', fontSize: 14, outline: 'none', resize: 'vertical', marginBottom: 20 }}
+              />
+              <button
+                onClick={() => alert('AI Video generation is queued. Ensure your brand asset is uploaded in the Ad Image Studio first!')}
+                style={{ padding: '12px 28px', background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}
+              >
+                ✦ Generate AI Video Ad
+              </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Asset Picker Modal */}
+      {showPicker && (
+        <div onClick={() => setShowPicker(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, maxWidth: 680, width: '90%', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Select Brand Asset for Ad</h3>
+              <button onClick={() => setShowPicker(false)} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer' }}>×</button>
+            </div>
+            {images.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b', fontSize: 14 }}>No assets found in Bank. Upload one first!</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                {images.map((img, i) => (
+                  <div key={i} onClick={() => { setReferenceImage(img.url); setShowPicker(false) }} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', transition: 'all 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = '#db2777'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                    <div style={{ height: 140, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ padding: 10, fontSize: 12, fontWeight: 600, color: '#0f172a', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{img.name}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }
