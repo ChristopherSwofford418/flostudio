@@ -162,7 +162,7 @@ async function toolCreatePosts({ posts }, onProgress) {
     status: p.status || 'pending',
     created_at: new Date().toISOString(),
   }))
-  const { data, error } = await supabase.from('posts').insert(rows).select()
+  const { data, error } = await supabase.from('campaign_posts').insert(rows).select()
   if (error) return { success: false, error: error.message }
   return { success: true, created: data.length, posts: data.map(p => ({ id: p.id, platform: p.platform, preview: p.content.substring(0, 80) })) }
 }
@@ -235,7 +235,7 @@ Make each post platform-appropriate (Instagram: visual/hashtags, Twitter: concis
 
   const { data: { user } } = await supabase.auth.getUser()
   const rowsWithUser = rows.map(r => ({ ...r, user_id: user?.id || null }))
-  const { data, error } = await supabase.from('posts').insert(rowsWithUser).select()
+  const { data, error } = await supabase.from('campaign_posts').insert(rowsWithUser).select()
   if (error) return { success: false, error: error.message }
 
   return {
@@ -246,7 +246,7 @@ Make each post platform-appropriate (Instagram: visual/hashtags, Twitter: concis
 }
 
 async function toolGetPosts({ status = 'all', platform, limit = 10 }) {
-  let q = supabase.from('posts').select('*').order('scheduled_at', { ascending: true }).limit(limit)
+  let q = supabase.from('campaign_posts').select('*').order('scheduled_at', { ascending: true }).limit(limit)
   if (status !== 'all') q = q.eq('status', status)
   if (platform) q = q.eq('platform', platform)
   const { data, error } = await q
@@ -267,34 +267,34 @@ async function toolGetPosts({ status = 'all', platform, limit = 10 }) {
 async function toolApprovePosts({ post_ids }, onProgress) {
   if (post_ids.includes('all')) {
     onProgress?.('Approving all pending posts...')
-    const { data: pending } = await supabase.from('posts').select('id').eq('status', 'pending')
+    const { data: pending } = await supabase.from('campaign_posts').select('id').eq('status', 'pending')
     if (!pending?.length) return { success: true, approved: 0, message: 'No pending posts to approve' }
     const ids = pending.map(p => p.id)
-    await supabase.from('posts').update({ status: 'approved' }).in('id', ids)
+    await supabase.from('campaign_posts').update({ status: 'approved' }).in('id', ids)
     return { success: true, approved: ids.length, message: `Approved ${ids.length} posts` }
   }
   onProgress?.(`Approving ${post_ids.length} posts...`)
-  await supabase.from('posts').update({ status: 'approved' }).in('id', post_ids)
+  await supabase.from('campaign_posts').update({ status: 'approved' }).in('id', post_ids)
   return { success: true, approved: post_ids.length }
 }
 
 async function toolDeletePosts({ post_ids, status }, onProgress) {
   if (status) {
     onProgress?.(`Deleting all ${status} posts...`)
-    let q = supabase.from('posts').delete()
+    let q = supabase.from('campaign_posts').delete()
     if (status !== 'all') q = q.eq('status', status)
     const { error } = await q
     if (error) return { success: false, error: error.message }
     return { success: true, message: `Deleted all ${status} posts` }
   }
   onProgress?.(`Deleting ${post_ids.length} posts...`)
-  await supabase.from('posts').delete().in('id', post_ids)
+  await supabase.from('campaign_posts').delete().in('id', post_ids)
   return { success: true, deleted: post_ids.length }
 }
 
 async function toolRewritePosts({ post_ids, instruction }, onProgress) {
   onProgress?.(`Fetching ${post_ids.length} posts to rewrite...`)
-  const { data: posts } = await supabase.from('posts').select('*').in('id', post_ids)
+  const { data: posts } = await supabase.from('campaign_posts').select('*').in('id', post_ids)
   if (!posts?.length) return { success: false, error: 'Posts not found' }
 
   onProgress?.(`AI is rewriting ${posts.length} posts...`)
@@ -314,7 +314,7 @@ async function toolRewritePosts({ post_ids, instruction }, onProgress) {
     })
     const d = await res.json()
     const newContent = d?.content || d?.choices?.[0]?.message?.content || post.content
-    await supabase.from('posts').update({ content: newContent.trim() }).eq('id', post.id)
+    await supabase.from('campaign_posts').update({ content: newContent.trim() }).eq('id', post.id)
     rewrites.push({ id: post.id, platform: post.platform, preview: newContent.substring(0, 80) })
   }
 
@@ -322,7 +322,7 @@ async function toolRewritePosts({ post_ids, instruction }, onProgress) {
 }
 
 async function toolGetAnalytics() {
-  const { data: all } = await supabase.from('posts').select('platform, status, created_at')
+  const { data: all } = await supabase.from('campaign_posts').select('platform, status, created_at')
   if (!all) return { success: false, error: 'Could not fetch data' }
 
   const byStatus = all.reduce((acc, p) => { acc[p.status] = (acc[p.status] || 0) + 1; return acc }, {})
