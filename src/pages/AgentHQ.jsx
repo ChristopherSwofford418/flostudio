@@ -1,347 +1,106 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 
-const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdWJhc2UiLCJyZWYiOiJ4eGtwdm5va2hxYnBicWVmZWd4YSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzc2MjAyNTQ4LCJleHAiOjIwOTc3MDI1NDh9.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 
-async function callAI(messages, maxTokens = 1200) {
-  const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/ai-proxy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
-    body: JSON.stringify({ model: 'gpt-4o', messages, max_tokens: maxTokens }),
-  })
-  const d = await res.json()
-  return d?.content || d?.choices?.[0]?.message?.content || ''
+async function callAI(messages, maxTokens = 1600) {
+  const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/ai-proxy', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON }, body: JSON.stringify({ model: 'gpt-4o', messages, max_tokens: maxTokens }) })
+  const data = await res.json()
+  return data?.content || data?.choices?.[0]?.message?.content || ''
 }
 
-const AGENT_STEPS = [
-  { id: 'analyze', label: 'Analyzing brand & goals', icon: '🔍' },
-  { id: 'strategy', label: 'Building content strategy', icon: '🧠' },
-  { id: 'calendar', label: 'Planning content calendar', icon: '📅' },
-  { id: 'generate', label: 'Generating posts', icon: '✍️' },
-  { id: 'optimize', label: 'Optimizing for each platform', icon: '⚡' },
-  { id: 'schedule', label: 'Scheduling optimal times', icon: '🕐' },
-  { id: 'complete', label: 'Campaign ready!', icon: '✅' },
+const steps = [
+  ['01', 'Positioning signal', 'Reading your offer, audience, and ambition'],
+  ['02', 'Content architecture', 'Defining audience angles and pillars'],
+  ['03', 'Creative production', 'Writing platform-native concepts'],
+  ['04', 'Publishing plan', 'Sequencing and scheduling the campaign'],
 ]
+const platforms = ['instagram', 'linkedin', 'facebook', 'tiktok', 'twitter']
+const platformShort = { instagram: 'IG', linkedin: 'LI', facebook: 'FB', tiktok: 'TT', twitter: 'X' }
+const optimalTimes = { instagram: '09:00', linkedin: '08:00', facebook: '13:00', tiktok: '19:00', twitter: '12:00' }
 
 export default function AgentHQ() {
   const navigate = useNavigate()
   const [brand, setBrand] = useState('')
   const [audience, setAudience] = useState('')
-  const [goals, setGoals] = useState('')
-  const [platforms, setPlatforms] = useState(['instagram', 'linkedin'])
-  const [postsPerWeek, setPostsPerWeek] = useState(5)
+  const [goal, setGoal] = useState('')
+  const [selectedPlatforms, setSelectedPlatforms] = useState(['instagram', 'linkedin'])
+  const [volume, setVolume] = useState(5)
   const [running, setRunning] = useState(false)
-  const [currentStep, setCurrentStep] = useState(-1)
-  const [completedSteps, setCompletedSteps] = useState([])
-  const [agentLog, setAgentLog] = useState([])
-  const [results, setResults] = useState(null)
-  const [savedCount, setSavedCount] = useState(0)
+  const [activeStep, setActiveStep] = useState(-1)
+  const [notes, setNotes] = useState([])
+  const [result, setResult] = useState(null)
   const [error, setError] = useState('')
-  const logRef = useRef()
+  const liveRef = useRef(null)
+  useEffect(() => liveRef.current?.scrollIntoView({ behavior: 'smooth' }), [notes])
 
-  useEffect(() => { logRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [agentLog])
-
-  const PLATFORM_OPTIONS = ['instagram', 'twitter', 'linkedin', 'facebook', 'tiktok']
-
-  const togglePlatform = (p) => setPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
-
-  const addLog = (msg, type = 'info') => setAgentLog(prev => [...prev, { msg, type, ts: new Date().toLocaleTimeString() }])
+  const togglePlatform = (p) => setSelectedPlatforms(previous => previous.includes(p) ? previous.filter(x => x !== p) : [...previous, p])
+  const addNote = (title, body, tone = 'neutral') => setNotes(previous => [...previous, { title, body, tone }])
 
   const runAgent = async () => {
-    if (!brand.trim()) return
-    setRunning(true)
-    setCompletedSteps([])
-    setCurrentStep(0)
-    setAgentLog([])
-    setResults(null)
-    setError('')
-
+    if (!brand.trim() || !selectedPlatforms.length) return
+    setRunning(true); setActiveStep(0); setNotes([]); setResult(null); setError('')
     try {
-      // Step 0: Analyze
-      addLog('Agent initialized. Analyzing your brand profile...', 'system')
-      await new Promise(r => setTimeout(r, 800))
-      setCompletedSteps(['analyze'])
-      setCurrentStep(1)
-
-      // Step 1: Strategy
-      addLog('Building content strategy based on your goals and audience...', 'system')
-      const strategyText = await callAI([
-        { role: 'system', content: 'You are a senior social media strategist. Create a concise content strategy. Return JSON: {"strategy":"...", "content_pillars":["...","...","...","..."], "posting_frequency":"...", "best_platforms":["..."], "tone":"..."}' },
-        { role: 'user', content: `Brand: ${brand}\nAudience: ${audience || 'general business audience'}\nGoals: ${goals || 'grow audience and engagement'}\nPlatforms: ${platforms.join(', ')}\nPosts per week: ${postsPerWeek}` }
-      ], 600)
-      let strategy = {}
-      try { const m = strategyText.match(/\{[\s\S]*\}/); strategy = m ? JSON.parse(m[0]) : {} } catch {}
-      addLog(`Strategy defined: ${strategy.tone || 'Professional'} tone across ${strategy.content_pillars?.length || 4} content pillars`, 'success')
-      addLog(`Content pillars: ${strategy.content_pillars?.join(' · ') || 'Education, Inspiration, Behind-the-scenes, Promotion'}`, 'info')
-      setCompletedSteps(p => [...p, 'strategy'])
-      setCurrentStep(2)
-
-      // Step 2: Calendar planning
-      addLog('Planning content calendar for the next 2 weeks...', 'system')
-      await new Promise(r => setTimeout(r, 600))
-      addLog(`Scheduling ${postsPerWeek} posts/week across ${platforms.length} platform(s)`, 'info')
-      setCompletedSteps(p => [...p, 'calendar'])
-      setCurrentStep(3)
-
-      // Step 3: Generate posts
-      addLog('Generating post content for each platform...', 'system')
-      const postsToGenerate = Math.min(postsPerWeek * 2, 10)
-      const postsText = await callAI([
-        { role: 'system', content: `You are an expert social media copywriter. Generate exactly ${postsToGenerate} social media posts. Return ONLY a valid JSON array matching this structure: [{"platform":"instagram","content":"...","hashtags":"...","scheduled_day":"Monday","post_type":"educational"}]` },
-        { role: 'user', content: `Brand: ${brand}\nAudience: ${audience || 'general business audience'}\nGoals: ${goals || 'grow audience and engagement'}\nPlatforms (rotate): ${platforms.join(', ')}\nTone: ${strategy.tone || 'Professional'}\nContent pillars: ${strategy.content_pillars?.join(', ') || 'Education, Inspiration, Behind-the-scenes, Promotion'}\n\nGenerate ${postsToGenerate} varied posts.` }
-      ], 3000)
-      
-      let generatedPosts = []
-      try {
-        const cleanJson = postsText.replace(/```json/g, '').replace(/```/g, '').trim()
-        const m = cleanJson.match(/\[[\s\S]*\]/)
-        generatedPosts = m ? JSON.parse(m[0]) : JSON.parse(cleanJson)
-      } catch (err) {
-        // Fallback guaranteed posts if AI JSON is malformed
-        generatedPosts = platforms.map((p, idx) => ({
-          platform: p,
-          content: `Excited to share how ${brand} is transforming the industry! Join us today.`,
-          hashtags: '#Innovation #Growth #FloStudio',
-          scheduled_day: 'Monday',
-          post_type: 'promotion'
-        }))
-      }
-      
-      if (!generatedPosts.length) {
-        generatedPosts = platforms.map((p, idx) => ({
-          platform: p,
-          content: `Discover what's new at ${brand}. Built for scale and impact.`,
-          hashtags: '#FloStudio #Tech #Growth',
-          scheduled_day: 'Monday',
-          post_type: 'announcement'
-        }))
-      }
-
-      addLog(`Generated ${generatedPosts.length} posts across ${[...new Set(generatedPosts.map(p=>p.platform))].join(', ')}`, 'success')
-      setCompletedSteps(p => [...p, 'generate'])
-      setCurrentStep(4)
-
-      // Step 4: Optimize
-      addLog('Optimizing content for each platform\'s algorithm...', 'system')
-      await new Promise(r => setTimeout(r, 700))
-      addLog('Applied platform-specific formatting, character limits, and hashtag strategies', 'info')
-      setCompletedSteps(p => [...p, 'optimize'])
-      setCurrentStep(5)
-
-      // Step 5: Schedule
-      addLog('Calculating optimal posting times based on platform data...', 'system')
-      const OPTIMAL_TIMES = { instagram: '9:00 AM', twitter: '12:00 PM', linkedin: '8:00 AM', facebook: '1:00 PM', tiktok: '7:00 PM' }
-      const scheduledPosts = generatedPosts.map((post, i) => {
-        const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-        const dayOffset = Math.floor(i / platforms.length) * Math.floor(7 / postsPerWeek)
-        const scheduledDate = new Date()
-        scheduledDate.setDate(scheduledDate.getDate() + dayOffset + 1)
-        return { ...post, scheduled_at: scheduledDate.toISOString(), optimal_time: OPTIMAL_TIMES[post.platform] || '10:00 AM' }
-      })
-      addLog(`Optimal times assigned: ${platforms.map(p => `${p} @ ${OPTIMAL_TIMES[p]||'10am'}`).join(', ')}`, 'success')
-      setCompletedSteps(p => [...p, 'schedule'])
-      setCurrentStep(6)
-
-      // Step 6: Save to DB
-      addLog('Saving campaign to your content pipeline...', 'system')
+      addNote('Brief locked', 'Flo is translating your signal into campaign direction.', 'violet')
+      const strategyText = await callAI([{ role: 'system', content: 'You are a senior social media strategist. Return concise valid JSON: {"tone":"...","pillars":["...","...","...","..."],"strategy":"..."}.' }, { role: 'user', content: `Brand: ${brand}\nAudience: ${audience || 'broad prospective customers'}\nGoal: ${goal || 'grow awareness and conversion'}\nPlatforms: ${selectedPlatforms.join(', ')}` }], 650)
+      let strategy = { tone: 'Confident and human', pillars: ['Expert point of view', 'Customer proof', 'Practical education', 'Offer activation'], strategy: 'Build recognition through clear opinions, useful proof, and a strong call to action.' }
+      try { const match = strategyText.match(/\{[\s\S]*\}/); if (match) strategy = { ...strategy, ...JSON.parse(match[0]) } } catch {}
+      addNote('Campaign strategy ready', `${strategy.tone} voice across ${strategy.pillars.length} content pillars.`, 'success')
+      setActiveStep(1)
+      const total = Math.min(volume * 2, 10)
+      addNote('Creative engine engaged', `Writing ${total} platform-aware pieces of content now.`, 'violet')
+      const postText = await callAI([{ role: 'system', content: `Generate exactly ${total} varied social posts. Return ONLY valid JSON array: [{"platform":"instagram","content":"...","hashtags":"#...","post_type":"education"}].` }, { role: 'user', content: `Brand: ${brand}\nAudience: ${audience || 'general customers'}\nGoal: ${goal || 'grow visibility'}\nRotate platforms: ${selectedPlatforms.join(', ')}\nTone: ${strategy.tone}\nPillars: ${strategy.pillars.join(', ')}` }], 3200)
+      let generated = []
+      try { const clean = postText.replace(/```json|```/g, '').trim(); const match = clean.match(/\[[\s\S]*\]/); generated = JSON.parse(match ? match[0] : clean) } catch {}
+      if (!generated.length) generated = Array.from({ length: total }, (_, i) => ({ platform: selectedPlatforms[i % selectedPlatforms.length], content: `${brand} is built for people ready to move with more clarity, confidence, and momentum. Discover what is possible when the right solution meets the right ambition.`, hashtags: '#Growth #Marketing #FloStudio', post_type: 'brand' }))
+      setActiveStep(2)
+      addNote('Creative set complete', `${generated.length} concepts are ready for review.`, 'success')
+      const now = new Date()
+      const scheduled = generated.map((post, index) => { const date = new Date(now); date.setDate(now.getDate() + index + 1); date.setHours(Number((optimalTimes[post.platform] || '10:00').split(':')[0]), 0, 0, 0); return { ...post, scheduled_at: date.toISOString() } })
+      setActiveStep(3)
+      addNote('Publishing map built', 'Sequencing concepts at platform-specific high-intent hours.', 'violet')
       const { data: { user } } = await supabase.auth.getUser()
       let saved = 0
-      for (const post of scheduledPosts) {
-        const postRow = {
-          user_id: user?.id || null,
-          platform: post.platform,
-          content: `${post.content}${post.hashtags ? '\n\n' + post.hashtags : ''}`,
-          status: 'pending',
-          scheduled_at: post.scheduled_at,
-          created_at: new Date().toISOString(),
-        }
-        const { error: insertErr } = await supabase.from('campaign_posts').insert([postRow])
-        if (insertErr) {
-          addLog(`Insert error (campaign_posts): ${insertErr.message}`, 'error')
-        } else {
-          saved++
-        }
+      for (const post of scheduled) {
+        const { error: insertError } = await supabase.from('campaign_posts').insert([{ user_id: user?.id || null, platform: post.platform, content: `${post.content}${post.hashtags ? `\n\n${post.hashtags}` : ''}`, status: 'pending', scheduled_at: post.scheduled_at, created_at: new Date().toISOString() }])
+        if (insertError) throw insertError
+        saved += 1
       }
-      setSavedCount(saved)
-      addLog(`✅ Campaign complete! ${saved} posts saved to your pipeline`, 'success')
-      setCompletedSteps(p => [...p, 'complete'])
-      setCurrentStep(-1)
-      setResults({ strategy, posts: scheduledPosts, saved })
-
-    } catch (e) {
-      setError('Agent encountered an error. Please try again.')
-      addLog('Error: ' + e.message, 'error')
-    }
+      addNote('Campaign in review queue', `${saved} pieces were saved to your workspace.`, 'success')
+      setResult({ strategy, posts: scheduled, saved })
+      setActiveStep(-1)
+    } catch (err) { setError(err?.message || 'The campaign did not save. Please try again.'); addNote('Campaign interrupted', err?.message || 'A save operation was not completed.', 'danger'); setActiveStep(-1) }
     setRunning(false)
   }
 
-  return (
-    <Layout title="Agent HQ">
-      <style>{`
-        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-        @keyframes stepIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
-        @keyframes glow{0%,100%{box-shadow:0 0 8px rgba(99,102,241,0.3)}50%{box-shadow:0 0 20px rgba(99,102,241,0.6)}}
-      `}</style>
-
-      <div style={{ maxWidth: 1100, margin: '0 auto', animation: 'fadeIn 0.3s ease' }}>
-
-        {/* Header */}
-        <div style={{ marginBottom: 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 20px rgba(99,102,241,0.4)', animation: running ? 'glow 2s ease infinite' : 'none' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-              </div>
-              <div>
-                <h1 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 }}>Agent HQ</h1>
-                <p style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>Tell the AI about your brand. It handles everything else.</p>
-              </div>
-            </div>
+  return <Layout title="Agent Studio">
+    <style>{`@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}} @keyframes glowpulse{0%,100%{box-shadow:0 12px 28px rgba(108,44,255,.2)}50%{box-shadow:0 18px 42px rgba(255,79,163,.32)}}`}</style>
+    <div style={{ animation: 'rise .4s cubic-bezier(.23,1,.32,1)', maxWidth: 1280, margin: '0 auto' }}>
+      <section style={{ borderRadius: 30, overflow: 'hidden', minHeight: 212, padding: '32px 36px', color: '#fff', position: 'relative', background: 'linear-gradient(122deg,#1f1749,#5c2eff 52%,#ff4fa3)', boxShadow: '0 24px 48px rgba(78,33,194,.22)', marginBottom: 24 }}>
+        <div style={{ position: 'absolute', width: 390, height: 390, borderRadius: '50%', right: -120, top: -190, background: 'radial-gradient(circle,rgba(255,199,228,.56),rgba(255,255,255,0))' }} />
+        <div style={{ position: 'relative', maxWidth: 710 }}><div style={{ fontSize: 10, fontWeight: 900, letterSpacing: '.16em', opacity: .74, marginBottom: 14 }}>AI CAMPAIGN ARCHITECT</div><h1 style={{ fontSize: 'clamp(30px,4vw,46px)', lineHeight: 1.04, letterSpacing: '-.06em', marginBottom: 12 }}>One brief. A complete <span style={{ color: '#ffd4e9' }}>creative system.</span></h1><p style={{ fontSize: 14, opacity: .82, maxWidth: 540, lineHeight: 1.7 }}>Give Flo your market signal. It will translate it into a strategy, content architecture, publishable posts, and a ready-to-review campaign map.</p></div>
+        <div style={{ position:'absolute', right:32, bottom:26, display:'flex', gap:8 }}>{['Position','Create','Schedule','Review'].map((tag, i) => <span key={tag} style={{ padding:'6px 9px', borderRadius:99, border:'1px solid rgba(255,255,255,.24)', background:i===0?'rgba(255,255,255,.18)':'rgba(23,17,58,.16)', fontSize:10, fontWeight:800 }}>{tag}</span>)}</div>
+      </section>
+      <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1.5fr) minmax(310px,.85fr)', gap:24, alignItems:'start' }}>
+        <section style={{ background:'rgba(255,255,255,.82)', border:'1px solid rgba(255,255,255,.9)', borderRadius:26, padding:26, boxShadow:'0 16px 32px rgba(39,26,101,.07)' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:24 }}><div><span className="section-label">CAMPAIGN SIGNAL</span><h2 style={{ fontSize:22, letterSpacing:'-.045em' }}>Shape the assignment</h2></div><span style={{ padding:'6px 9px', borderRadius:99, background:'#eee9ff', color:'#6230dc', fontWeight:800, fontSize:10 }}>STEP 1 OF 1</span></div>
+          <div style={{ display:'grid', gap:16 }}>
+            <label style={{ display:'grid', gap:7 }}><span style={{ fontSize:12, fontWeight:800, color:'#39315f' }}>What are you building momentum for? <b style={{ color:'#ff4fa3' }}>*</b></span><textarea value={brand} onChange={e=>setBrand(e.target.value)} placeholder="Describe your product, offer, or brand in your own words." rows={4} style={{ width:'100%', border:'1px solid #dedaf0', background:'#fbfaff', borderRadius:15, padding:'13px 15px', color:'#17113a', fontSize:13.5, lineHeight:1.6, resize:'vertical' }} /></label>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}><label style={{ display:'grid', gap:7 }}><span style={{ fontSize:12, fontWeight:800, color:'#39315f' }}>Who should care?</span><input value={audience} onChange={e=>setAudience(e.target.value)} placeholder="Audience, context, and mindset" style={{ border:'1px solid #dedaf0', background:'#fbfaff', borderRadius:13, padding:'12px 13px', color:'#17113a', fontSize:13 }} /></label><label style={{ display:'grid', gap:7 }}><span style={{ fontSize:12, fontWeight:800, color:'#39315f' }}>What should change?</span><input value={goal} onChange={e=>setGoal(e.target.value)} placeholder="Awareness, revenue, leads…" style={{ border:'1px solid #dedaf0', background:'#fbfaff', borderRadius:13, padding:'12px 13px', color:'#17113a', fontSize:13 }} /></label></div>
+            <div style={{ paddingTop:5 }}><div style={{ fontSize:12, fontWeight:800, color:'#39315f', marginBottom:10 }}>Channels to activate</div><div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>{platforms.map(p=>{const active=selectedPlatforms.includes(p);return <button key={p} onClick={()=>togglePlatform(p)} style={{ border:`1px solid ${active?'#6c2cff':'#ddd9ef'}`, background:active?'#f0eaff':'#fff', color:active?'#5c20d8':'#645d85', padding:'8px 11px', borderRadius:11, fontSize:11, fontWeight:800, display:'flex', alignItems:'center', gap:7 }}><span style={{ width:18,height:18,borderRadius:6,background:active?'#6c2cff':'#f0eff8',color:active?'#fff':'#756e95',display:'grid',placeItems:'center',fontSize:9 }}>{platformShort[p]}</span>{p}</button>})}</div></div>
+            <div style={{ padding:'18px', borderRadius:17, background:'linear-gradient(135deg,#f6f3ff,#fff6fb)', border:'1px solid #e8e0fb' }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:12 }}><span style={{ fontSize:12,fontWeight:800,color:'#39315f' }}>Weekly creative cadence</span><b style={{ color:'#6c2cff',fontSize:19 }}>{volume} <span style={{fontSize:10}}>POSTS / WEEK</span></b></div><input type="range" min={3} max={14} value={volume} onChange={e=>setVolume(Number(e.target.value))} style={{ width:'100%', accentColor:'#6c2cff' }}/><div style={{ display:'flex', justifyContent:'space-between', color:'#8b84a7',fontSize:10,fontWeight:700,marginTop:5 }}><span>Focused</span><span>Balanced</span><span>Always on</span></div></div>
+            <button onClick={runAgent} disabled={running || !brand.trim() || !selectedPlatforms.length} className="btn-primary" style={{ width:'100%', padding:'16px 20px', fontSize:14, animation:running?'glowpulse 1.8s infinite':'none', opacity:(!brand.trim()||!selectedPlatforms.length)? .5:1 }}>{running ? 'Building your campaign system…' : 'Generate campaign system  →'}</button>
+            {error && <div style={{ background:'#fff0f1', border:'1px solid #ffd4d8', borderRadius:13, padding:'10px 12px', color:'#bf3b4d', fontSize:12 }}>{error}</div>}
           </div>
-          {results && (
-            <button onClick={() => navigate('/approve')} style={{ padding: '10px 20px', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              View {savedCount} Posts in Pipeline →
-            </button>
-          )}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20 }}>
-
-          {/* Left: Input form */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-            {/* Brand Brief */}
-            <div style={{ background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: '22px 24px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: '0.06em', marginBottom: 18 }}>BRAND BRIEF — THE AI READS THIS</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div>
-                  <label style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500, display: 'block', marginBottom: 7 }}>What is your brand / business? <span style={{ color: '#ef4444' }}>*</span></label>
-                  <textarea value={brand} onChange={e => setBrand(e.target.value)} placeholder="e.g. We're a boutique fitness studio in Austin TX specializing in HIIT and yoga for busy professionals. We sell memberships, online classes, and wellness products." rows={3} style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: `1px solid ${brand ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.08)'}`, borderRadius: 10, padding: '11px 14px', color: '#f1f5f9', fontSize: 13.5, fontFamily: 'inherit', resize: 'none', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box', transition: 'border 0.2s' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500, display: 'block', marginBottom: 7 }}>Who is your target audience?</label>
-                  <input value={audience} onChange={e => setAudience(e.target.value)} placeholder="e.g. Women 25-45, health-conscious, disposable income, Instagram users" style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '11px 14px', color: '#f1f5f9', fontSize: 13.5, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500, display: 'block', marginBottom: 7 }}>What are your goals?</label>
-                  <input value={goals} onChange={e => setGoals(e.target.value)} placeholder="e.g. Grow Instagram to 10k followers, drive class bookings, build email list" style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '11px 14px', color: '#f1f5f9', fontSize: 13.5, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
-                </div>
-              </div>
-            </div>
-
-            {/* Platform + Frequency */}
-            <div style={{ background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: '22px 24px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: '0.06em', marginBottom: 18 }}>CAMPAIGN SETTINGS</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500, display: 'block', marginBottom: 10 }}>Target platforms</label>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {PLATFORM_OPTIONS.map(p => (
-                      <button key={p} onClick={() => togglePlatform(p)} style={{ padding: '7px 16px', borderRadius: 20, border: `1px solid ${platforms.includes(p) ? '#6366f1' : 'rgba(255,255,255,0.08)'}`, background: platforms.includes(p) ? 'rgba(99,102,241,0.15)' : 'transparent', color: platforms.includes(p) ? '#a5b4fc' : '#64748b', fontSize: 12.5, fontWeight: platforms.includes(p) ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'all 0.15s' }}>{p}</button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500, display: 'block', marginBottom: 10 }}>Posts per week: <strong style={{ color: '#a5b4fc' }}>{postsPerWeek}</strong></label>
-                  <input type="range" min={3} max={14} value={postsPerWeek} onChange={e => setPostsPerWeek(Number(e.target.value))} style={{ width: '100%', accentColor: '#6366f1' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569', marginTop: 4 }}>
-                    <span>3 (light)</span><span>7 (standard)</span><span>14 (aggressive)</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Launch button */}
-            <button onClick={runAgent} disabled={!brand.trim() || running} style={{ padding: '16px', borderRadius: 12, background: brand.trim() && !running ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.06)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 800, cursor: brand.trim() && !running ? 'pointer' : 'not-allowed', fontFamily: 'inherit', boxShadow: brand.trim() && !running ? '0 6px 20px rgba(99,102,241,0.4)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, letterSpacing: '0.02em', transition: 'all 0.2s' }}
-              onMouseEnter={e => { if (brand.trim() && !running) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(99,102,241,0.5)' }}}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = brand.trim() && !running ? '0 6px 20px rgba(99,102,241,0.4)' : 'none' }}>
-              {running ? (
-                <><span style={{ width: 18, height: 18, border: '2.5px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> Agent Running...</>
-              ) : (
-                <><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg> Launch AI Agent</>
-              )}
-            </button>
-
-            {error && <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, color: '#f87171', fontSize: 13 }}>{error}</div>}
-          </div>
-
-          {/* Right: Agent progress + results */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-            {/* Agent steps */}
-            <div style={{ background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: '22px 24px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: '0.06em', marginBottom: 18 }}>AGENT PIPELINE</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {AGENT_STEPS.map((step, i) => {
-                  const done = completedSteps.includes(step.id)
-                  const active = currentStep === i
-                  return (
-                    <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 9, background: done ? 'rgba(16,185,129,0.06)' : active ? 'rgba(99,102,241,0.08)' : 'transparent', border: `1px solid ${done ? 'rgba(16,185,129,0.15)' : active ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)'}`, transition: 'all 0.3s', animation: active ? 'stepIn 0.3s ease' : 'none' }}>
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: done ? 'rgba(16,185,129,0.15)' : active ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
-                        {done ? '✓' : active ? <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#a5b4fc', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> : step.icon}
-                      </div>
-                      <span style={{ fontSize: 13, color: done ? '#34d399' : active ? '#a5b4fc' : '#475569', fontWeight: done || active ? 500 : 400 }}>{step.label}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Agent log */}
-            {agentLog.length > 0 && (
-              <div style={{ background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: '18px 20px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: '0.06em', marginBottom: 14 }}>AGENT LOG</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
-                  {agentLog.map((log, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', animation: 'stepIn 0.2s ease' }}>
-                      <span style={{ fontSize: 10, color: '#334155', fontFamily: 'monospace', marginTop: 2, flexShrink: 0 }}>{log.ts}</span>
-                      <span style={{ fontSize: 12.5, color: log.type === 'success' ? '#34d399' : log.type === 'error' ? '#f87171' : log.type === 'system' ? '#a5b4fc' : '#64748b', lineHeight: 1.5 }}>{log.msg}</span>
-                    </div>
-                  ))}
-                  <div ref={logRef} />
-                </div>
-              </div>
-            )}
-
-            {/* Results summary */}
-            {results && (
-              <div style={{ background: 'linear-gradient(135deg,rgba(16,185,129,0.06),rgba(99,102,241,0.04))', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 14, padding: '22px 24px', animation: 'fadeIn 0.4s ease' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#34d399', letterSpacing: '0.06em', marginBottom: 16 }}>✅ CAMPAIGN GENERATED</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-                  {[
-                    { label: 'Posts Created', value: results.saved },
-                    { label: 'Platforms', value: [...new Set(results.posts.map(p => p.platform))].length },
-                    { label: 'Weeks Covered', value: 2 },
-                    { label: 'Status', value: 'Pending Review' },
-                  ].map((s, i) => (
-                    <div key={i} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 9, padding: '10px 12px' }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9' }}>{s.value}</div>
-                      <div style={{ fontSize: 11, color: '#64748b' }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-                {results.strategy?.content_pillars && (
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>CONTENT PILLARS</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {results.strategy.content_pillars.map((p, i) => (
-                        <span key={i} style={{ fontSize: 11.5, padding: '4px 10px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 20, color: '#a5b4fc' }}>{p}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <button onClick={() => navigate('/approve')} style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Review & Approve Posts →
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        </section>
+        <aside style={{ display:'grid', gap:18 }}>
+          <section style={{ background:'#17113a', color:'#fff', padding:23, borderRadius:24, boxShadow:'0 20px 38px rgba(37,20,93,.18)' }}><div style={{ color:'#c6baff',letterSpacing:'.14em',fontWeight:900,fontSize:10,marginBottom:17 }}>FLO’S BUILD PLAN</div><div style={{ display:'grid',gap:8 }}>{steps.map(([number,title,detail],index)=>{const active=activeStep===index;const done=activeStep>index||!!result;return <div key={number} style={{ display:'grid',gridTemplateColumns:'30px 1fr',gap:10,padding:'10px 0',borderTop:index?'1px solid rgba(255,255,255,.09)':'none',opacity:active||done?1:.42 }}><span style={{color:done?'#85f4dc':active?'#ff9acb':'#9e94c4',fontWeight:900,fontSize:11 }}>{done?'✓':number}</span><div><div style={{ fontSize:12,fontWeight:800 }}>{title}</div><div style={{fontSize:10.5,lineHeight:1.5,color:'#b6aed0',marginTop:2}}>{detail}</div></div></div>})}</div></section>
+          <section style={{ background:'rgba(255,255,255,.82)', border:'1px solid rgba(255,255,255,.9)', borderRadius:24, padding:21, boxShadow:'0 14px 30px rgba(39,26,101,.06)' }}><span className="section-label">LIVE BUILD LOG</span>{notes.length===0?<div style={{ color:'#827ba3',fontSize:12,lineHeight:1.65,padding:'4px 0 12px' }}>Your campaign activity will appear here as Flo creates it in real time.</div>:<div style={{ display:'grid',gap:10,maxHeight:260,overflowY:'auto' }}>{notes.map((note,index)=><div key={index} style={{ padding:'10px 0',borderTop:index?'1px solid #edeaf8':'none' }}><div style={{display:'flex',gap:7,alignItems:'center'}}><span style={{width:7,height:7,borderRadius:'50%',background:note.tone==='success'?'#0bbf9a':note.tone==='danger'?'#ef6071':'#8d55ff'}}/><b style={{fontSize:11.5,color:'#39315f'}}>{note.title}</b></div><p style={{fontSize:11,color:'#746e95',lineHeight:1.55,margin:'4px 0 0 14px'}}>{note.body}</p></div>)}<div ref={liveRef}/></div>}</section>
+          {result && <section style={{ padding:21,borderRadius:24,background:'linear-gradient(135deg,#e7fff7,#eff0ff)',border:'1px solid #ccebdd' }}><div style={{ color:'#07735e',fontWeight:900,fontSize:10,letterSpacing:'.14em' }}>CAMPAIGN READY</div><div style={{fontSize:28,fontWeight:900,letterSpacing:'-.06em',color:'#17113a',margin:'5px 0'}}>{result.saved} ideas in review</div><div style={{fontSize:11.5,color:'#5e6880',lineHeight:1.55,marginBottom:13}}>The campaign is now waiting in your review queue.</div><button onClick={()=>navigate('/pipeline')} style={{width:'100%',padding:'10px',borderRadius:12,border:0,background:'#17113a',color:'#fff',fontWeight:800,fontSize:12}}>Open review queue →</button></section>}
+        </aside>
       </div>
-    </Layout>
-  )
+    </div>
+  </Layout>
 }
