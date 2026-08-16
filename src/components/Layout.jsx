@@ -14,7 +14,7 @@ const NAV = [
   { path: '/dashboard', label: 'Dashboard', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
 ]
 
-const AVATAR_COLORS = ['#ec4899','#8b5cf6','#6366f1','#06b6d4','#10b981','#f59e0b']
+const AVATAR_COLORS = ['#db2777','#7c3aed','#4f46e5','#0891b2','#059669','#d97706']
 function stringToColor(str) {
   if (!str) return AVATAR_COLORS[0]
   let hash = 0
@@ -44,7 +44,7 @@ function AgentPanel({ onClose }) {
   const renderContent = (content) => content
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code style="background:rgba(236,72,153,0.15);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>')
+    .replace(/`(.*?)`/g, '<code style="background:rgba(236,72,153,0.08);padding:1px 5px;border-radius:4px;font-size:12px;color:#db2777">$1</code>')
     .replace(/\n/g, '<br/>')
 
   const send = async (text) => {
@@ -75,45 +75,45 @@ function AgentPanel({ onClose }) {
   }
 
   return (
-    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:400, background:'linear-gradient(180deg,#0f172a 0%,#070b19 100%)', borderLeft:'1px solid rgba(236,72,153,0.3)', display:'flex', flexDirection:'column', zIndex:1000, boxShadow:'-20px 0 60px rgba(0,0,0,0.6)', animation:'slideInRight 0.3s ease' }}>
+    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:400, background:'#ffffff', borderLeft:'1px solid #e2e8f0', display:'flex', flexDirection:'column', zIndex:1000, boxShadow:'-15px 0 40px rgba(0,0,0,0.08)', animation:'slideInRight 0.25s ease' }}>
       <style>{`
         @keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
         @keyframes bounceDot{0%,80%,100%{transform:scale(0);opacity:0.3}40%{transform:scale(1.0);opacity:1}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
       {/* Header */}
-      <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(236,72,153,0.2)', display:'flex', alignItems:'center', gap:12 }}>
-        <div style={{ width:38, height:38, borderRadius:'50%', background:'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 20px rgba(236,72,153,0.5)', flexShrink:0 }}>
+      <div style={{ padding:'18px 20px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', gap:12, background:'#f8fafc' }}>
+        <div style={{ width:38, height:38, borderRadius:'50%', background:'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 12px rgba(219,39,119,0.25)', flexShrink:0 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
         </div>
         <div style={{ flex:1 }}>
-          <div style={{ fontWeight:800, fontSize:14, color:'#f8fafc' }}>Flo - Agentic AI</div>
-          <div style={{ fontSize:11, color:'#10b981', display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', display:'inline-block' }}/>
+          <div style={{ fontWeight:800, fontSize:14, color:'#0f172a' }}>Flo AI Copilot</div>
+          <div style={{ fontSize:11, color:'#059669', display:'flex', alignItems:'center', gap:4, fontWeight:600 }}>
+            <span style={{ width:6, height:6, borderRadius:'50%', background:'#059669', display:'inline-block' }}/>
             Active · GPT-4o Live Stream
           </div>
         </div>
-        <button onClick={onClose} style={{ background:'none', border:'none', color:'#94a3b8', cursor:'pointer', padding:4 }}>
+        <button onClick={onClose} style={{ background:'none', border:'none', color:'#64748b', cursor:'pointer', padding:4 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
 
       {/* Messages */}
-      <div style={{ flex:1, overflowY:'auto', padding:'16px 16px 8px', display:'flex', flexDirection:'column', gap:12 }}>
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 16px 8px', display:'flex', flexDirection:'column', gap:12, background:'#ffffff' }}>
         {messages.map((msg, i) => (
           <div key={i} style={{ animation:'fadeIn 0.25s ease' }}>
             <div style={{ display:'flex', gap:10, alignItems:'flex-start', flexDirection:msg.role==='user'?'row-reverse':'row' }}>
               {msg.role==='assistant' && (
-                <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#ec4899,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
+                <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#db2777,#7c3aed)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
                 </div>
               )}
-              <div style={{ maxWidth:'82%', padding:'10px 14px', borderRadius:msg.role==='user'?'14px 14px 4px 14px':'4px 14px 14px 14px', background:msg.role==='user'?'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)':'rgba(255,255,255,0.05)', border:msg.role==='user'?'none':'1px solid rgba(236,72,153,0.2)', fontSize:13, lineHeight:1.6, color:'#f8fafc' }} dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
+              <div style={{ maxWidth:'82%', padding:'12px 16px', borderRadius:msg.role==='user'?'16px 16px 4px 16px':'4px 16px 16px 16px', background:msg.role==='user'?'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)':'#f1f5f9', border:msg.role==='user'?'none':'1px solid #e2e8f0', fontSize:13, lineHeight:1.6, color:msg.role==='user'?'#ffffff':'#0f172a', boxShadow:msg.role==='user'?'0 4px 15px rgba(219,39,119,0.25)':'none' }} dangerouslySetInnerHTML={{ __html: renderContent(msg.content) }} />
             </div>
             {msg.actions?.length > 0 && (
               <div style={{ marginLeft:38, marginTop:6, display:'flex', flexWrap:'wrap', gap:4 }}>
                 {msg.actions.map((a, ai) => (
-                  <div key={ai} style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 8px', background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.3)', borderRadius:20, fontSize:11, color:'#34d399', fontWeight:600 }}>
+                  <div key={ai} style={{ display:'flex', alignItems:'center', gap:5, padding:'3px 8px', background:'rgba(5,150,105,0.1)', border:'1px solid rgba(5,150,105,0.2)', borderRadius:20, fontSize:11, color:'#059669', fontWeight:600 }}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                     {a.tool.replace(/_/g,' ')}
                   </div>
@@ -125,20 +125,20 @@ function AgentPanel({ onClose }) {
 
         {loading && (
           <div style={{ display:'flex', gap:10, alignItems:'flex-start', animation:'fadeIn 0.2s ease' }}>
-            <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#ec4899,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
+            <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#db2777,#7c3aed)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
             </div>
-            <div style={{ padding:'12px 16px', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(236,72,153,0.25)', borderRadius:'4px 14px 14px 14px', display:'flex', flexDirection:'column', gap:8, minWidth:240 }}>
+            <div style={{ padding:'12px 16px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'4px 16px 16px 16px', display:'flex', flexDirection:'column', gap:8, minWidth:240 }}>
               <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-                <span style={{ width:7, height:7, borderRadius:'50%', background:'#ec4899', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both', animationDelay:'-0.32s' }} />
-                <span style={{ width:7, height:7, borderRadius:'50%', background:'#8b5cf6', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both', animationDelay:'-0.16s' }} />
-                <span style={{ width:7, height:7, borderRadius:'50%', background:'#6366f1', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both' }} />
-                <span style={{ fontSize:11.5, color:'#f472b6', fontWeight:700, marginLeft:4 }}>Flo is working live...</span>
+                <span style={{ width:7, height:7, borderRadius:'50%', background:'#db2777', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both', animationDelay:'-0.32s' }} />
+                <span style={{ width:7, height:7, borderRadius:'50%', background:'#7c3aed', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both', animationDelay:'-0.16s' }} />
+                <span style={{ width:7, height:7, borderRadius:'50%', background:'#4f46e5', display:'inline-block', animation:'bounceDot 1.4s infinite ease-in-out both' }} />
+                <span style={{ fontSize:11.5, color:'#db2777', fontWeight:700, marginLeft:4 }}>Flo is working live...</span>
               </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:4, borderLeft:'2px solid rgba(236,72,153,0.3)', paddingLeft:8, marginTop:2 }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:4, borderLeft:'2px solid rgba(219,39,119,0.3)', paddingLeft:8, marginTop:2 }}>
                 {activitySteps.map((step, idx) => (
-                  <div key={idx} style={{ fontSize:11, color:idx === activitySteps.length - 1 ? '#38bdf8' : '#94a3b8', display:'flex', alignItems:'center', gap:6 }}>
-                    <span style={{ width:4, height:4, borderRadius:'50%', background:idx === activitySteps.length - 1 ? '#38bdf8' : '#64748b' }} />
+                  <div key={idx} style={{ fontSize:11, color:idx === activitySteps.length - 1 ? '#4f46e5' : '#64748b', display:'flex', alignItems:'center', gap:6, fontWeight:idx === activitySteps.length - 1 ? 600 : 400 }}>
+                    <span style={{ width:4, height:4, borderRadius:'50%', background:idx === activitySteps.length - 1 ? '#4f46e5' : '#cbd5e1' }} />
                     {step}
                   </div>
                 ))}
@@ -150,17 +150,17 @@ function AgentPanel({ onClose }) {
       </div>
 
       {messages.length <= 1 && (
-        <div style={{ padding:'0 16px 12px', display:'flex', flexWrap:'wrap', gap:6 }}>
+        <div style={{ padding:'0 16px 12px', display:'flex', flexWrap:'wrap', gap:6, background:'#ffffff' }}>
           {QUICK_PROMPTS.map((p, i) => (
-            <button key={i} onClick={() => send(p)} style={{ background:'rgba(236,72,153,0.08)', border:'1px solid rgba(236,72,153,0.25)', borderRadius:20, padding:'5px 12px', fontSize:12, color:'#f472b6', cursor:'pointer', fontFamily:'inherit', fontWeight:500 }}>{p}</button>
+            <button key={i} onClick={() => send(p)} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:20, padding:'6px 12px', fontSize:12, color:'#db2777', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>{p}</button>
           ))}
         </div>
       )}
 
-      <div style={{ padding:'12px 16px 16px', borderTop:'1px solid rgba(236,72,153,0.2)' }}>
+      <div style={{ padding:'12px 16px 16px', borderTop:'1px solid #e2e8f0', background:'#f8fafc' }}>
         <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Tell Flo what to do or ask a question..." rows={2} style={{ flex:1, background:'rgba(255,255,255,0.05)', border:'1px solid rgba(236,72,153,0.25)', borderRadius:10, padding:'10px 14px', color:'#f8fafc', fontSize:13, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }} />
-          <button onClick={()=>send()} disabled={!input.trim()||loading} style={{ width:40, height:40, borderRadius:10, flexShrink:0, background:input.trim()&&!loading?'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)':'rgba(255,255,255,0.06)', border:'none', cursor:input.trim()&&!loading?'pointer':'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:input.trim()&&!loading?'0 4px 15px rgba(236,72,153,0.4)':'none' }}>
+          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Ask Flo anything or tell her to automate..." rows={2} style={{ flex:1, background:'#ffffff', border:'1px solid #cbd5e1', borderRadius:10, padding:'10px 14px', color:'#0f172a', fontSize:13, fontFamily:'inherit', resize:'none', outline:'none', lineHeight:1.5 }} />
+          <button onClick={()=>send()} disabled={!input.trim()||loading} style={{ width:40, height:40, borderRadius:10, flexShrink:0, background:input.trim()&&!loading?'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)':'#e2e8f0', border:'none', cursor:input.trim()&&!loading?'pointer':'not-allowed', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:input.trim()&&!loading?'0 4px 15px rgba(219,39,119,0.3)':'none' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
@@ -192,79 +192,77 @@ export default function Layout({ children, title }) {
   const pageLabel = { '/':'Dashboard', '/compose':'AI Compose', '/approve':'Approve', '/calendar':'Calendar', '/images':'Image Studio', '/accounts':'Accounts', '/pricing':'Pricing', '/agent':'Agent HQ', '/pipeline':'Pipeline', '/ai-calendar':'AI Calendar' }[location.pathname] || title || ''
 
   return (
-    <div style={{ display:'flex', minHeight:'100vh', background:'var(--bg)' }}>
-      <aside style={{ width:238, background:'linear-gradient(180deg,#0c1326 0%,#070b19 100%)', borderRight:'1px solid rgba(236,72,153,0.15)', display:'flex', flexDirection:'column', position:'fixed', top:0, left:0, bottom:0, zIndex:40 }}>
-        <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:'linear-gradient(90deg,#ec4899,#8b5cf6,#6366f1)' }} />
-        <div style={{ padding:'24px 18px 20px', borderBottom:'1px solid rgba(236,72,153,0.15)' }}>
+    <div style={{ display:'flex', minHeight:'100vh', background:'#f8fafc' }}>
+      <aside style={{ width:248, background:'#ffffff', borderRight:'1px solid #e2e8f0', display:'flex', flexDirection:'column', position:'fixed', top:0, left:0, bottom:0, zIndex:40 }}>
+        <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:'linear-gradient(90deg,#db2777,#7c3aed,#4f46e5)' }} />
+        <div style={{ padding:'24px 20px 20px', borderBottom:'1px solid #e2e8f0' }}>
           <div style={{ display:'flex', alignItems:'center', gap:11 }}>
-            <div style={{ width:38, height:38, background:'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:900, color:'#fff', boxShadow:'0 4px 18px rgba(236,72,153,0.4)', flexShrink:0 }}>FS</div>
+            <div style={{ width:38, height:38, background:'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:900, color:'#fff', boxShadow:'0 4px 14px rgba(219,39,119,0.3)', flexShrink:0 }}>FS</div>
             <div>
-              <div style={{ fontWeight:900, fontSize:16, color:'#f8fafc', letterSpacing:'-0.3px' }}>FloStudio</div>
-              <div style={{ fontSize:11, color:'#f472b6', fontWeight:600 }}>AI Marketing Platform</div>
+              <div style={{ fontWeight:800, fontSize:16, color:'#0f172a', letterSpacing:'-0.3px' }}>FloStudio</div>
+              <div style={{ fontSize:11, color:'#db2777', fontWeight:700 }}>AI Marketing Suite</div>
             </div>
           </div>
         </div>
 
-        <nav style={{ flex:1, padding:'16px 12px', display:'flex', flexDirection:'column', gap:3 }}>
+        <nav style={{ flex:1, padding:'16px 12px', display:'flex', flexDirection:'column', gap:4 }}>
           {NAV.map(item => {
             const active = location.pathname === item.path
             const hovered = hoveredNav === item.path
             return (
-              <button key={item.path} onClick={()=>navigate(item.path)} onMouseEnter={()=>setHoveredNav(item.path)} onMouseLeave={()=>setHoveredNav(null)} style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'10px 14px', borderRadius:12, border:'none', background:active?'linear-gradient(135deg,rgba(236,72,153,0.2),rgba(139,92,246,0.15))':hovered?'rgba(255,255,255,0.05)':'transparent', color:active?'#f472b6':hovered?'#cbd5e1':'#94a3b8', fontSize:13.5, fontWeight:active?700:500, cursor:'pointer', textAlign:'left', position:'relative', boxShadow:active?'inset 0 0 0 1px rgba(236,72,153,0.4)':'none', fontFamily:'inherit' }}>
-                <span style={{ opacity:active?1:0.75, flexShrink:0, color:active?'#ec4899':'inherit' }}>{item.icon}</span>
+              <button key={item.path} onClick={()=>navigate(item.path)} onMouseEnter={()=>setHoveredNav(item.path)} onMouseLeave={()=>setHoveredNav(null)} style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'10px 14px', borderRadius:10, border:'none', background:active?'linear-gradient(135deg,rgba(219,39,119,0.08),rgba(124,58,237,0.06))':hovered?'#f1f5f9':'transparent', color:active?'#db2777':hovered?'#0f172a':'#64748b', fontSize:13.5, fontWeight:active?700:500, cursor:'pointer', textAlign:'left', position:'relative', fontFamily:'inherit' }}>
+                <span style={{ opacity:active?1:0.8, flexShrink:0, color:active?'#db2777':'inherit' }}>{item.icon}</span>
                 <span>{item.label}</span>
-                {active && <span style={{ position:'absolute', left:0, top:'50%', transform:'translateY(-50%)', width:4, height:18, background:'linear-gradient(180deg,#ec4899,#8b5cf6)', borderRadius:'0 3px 3px 0', boxShadow:'0 0 10px #ec4899' }} />}
+                {active && <span style={{ position:'absolute', left:0, top:'50%', transform:'translateY(-50%)', width:4, height:18, background:'linear-gradient(180deg,#db2777,#7c3aed)', borderRadius:'0 3px 3px 0' }} />}
               </button>
             )
           })}
 
-          <div style={{ marginTop:14, paddingTop:14, borderTop:'1px solid rgba(236,72,153,0.15)' }}>
-            <button onClick={()=>setShowAgent(!showAgent)} style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'10px 14px', borderRadius:12, border:showAgent?'1px solid rgba(236,72,153,0.5)':'1px solid rgba(236,72,153,0.25)', background:showAgent?'linear-gradient(135deg,rgba(236,72,153,0.25),rgba(139,92,246,0.2))':'rgba(236,72,153,0.08)', color:'#f472b6', fontSize:13.5, fontWeight:700, cursor:'pointer', textAlign:'left', fontFamily:'inherit', boxShadow:showAgent?'0 0 20px rgba(236,72,153,0.35)':'none' }}>
+          <div style={{ marginTop:14, paddingTop:14, borderTop:'1px solid #e2e8f0' }}>
+            <button onClick={()=>setShowAgent(!showAgent)} style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'10px 14px', borderRadius:10, border:showAgent?'1px solid #db2777':'1px solid #e2e8f0', background:showAgent?'linear-gradient(135deg,rgba(219,39,119,0.1),rgba(124,58,237,0.08))':'#fdf2f8', color:'#db2777', fontSize:13.5, fontWeight:700, cursor:'pointer', textAlign:'left', fontFamily:'inherit', boxShadow:showAgent?'0 0 15px rgba(219,39,119,0.2)':'none' }}>
               <span style={{ position:'relative', flexShrink:0 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-                <span style={{ position:'absolute', top:-2, right:-2, width:6, height:6, borderRadius:'50%', background:'#10b981', border:'1px solid #070b19' }}/>
+                <span style={{ position:'absolute', top:-2, right:-2, width:6, height:6, borderRadius:'50%', background:'#059669', border:'1px solid #fff' }}/>
               </span>
-              <span>Flo AI Agent</span>
+              <span>Flo AI Copilot</span>
             </button>
           </div>
         </nav>
 
-        <div style={{ padding:'12px 12px 18px', borderTop:'1px solid rgba(236,72,153,0.15)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:12, background:'rgba(236,72,153,0.06)', border:'1px solid rgba(236,72,153,0.2)', marginBottom:8 }}>
-            <div style={{ width:32, height:32, borderRadius:'50%', background:`linear-gradient(135deg,${avatarColor},#ec4899)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:'#fff', flexShrink:0, boxShadow:'0 2px 10px rgba(236,72,153,0.3)' }}>{avatarLetter}</div>
+        <div style={{ padding:'12px 12px 18px', borderTop:'1px solid #e2e8f0', background:'#fafafa' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10, background:'#ffffff', border:'1px solid #e2e8f0', marginBottom:8, boxShadow:'0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ width:32, height:32, borderRadius:'50%', background:`linear-gradient(135deg,${avatarColor},#db2777)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:'#fff', flexShrink:0, boxShadow:'0 2px 8px rgba(219,39,119,0.2)' }}>{avatarLetter}</div>
             <div style={{ minWidth:0, flex:1 }}>
-              <div style={{ fontSize:11.5, fontWeight:600, color:'#f8fafc', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{email||'User'}</div>
-              <div style={{ fontSize:10, color:'#f472b6', fontWeight:700, textTransform:'uppercase' }}>Tier: {tier} ({tokens} tokens)</div>
+              <div style={{ fontSize:11.5, fontWeight:700, color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{email||'User'}</div>
+              <div style={{ fontSize:10, color:'#db2777', fontWeight:700, textTransform:'uppercase' }}>Tier: {tier} ({tokens} tokens)</div>
             </div>
           </div>
-          <button onClick={handleSignOut} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 12px', borderRadius:10, border:'none', background:'transparent', color:'#94a3b8', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}
-            onMouseEnter={e=>{e.currentTarget.style.color='#f87171';e.currentTarget.style.background='rgba(239,68,68,0.1)'}}
-            onMouseLeave={e=>{e.currentTarget.style.color='#94a3b8';e.currentTarget.style.background='transparent'}}>
+          <button onClick={handleSignOut} style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 12px', borderRadius:8, border:'none', background:'transparent', color:'#64748b', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}
+            onMouseEnter={e=>{e.currentTarget.style.color='#dc2626';e.currentTarget.style.background='#fee2e2'}}
+            onMouseLeave={e=>{e.currentTarget.style.color='#64748b';e.currentTarget.style.background='transparent'}}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             Sign out
           </button>
         </div>
       </aside>
 
-      <div style={{ flex:1, display:'flex', flexDirection:'column', marginLeft:238, marginRight:showAgent?400:0, minHeight:'100vh', transition:'margin-right 0.3s ease' }}>
-        <div style={{ position:'fixed', top:0, left:238, right:showAgent?400:0, height:3, background:'linear-gradient(90deg,#ec4899,#8b5cf6,#6366f1)', zIndex:30, transition:'right 0.3s ease', boxShadow:'0 0 15px #ec4899' }} />
-        <header style={{ padding:'0 32px', height:64, borderBottom:'1px solid rgba(236,72,153,0.15)', background:'rgba(7,11,25,0.9)', backdropFilter:'blur(16px)', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:20, marginTop:3 }}>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', marginLeft:248, marginRight:showAgent?400:0, minHeight:'100vh', transition:'margin-right 0.25s ease' }}>
+        <div style={{ position:'fixed', top:0, left:248, right:showAgent?400:0, height:3, background:'linear-gradient(90deg,#db2777,#7c3aed,#4f46e5)', zIndex:30, transition:'right 0.25s ease' }} />
+        <header style={{ padding:'0 32px', height:64, borderBottom:'1px solid #e2e8f0', background:'rgba(255,255,255,0.85)', backdropFilter:'blur(12px)', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:20, marginTop:3 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ color:'#94a3b8', fontSize:13.5, fontWeight:500 }}>FloStudio</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color:'#ec4899', opacity:0.7 }}><polyline points="9 18 15 12 9 6"/></svg>
-            <span style={{ color:'#f8fafc', fontSize:13.5, fontWeight:700 }}>{pageLabel}</span>
+            <span style={{ color:'#64748b', fontSize:13.5, fontWeight:500 }}>FloStudio</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color:'#db2777', opacity:0.7 }}><polyline points="9 18 15 12 9 6"/></svg>
+            <span style={{ color:'#0f172a', fontSize:13.5, fontWeight:700 }}>{pageLabel}</span>
           </div>
           <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 14px', background:'rgba(236,72,153,0.1)', border:'1px solid rgba(236,72,153,0.3)', borderRadius:10, fontSize:12.5, fontWeight:700, color:'#f472b6' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 14px', background:'#fdf2f8', border:'1px solid rgba(219,39,119,0.2)', borderRadius:8, fontSize:12.5, fontWeight:700, color:'#db2777' }}>
               <span>Tokens:</span> {tokens}
             </div>
-            <button onClick={()=>setShowAgent(!showAgent)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:10, background:showAgent?'rgba(236,72,153,0.2)':'rgba(236,72,153,0.1)', border:'1px solid rgba(236,72,153,0.35)', color:'#f472b6', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit', boxShadow:showAgent?'0 0 15px rgba(236,72,153,0.3)':'none' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            <button onClick={()=>setShowAgent(!showAgent)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, background:showAgent?'#fdf2f8':'#f1f5f9', border:'1px solid #cbd5e1', color:'#0f172a', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color:'#db2777' }}><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
               Ask Flo
             </button>
-            <button onClick={()=>navigate('/pricing')} style={{ background:'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)', color:'#fff', border:'none', borderRadius:10, padding:'8px 18px', fontWeight:800, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6, boxShadow:'0 4px 18px rgba(236,72,153,0.4)', fontFamily:'inherit' }}
-              onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-1px)'}}
-              onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)'}}>
+            <button onClick={()=>navigate('/pricing')} style={{ background:'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', color:'#fff', border:'none', borderRadius:8, padding:'8px 18px', fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6, boxShadow:'0 4px 14px rgba(219,39,119,0.25)', fontFamily:'inherit' }}>
               Pricing & Tokens
             </button>
           </div>

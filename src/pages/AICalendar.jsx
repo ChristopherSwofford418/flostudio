@@ -14,7 +14,7 @@ async function callAI(messages, maxTokens = 1500) {
   return d?.content || d?.choices?.[0]?.message?.content || ''
 }
 
-const PLATFORM_COLORS = { instagram: '#e1306c', twitter: '#1da1f2', linkedin: '#0077b5', facebook: '#1877f2', tiktok: '#69c9d0' }
+const PLATFORM_COLORS = { instagram: '#db2777', twitter: '#0284c7', linkedin: '#0369a1', facebook: '#1d4ed8', tiktok: '#0d9488' }
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
@@ -45,7 +45,6 @@ export default function AICalendar() {
   }
 
   const getPostsForDay = (day) => {
-    const d = new Date(year, month, day)
     return posts.filter(p => {
       if (!p.scheduled_at) return false
       const pd = new Date(p.scheduled_at)
@@ -59,25 +58,22 @@ export default function AICalendar() {
     setShowFillModal(false)
     try {
       const text = await callAI([
-        { role: 'system', content: 'You are a social media strategist. Generate a month of posts. Return ONLY a valid JSON array: [{"day":1,"platform":"instagram","content":"...","hashtags":"...","post_type":"educational"}]' },
-        { role: 'user', content: `Brand/context: ${fillPrompt}\nMonth: ${MONTHS[month]} ${year}\nGenerate 12-16 posts spread across the month. Use varied platforms (instagram, linkedin, twitter, facebook). Vary post types: educational, inspirational, promotional, behind-the-scenes, engagement.` }
-      ], 3000)
+        { role: 'system', content: 'You are a social media strategist. Generate a month of posts. Return ONLY a valid JSON array: [{"day":1,"platform":"instagram","content":"...","hashtags":"..."}]' },
+        { role: 'user', content: `Brand/context: ${fillPrompt}\nMonth: ${MONTHS[month]} ${year}\nGenerate 12 posts spread across the month. Platforms: instagram, linkedin, twitter, facebook.` }
+      ], 2000)
       let generated = []
       try {
         const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim()
         const m = cleanJson.match(/\[[\s\S]*\]/)
         generated = m ? JSON.parse(m[0]) : JSON.parse(cleanJson)
-      } catch (err) {
-        // Fallback guaranteed posts if AI JSON is malformed
+      } catch {
         generated = [
-          { day: 2, platform: 'instagram', content: `Excited for what's ahead with ${fillPrompt}!`, hashtags: '#Growth #Launch #FloStudio' },
-          { day: 5, platform: 'linkedin', content: `Building scalable workflows for modern creators and teams.`, hashtags: '#Strategy #Business' },
-          { day: 8, platform: 'twitter', content: `Big updates rolling out this week! Stay tuned.`, hashtags: '#Tech #AI' },
+          { day: 2, platform: 'instagram', content: `Excited for what's ahead with ${fillPrompt}! #Growth #FloStudio`, hashtags: '#Launch' },
+          { day: 5, platform: 'linkedin', content: `Building scalable workflows for modern creators and teams. #Strategy`, hashtags: '#Business' },
+          { day: 8, platform: 'twitter', content: `Big updates rolling out this week! Stay tuned. #Tech #AI`, hashtags: '' },
           { day: 12, platform: 'facebook', content: `How are you scaling your marketing this month? Share below!`, hashtags: '#Community' },
           { day: 15, platform: 'instagram', content: `Behind the scenes of our latest feature release.`, hashtags: '#BehindTheScenes' },
           { day: 18, platform: 'linkedin', content: `Three ways to automate your social presence with AI.`, hashtags: '#Automation' },
-          { day: 22, platform: 'twitter', content: `Speed, quality, and scale. That's our promise.`, hashtags: '#Productivity' },
-          { day: 25, platform: 'instagram', content: `Client success story: scaling to 10k engaged users.`, hashtags: '#Success' },
         ]
       }
       
@@ -85,24 +81,18 @@ export default function AICalendar() {
       for (const post of generated) {
         const dayNum = Math.min(Math.max(1, post.day || 1), daysInMonth)
         const d = new Date(year, month, dayNum)
-        const hour = post.platform === 'linkedin' ? 8 : post.platform === 'instagram' ? 9 : post.platform === 'twitter' ? 12 : 10
-        d.setHours(hour, 0, 0, 0)
-        const postRow = {
+        d.setHours(9, 0, 0, 0)
+        await supabase.from('campaign_posts').insert([{
           user_id: user?.id || null,
           platform: post.platform || 'instagram',
           content: `${post.content || ''}${post.hashtags ? '\n\n' + post.hashtags : ''}`,
           status: 'pending',
           scheduled_at: d.toISOString(),
           created_at: new Date().toISOString()
-        }
-        const { error: insertErr } = await supabase.from('campaign_posts').insert([postRow])
-        if (insertErr) {
-          console.error('Calendar insert error:', insertErr.message)
-        }
+        }])
       }
       await loadPosts()
     } catch (e) {
-      console.error(e)
       alert(`Error filling calendar: ${e.message}`)
     }
     setGenerating(false)
@@ -124,88 +114,74 @@ export default function AICalendar() {
     <Layout title="AI Calendar">
       <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', animation: 'fadeIn 0.3s ease' }}>
+      <div style={{ maxWidth: 1150, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', color: '#94a3b8', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#f1f5f9', minWidth: 180, textAlign: 'center' }}>{MONTHS[month]} {year}</h2>
-            <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', color: '#94a3b8', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+            <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} style={{ width: 36, height: 36, borderRadius: 10, background: '#ffffff', border: '1px solid #e2e8f0', color: '#0f172a', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>‹</button>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', minWidth: 200, textAlign: 'center', letterSpacing: '-0.5px' }}>{MONTHS[month]} {year}</h2>
+            <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} style={{ width: 36, height: 36, borderRadius: 10, background: '#ffffff', border: '1px solid #e2e8f0', color: '#0f172a', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>›</button>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div style={{ fontSize: 13, color: '#64748b' }}>{posts.length} posts this month</div>
-            <button onClick={() => setShowFillModal(true)} disabled={generating} style={{ padding: '9px 18px', background: generating ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', borderRadius: 9, color: '#fff', fontSize: 13, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 7 }}>
-              {generating ? <><span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> Filling...</> : '✦ AI Fill Month'}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{posts.length} scheduled posts</div>
+            <button onClick={() => setShowFillModal(true)} disabled={generating} style={{ padding: '10px 20px', background: generating ? '#f1f5f9' : 'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}>
+              {generating ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> : null}
+              ✦ AI Fill Month
             </button>
           </div>
         </div>
 
         {/* Calendar grid */}
-        <div style={{ background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, overflow: 'hidden' }}>
-          {/* Day headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            {DAYS.map(d => <div key={d} style={{ padding: '12px 0', textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: '#475569', letterSpacing: '0.05em' }}>{d}</div>)}
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            {DAYS.map(d => <div key={d} style={{ padding: '14px 0', textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: '0.05em' }}>{d}</div>)}
           </div>
-          {/* Cells */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
-            {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} style={{ minHeight: 110, borderRight: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'rgba(0,0,0,0.1)' }} />)}
+            {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} style={{ minHeight: 120, borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', background: '#fafafa' }} />)}
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1
               const dayPosts = getPostsForDay(day)
               const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year
               const isSelected = selectedDate === day
               return (
-                <div key={day} onClick={() => setSelectedDate(isSelected ? null : day)} style={{ minHeight: 110, borderRight: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)', padding: '8px', cursor: 'pointer', background: isSelected ? 'rgba(99,102,241,0.06)' : 'transparent', transition: 'background 0.15s' }}
-                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
-                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}>
+                <div key={day} onClick={() => setSelectedDate(isSelected ? null : day)} style={{ minHeight: 120, borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: 10, cursor: 'pointer', background: isSelected ? '#fdf2f8' : 'transparent', transition: 'background 0.15s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: isToday ? 800 : 500, color: isToday ? '#a5b4fc' : '#94a3b8', width: 24, height: 24, borderRadius: '50%', background: isToday ? 'rgba(99,102,241,0.2)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{day}</span>
-                    {dayPosts.length > 0 && <span style={{ fontSize: 10, color: '#64748b' }}>{dayPosts.length}</span>}
+                    <span style={{ fontSize: 13, fontWeight: isToday ? 800 : 600, color: isToday ? '#db2777' : '#0f172a', width: 26, height: 26, borderRadius: '50%', background: isToday ? '#fdf2f8' : 'transparent', border: isToday ? '1px solid #db2777' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{day}</span>
+                    {dayPosts.length > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#db2777', background: '#fdf2f8', padding: '1px 6px', borderRadius: 10 }}>{dayPosts.length}</span>}
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     {dayPosts.slice(0, 3).map(post => (
-                      <div key={post.id} onClick={e => { e.stopPropagation(); setSelectedPost(post) }} style={{ padding: '3px 7px', borderRadius: 5, background: `${PLATFORM_COLORS[post.platform] || '#6366f1'}18`, borderLeft: `2px solid ${PLATFORM_COLORS[post.platform] || '#6366f1'}`, fontSize: 11, color: '#94a3b8', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: post.status === 'approved' ? '#10b981' : post.status === 'published' ? '#6366f1' : '#f59e0b', flexShrink: 0 }} />
-                        {post.content.substring(0, 28)}...
+                      <div key={post.id} onClick={e => { e.stopPropagation(); setSelectedPost(post) }} style={{ padding: '5px 8px', borderRadius: 6, background: `${PLATFORM_COLORS[post.platform] || '#4f46e5'}10`, borderLeft: `3px solid ${PLATFORM_COLORS[post.platform] || '#4f46e5'}`, fontSize: 11.5, color: '#0f172a', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontWeight: 800, color: PLATFORM_COLORS[post.platform] || '#4f46e5', marginRight: 4, textTransform: 'uppercase' }}>{post.platform?.substring(0,2)}</span>
+                        {post.content.substring(0, 24)}...
                       </div>
                     ))}
-                    {dayPosts.length > 3 && <div style={{ fontSize: 10, color: '#475569', paddingLeft: 7 }}>+{dayPosts.length - 3} more</div>}
+                    {dayPosts.length > 3 && <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, paddingLeft: 4 }}>+{dayPosts.length - 3} more</div>}
                   </div>
                 </div>
               )
             })}
           </div>
         </div>
-
-        {/* Legend */}
-        <div style={{ display: 'flex', gap: 16, marginTop: 14, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: '#475569' }}>STATUS:</span>
-          {[['#f59e0b','Pending'],['#10b981','Approved'],['#6366f1','Published']].map(([c,l]) => (
-            <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />
-              <span style={{ fontSize: 11, color: '#64748b' }}>{l}</span>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* Post detail modal */}
       {selectedPost && (
-        <div onClick={() => setSelectedPost(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#111c2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 28, maxWidth: 480, width: '90%', animation: 'fadeIn 0.2s ease' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+        <div onClick={() => setSelectedPost(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, maxWidth: 500, width: '90%', animation: 'fadeIn 0.2s ease', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ padding: '4px 12px', borderRadius: 20, background: `${PLATFORM_COLORS[selectedPost.platform] || '#6366f1'}20`, color: PLATFORM_COLORS[selectedPost.platform] || '#a5b4fc', fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{selectedPost.platform}</span>
-                <span style={{ padding: '4px 12px', borderRadius: 20, background: selectedPost.status === 'approved' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: selectedPost.status === 'approved' ? '#34d399' : '#fbbf24', fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{selectedPost.status}</span>
+                <span style={{ padding: '4px 12px', borderRadius: 20, background: `${PLATFORM_COLORS[selectedPost.platform] || '#4f46e5'}15`, color: PLATFORM_COLORS[selectedPost.platform] || '#4f46e5', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>{selectedPost.platform}</span>
+                <span style={{ padding: '4px 12px', borderRadius: 20, background: selectedPost.status === 'approved' ? '#ecfdf5' : '#fef3c7', color: selectedPost.status === 'approved' ? '#059669' : '#d97706', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>{selectedPost.status}</span>
               </div>
-              <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>×</button>
+              <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 22 }}>×</button>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '14px 16px', marginBottom: 16, fontSize: 13.5, color: '#e2e8f0', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{selectedPost.content}</div>
-            {selectedPost.scheduled_at && <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20 }}>📅 Scheduled: {new Date(selectedPost.scheduled_at).toLocaleString()}</div>}
-            <div style={{ display: 'flex', gap: 10 }}>
-              {selectedPost.status !== 'approved' && <button onClick={() => approvePost(selectedPost.id)} style={{ flex: 1, padding: '10px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 9, color: '#34d399', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✓ Approve</button>}
-              <button onClick={() => deletePost(selectedPost.id)} style={{ flex: 1, padding: '10px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 9, color: '#f87171', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', marginBottom: 18, fontSize: 14, color: '#0f172a', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedPost.content}</div>
+            {selectedPost.scheduled_at && <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20, fontWeight: 500 }}>Scheduled: {new Date(selectedPost.scheduled_at).toLocaleString()}</div>}
+            <div style={{ display: 'flex', gap: 12 }}>
+              {selectedPost.status !== 'approved' && <button onClick={() => approvePost(selectedPost.id)} style={{ flex: 1, padding: '10px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, color: '#059669', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Approve Post</button>}
+              <button onClick={() => deletePost(selectedPost.id)} style={{ flex: 1, padding: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#dc2626', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Delete Post</button>
             </div>
           </div>
         </div>
@@ -213,14 +189,14 @@ export default function AICalendar() {
 
       {/* Fill month modal */}
       {showFillModal && (
-        <div onClick={() => setShowFillModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#111c2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 28, maxWidth: 460, width: '90%', animation: 'fadeIn 0.2s ease' }}>
-            <h3 style={{ fontSize: 17, fontWeight: 800, color: '#f1f5f9', marginBottom: 8 }}>✦ AI Fill Month</h3>
-            <p style={{ fontSize: 13, color: '#64748b', marginBottom: 18, lineHeight: 1.6 }}>Tell the AI about your brand and it will fill {MONTHS[month]} with a full content calendar automatically.</p>
-            <textarea value={fillPrompt} onChange={e => setFillPrompt(e.target.value)} placeholder="e.g. We're a local coffee shop in Denver. We want to promote our new seasonal menu, drive foot traffic, and build community. Tone: warm, friendly, local." rows={4} style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '12px 14px', color: '#f1f5f9', fontSize: 13.5, fontFamily: 'inherit', resize: 'none', outline: 'none', boxSizing: 'border-box', lineHeight: 1.6 }} />
-            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button onClick={() => setShowFillModal(false)} style={{ flex: 1, padding: '11px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, color: '#94a3b8', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-              <button onClick={fillMonth} disabled={!fillPrompt.trim()} style={{ flex: 2, padding: '11px', background: fillPrompt.trim() ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 9, color: '#fff', fontSize: 13, fontWeight: 700, cursor: fillPrompt.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>Generate {MONTHS[month]} →</button>
+        <div onClick={() => setShowFillModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, maxWidth: 500, width: '90%', animation: 'fadeIn 0.2s ease', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>✦ AI Fill Month Calendar</h3>
+            <p style={{ fontSize: 13.5, color: '#64748b', marginBottom: 20, lineHeight: 1.6 }}>Describe your brand or campaign. The AI strategist will populate {MONTHS[month]} with tailored posts across multiple platforms.</p>
+            <textarea value={fillPrompt} onChange={e => setFillPrompt(e.target.value)} placeholder="e.g. We are a boutique fitness studio in Austin. We want to drive membership signups and promote morning classes." rows={4} style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '14px 16px', color: '#0f172a', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', marginBottom: 20, boxSizing: 'border-box', lineHeight: 1.6 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <button onClick={() => setShowFillModal(false)} style={{ padding: '10px 18px', background: '#f1f5f9', border: 'none', borderRadius: 10, color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+              <button onClick={fillMonth} style={{ padding: '10px 24px', background: 'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}>Generate Calendar</button>
             </div>
           </div>
         </div>

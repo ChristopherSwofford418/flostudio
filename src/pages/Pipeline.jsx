@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 
-const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIicgLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NjIwMjU0OCwiZXhwIjoyMDkxNzc4NTQ4f5.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 
 async function callAI(messages, maxTokens = 800) {
   const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/ai-proxy', {
@@ -14,7 +14,7 @@ async function callAI(messages, maxTokens = 800) {
   return d?.content || d?.choices?.[0]?.message?.content || ''
 }
 
-const PLATFORM_COLORS = { instagram: '#e1306c', twitter: '#1da1f2', linkedin: '#0077b5', facebook: '#1877f2', tiktok: '#69c9d0' }
+const PLATFORM_COLORS = { instagram: '#db2777', twitter: '#0284c7', linkedin: '#0369a1', facebook: '#1d4ed8', tiktok: '#0d9488' }
 const STATUS_TABS = ['pending', 'approved', 'published', 'all']
 
 export default function Pipeline() {
@@ -33,7 +33,6 @@ export default function Pipeline() {
 
   const loadPosts = async () => {
     setLoading(true)
-    // Fetch all posts to calculate accurate stats, and filter locally or via query
     const { data: allData, error } = await supabase.from('campaign_posts').select('*').order('scheduled_at', { ascending: true })
     if (!error && allData) {
       setAllPosts(allData)
@@ -117,79 +116,82 @@ export default function Pipeline() {
     <Layout title="Content Pipeline">
       <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', animation: 'fadeIn 0.3s ease' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9' }}>Content Pipeline</h1>
-            <p style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>Review, edit, and approve AI-generated posts</p>
+            <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>Content Pipeline</h1>
+            <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 4 }}>Review, optimize, and approve AI-generated marketing assets</p>
           </div>
           {counts.pending > 0 && (
-            <button onClick={bulkApproveAll} disabled={bulkApproving} style={{ padding: '9px 18px', background: bulkApproving ? 'rgba(255,255,255,0.06)' : 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 9, color: '#34d399', fontSize: 13, fontWeight: 700, cursor: bulkApproving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 7 }}>
-              {bulkApproving ? <><span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#34d399', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> Approving...</> : `✓ Approve All (${counts.pending})`}
+            <button onClick={bulkApproveAll} disabled={bulkApproving} style={{ padding: '10px 20px', background: bulkApproving ? '#f1f5f9' : 'linear-gradient(135deg,#059669,#10b981)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: bulkApproving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(16,185,129,0.3)' }}>
+              {bulkApproving ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> : null}
+              Approve All Pending ({counts.pending})
             </button>
           )}
         </div>
 
         {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
-          {[['pending','⏳','#f59e0b'],['approved','✅','#10b981'],['published','🚀','#6366f1']].map(([s,icon,c]) => (
-            <div key={s} onClick={() => setActiveTab(s)} style={{ background: activeTab === s ? `${c}12` : 'var(--card)', border: `1px solid ${activeTab === s ? `${c}30` : 'rgba(255,255,255,0.06)'}`, borderRadius: 12, padding: '16px 20px', cursor: 'pointer', transition: 'all 0.15s' }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: activeTab === s ? c : '#f1f5f9' }}>{counts[s] || 0}</div>
-              <div style={{ fontSize: 12, color: '#64748b', textTransform: 'capitalize', marginTop: 2 }}>{icon} {s}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 24 }}>
+          {[['pending','Pending Review','#f59e0b'],['approved','Approved','#059669'],['published','Published','#4f46e5']].map(([s,label,c]) => (
+            <div key={s} onClick={() => setActiveTab(s)} style={{ background: '#ffffff', border: `1px solid ${activeTab === s ? c : '#e2e8f0'}`, borderRadius: 14, padding: '20px 24px', cursor: 'pointer', transition: 'all 0.15s ease', boxShadow: activeTab === s ? `0 4px 20px ${c}15` : '0 1px 3px rgba(0,0,0,0.02)' }}>
+              <div style={{ fontSize: 26, fontWeight: 800, color: activeTab === s ? c : '#0f172a', letterSpacing: '-0.5px' }}>{counts[s] || 0}</div>
+              <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 4 }}>{label}</div>
             </div>
           ))}
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'var(--card)', borderRadius: 10, padding: 4, width: 'fit-content', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: '#ffffff', borderRadius: 12, padding: 6, width: 'fit-content', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
           {STATUS_TABS.map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '7px 16px', borderRadius: 7, background: activeTab === tab ? 'rgba(99,102,241,0.15)' : 'transparent', border: `1px solid ${activeTab === tab ? 'rgba(99,102,241,0.3)' : 'transparent'}`, color: activeTab === tab ? '#a5b4fc' : '#64748b', fontSize: 12.5, fontWeight: activeTab === tab ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'all 0.15s' }}>{tab}</button>
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', borderRadius: 8, background: activeTab === tab ? '#fdf2f8' : 'transparent', border: 'none', color: activeTab === tab ? '#db2777' : '#64748b', fontSize: 13, fontWeight: activeTab === tab ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'all 0.15s' }}>{tab}</button>
           ))}
         </div>
 
         {/* Post list */}
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
-            <span style={{ width: 28, height: 28, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#6366f1', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220, background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+            <span style={{ width: 30, height: 30, border: '3px solid #e2e8f0', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
           </div>
         ) : posts.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#475569' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>No {activeTab} posts</div>
-            <div style={{ fontSize: 13 }}>Run the AI Agent or Ask Flo to generate content</div>
+          <div style={{ textAlign: 'center', padding: '80px 20px', background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>No {activeTab} posts found</div>
+            <div style={{ fontSize: 13, color: '#64748b' }}>Use Ask Flo or Agent HQ to generate campaign content</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {posts.map(post => {
               const score = aiScoring[post.id]
               return (
-                <div key={post.id} style={{ background: 'var(--card)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '16px 20px', display: 'flex', gap: 16, alignItems: 'flex-start', transition: 'border 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'}>
-                  {/* Platform dot */}
-                  <div style={{ width: 36, height: 36, borderRadius: 9, background: `${PLATFORM_COLORS[post.platform] || '#6366f1'}18`, border: `1px solid ${PLATFORM_COLORS[post.platform] || '#6366f1'}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: PLATFORM_COLORS[post.platform] || '#a5b4fc', textTransform: 'capitalize' }}>{post.platform?.substring(0,2).toUpperCase()}</span>
+                <div key={post.id} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 24px', display: 'flex', gap: 20, alignItems: 'flex-start', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.05)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)' }}>
+                  
+                  {/* Platform badge */}
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${PLATFORM_COLORS[post.platform] || '#4f46e5'}12`, border: `1px solid ${PLATFORM_COLORS[post.platform] || '#4f46e5'}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: PLATFORM_COLORS[post.platform] || '#4f46e5', textTransform: 'uppercase' }}>{post.platform?.substring(0,2)}</span>
                   </div>
+
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, color: '#e2e8f0', lineHeight: 1.6, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{post.content}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                      {post.scheduled_at && <span style={{ fontSize: 11.5, color: '#475569' }}>📅 {new Date(post.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
-                      <span style={{ fontSize: 11.5, padding: '2px 9px', borderRadius: 20, background: post.status === 'approved' ? 'rgba(16,185,129,0.1)' : post.status === 'published' ? 'rgba(99,102,241,0.1)' : 'rgba(245,158,11,0.1)', color: post.status === 'approved' ? '#34d399' : post.status === 'published' ? '#a5b4fc' : '#fbbf24', fontWeight: 600, textTransform: 'capitalize' }}>{post.status}</span>
-                      {score && score !== 'loading' && <span style={{ fontSize: 11.5, color: score.score >= 8 ? '#34d399' : score.score >= 6 ? '#fbbf24' : '#f87171' }}>AI Score: {score.score}/10</span>}
+                    <div style={{ fontSize: 14, color: '#0f172a', lineHeight: 1.6, marginBottom: 10, fontWeight: 500 }}>{post.content}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                      {post.scheduled_at && <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>{new Date(post.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
+                      <span style={{ fontSize: 11.5, padding: '3px 10px', borderRadius: 20, background: post.status === 'approved' ? '#ecfdf5' : post.status === 'published' ? '#e0e7ff' : '#fef3c7', color: post.status === 'approved' ? '#059669' : post.status === 'published' ? '#4f46e5' : '#d97706', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{post.status}</span>
+                      {score && score !== 'loading' && <span style={{ fontSize: 12, fontWeight: 700, color: score.score >= 8 ? '#059669' : score.score >= 6 ? '#d97706' : '#dc2626' }}>AI Score: {score.score}/10</span>}
                     </div>
                   </div>
+
                   {/* Actions */}
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <button onClick={() => scorePost(post)} title="AI Score" style={{ width: 32, height: 32, borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: '#64748b', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {score === 'loading' ? <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#a5b4fc', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : '✦'}
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button onClick={() => scorePost(post)} title="AI Score" style={{ padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {score === 'loading' ? <span style={{ width: 12, height: 12, border: '2px solid #cbd5e1', borderTopColor: '#4f46e5', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : '✦ Score'}
                     </button>
-                    <button onClick={() => openPost(post)} title="Edit" style={{ width: 32, height: 32, borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: '#64748b', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✎</button>
-                    {post.status === 'pending' && <button onClick={() => updateStatus(post.id, 'approved')} title="Approve" style={{ width: 32, height: 32, borderRadius: 7, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)', color: '#34d399', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</button>}
-                    {post.status === 'approved' && <button onClick={() => updateStatus(post.id, 'published')} title="Mark Published" style={{ width: 32, height: 32, borderRadius: 7, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)', color: '#a5b4fc', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🚀</button>}
-                    <button onClick={() => deletePost(post.id)} title="Delete" style={{ width: 32, height: 32, borderRadius: 7, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.1)', color: '#f87171', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                    <button onClick={() => openPost(post)} title="Edit" style={{ padding: '8px 14px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Edit</button>
+                    {post.status === 'pending' && <button onClick={() => updateStatus(post.id, 'approved')} title="Approve" style={{ padding: '8px 16px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Approve</button>}
+                    {post.status === 'approved' && <button onClick={() => updateStatus(post.id, 'published')} title="Publish" style={{ padding: '8px 16px', borderRadius: 8, background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#4f46e5', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Publish</button>}
+                    <button onClick={() => deletePost(post.id)} title="Delete" style={{ padding: '8px 12px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Delete</button>
                   </div>
                 </div>
               )
@@ -200,30 +202,30 @@ export default function Pipeline() {
 
       {/* Edit modal */}
       {selectedPost && (
-        <div onClick={() => setSelectedPost(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#111c2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 28, maxWidth: 540, width: '90%', animation: 'fadeIn 0.2s ease' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+        <div onClick={() => setSelectedPost(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, maxWidth: 560, width: '90%', animation: 'fadeIn 0.2s ease', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ padding: '4px 12px', borderRadius: 20, background: `${PLATFORM_COLORS[selectedPost.platform] || '#6366f1'}20`, color: PLATFORM_COLORS[selectedPost.platform] || '#a5b4fc', fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{selectedPost.platform}</span>
-                <span style={{ fontSize: 13, color: '#64748b' }}>Edit Post</span>
+                <span style={{ padding: '4px 12px', borderRadius: 20, background: `${PLATFORM_COLORS[selectedPost.platform] || '#4f46e5'}15`, color: PLATFORM_COLORS[selectedPost.platform] || '#4f46e5', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>{selectedPost.platform}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Edit Post Content</span>
               </div>
-              <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>×</button>
+              <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 22 }}>×</button>
             </div>
-            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={6} style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '12px 14px', color: '#f1f5f9', fontSize: 13.5, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.7 }} />
+            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={6} style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '14px 16px', color: '#0f172a', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.7 }} />
             {aiSuggestion && (
-              <div style={{ marginTop: 12, padding: '12px 14px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 700, marginBottom: 8 }}>✦ AI SUGGESTION</div>
-                <div style={{ fontSize: 13, color: '#c7d2fe', lineHeight: 1.7, marginBottom: 10, whiteSpace: 'pre-wrap' }}>{aiSuggestion}</div>
-                <button onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} style={{ padding: '6px 14px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 7, color: '#a5b4fc', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Apply Suggestion</button>
+              <div style={{ marginTop: 14, padding: '14px 16px', background: '#e0e7ff', border: '1px solid #c7d2fe', borderRadius: 12 }}>
+                <div style={{ fontSize: 11.5, color: '#4f46e5', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase' }}>✦ AI Rewritten Suggestion</div>
+                <div style={{ fontSize: 13.5, color: '#312e81', lineHeight: 1.6, marginBottom: 10, whiteSpace: 'pre-wrap' }}>{aiSuggestion}</div>
+                <button onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} style={{ padding: '6px 14px', background: '#4f46e5', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Apply Suggestion</button>
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 }}>
-              <button onClick={aiRewrite} disabled={aiRewriting} style={{ padding: '8px 16px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 8, color: '#a5b4fc', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {aiRewriting ? <span style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#a5b4fc', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : '✦ AI Rewrite'}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24 }}>
+              <button onClick={aiRewrite} disabled={aiRewriting} style={{ padding: '10px 18px', background: '#fdf2f8', border: '1px solid rgba(219,39,119,0.3)', borderRadius: 10, color: '#db2777', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {aiRewriting ? <span style={{ width: 14, height: 14, border: '2px solid rgba(219,39,119,0.2)', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : '✦ AI Rewrite'}
               </button>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setSelectedPost(null)} style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#94a3b8', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-                <button onClick={saveEdit} style={{ padding: '8px 20px', background: 'linear-gradient(135deg,#ec4899,#8b5cf6,#6366f1)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(236,72,153,0.3)' }}>Save Changes</button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setSelectedPost(null)} style={{ padding: '10px 18px', background: '#f1f5f9', border: 'none', borderRadius: 10, color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                <button onClick={saveEdit} style={{ padding: '10px 22px', background: 'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}>Save Changes</button>
               </div>
             </div>
           </div>
