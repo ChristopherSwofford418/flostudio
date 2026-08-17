@@ -1,431 +1,226 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
+import { useWorkspace } from '../context/WorkspaceContext'
 
 const STYLE_PRESETS = [
-  { id: 'professional', label: 'Corporate & Studio', desc: 'Clean, professional lighting for business & B2B' },
-  { id: 'social', label: 'Social UGC / Lifestyle', desc: 'Vibrant, authentic, mobile-first aesthetic' },
-  { id: 'minimal', label: 'Minimalist Clean', desc: 'Neutral studio backdrop with sharp product focus' },
-  { id: 'dark', label: 'Cyber / Dark Tech', desc: 'High contrast neon accents, sleek modern tech' },
-  { id: 'cinematic', label: 'Cinematic 3D Render', desc: 'Ultra-detailed 3D product render with dramatic depth' },
+  { id: 'product', label: 'Product hero', desc: 'Sculptural product focus with commercial light' },
+  { id: 'ugc', label: 'UGC energy', desc: 'Native, direct-response social creative' },
+  { id: 'editorial', label: 'Editorial pull', desc: 'Art-directed fashion and launch language' },
+  { id: 'motion', label: 'Motion-first', desc: 'Dynamic composition built for vertical placements' },
 ]
 
 const ASPECT_RATIOS = [
-  { id: '1:1', label: '1:1 Square (Feed)', width: 1024, height: 1024 },
-  { id: '9:16', label: '9:16 Story / Reels', width: 576, height: 1024 },
-  { id: '16:9', label: '16:9 Landscape (Ad)', width: 1024, height: 576 },
+  { id: '1:1', label: 'Square feed', visual: '1:1' },
+  { id: '9:16', label: 'Stories & reels', visual: '9:16' },
+  { id: '16:9', label: 'Landscape placement', visual: '16:9' },
 ]
 
+const VIDEO_FORMATS = [
+  { id: '720x1280', label: 'Vertical 9:16', detail: 'Reels / Shorts' },
+  { id: '1280x720', label: 'Landscape 16:9', detail: 'YouTube / display' },
+]
+
+function extensionFor(type) {
+  if (type.includes('webp')) return 'webp'
+  if (type.includes('jpeg')) return 'jpg'
+  if (type.includes('mp4')) return 'mp4'
+  return 'png'
+}
+
+function kindFromName(name) {
+  return /\.(mp4|webm|mov)$/i.test(name) ? 'video' : 'image'
+}
+
+function AssetVisual({ asset, compact = false }) {
+  if (asset.kind === 'video') return <video src={asset.url} muted playsInline preload="metadata" controls={!compact} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+  return <img src={asset.url} alt={asset.name || 'Generated FloStudio creative'} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+}
+
 export default function ImageBank() {
-  const [activeTab, setActiveTab] = useState('generator') // 'generator' | 'library' | 'video'
-  const [images, setImages] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { useTokens } = useWorkspace()
+  const [activeTab, setActiveTab] = useState('generate')
+  const [assets, setAssets] = useState([])
+  const [loadingAssets, setLoadingAssets] = useState(true)
   const [uploading, setUploading] = useState(false)
-
-  // Generator State
-  const [prompt, setPrompt] = useState('')
-  const [stylePreset, setStylePreset] = useState('professional')
-  const [aspectRatio, setAspectRatio] = useState('1:1')
-  const [variationsCount, setVariationsCount] = useState(2)
-  const [brandOverlay, setBrandOverlay] = useState('')
   const [referenceImage, setReferenceImage] = useState(null)
-  const [showPicker, setShowPicker] = useState(false)
+  const [prompt, setPrompt] = useState('')
+  const [textOverlay, setTextOverlay] = useState('')
+  const [stylePreset, setStylePreset] = useState('product')
+  const [aspectRatio, setAspectRatio] = useState('1:1')
+  const [variations, setVariations] = useState(2)
   const [generating, setGenerating] = useState(false)
-  const [error, setError] = useState('')
   const [generatedResults, setGeneratedResults] = useState([])
-
-  // Video Generator State
+  const [error, setError] = useState('')
   const [videoPrompt, setVideoPrompt] = useState('')
-  const [videoVoice, setVideoVoice] = useState('Professional Male')
-  const [videoCaptionStyle, setVideoCaptionStyle] = useState('Dynamic Pop')
-  const [generatingVideo, setGeneratingVideo] = useState(false)
-  const [generatedVideo, setGeneratedVideo] = useState(null)
+  const [videoFormat, setVideoFormat] = useState('720x1280')
+  const [videoSeconds, setVideoSeconds] = useState('8')
+  const [videoQuality, setVideoQuality] = useState('draft')
+  const [videoJob, setVideoJob] = useState(null)
+  const [videoError, setVideoError] = useState('')
 
-  useEffect(() => { loadImages() }, [])
+  const imageAssets = useMemo(() => assets.filter(asset => asset.kind === 'image'), [assets])
+  const videoAssets = useMemo(() => assets.filter(asset => asset.kind === 'video'), [assets])
+  const selectedStyle = STYLE_PRESETS.find(style => style.id === stylePreset)
 
-  const loadImages = async () => {
-    setLoading(true)
-    const { data, error } = await supabase.storage
-      .from('marketing-assets')
-      .list('', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } })
-    if (!error && data) {
-      setImages(
-        data
-          .filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name))
-          .map(f => ({
-            name: f.name,
-            url: `https://jtogllurcrxxaguoxeus.supabase.co/storage/v1/object/public/marketing-assets/${encodeURIComponent(f.name)}`,
-            size: f.metadata?.size,
-          }))
-      )
+  const loadAssets = async () => {
+    setLoadingAssets(true)
+    const { data, error: listError } = await supabase.storage.from('marketing-assets').list('', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } })
+    if (!listError && data) {
+      const media = data.filter(file => /\.(jpg|jpeg|png|webp|gif|mp4|webm|mov)$/i.test(file.name)).map(file => {
+        const { data: publicData } = supabase.storage.from('marketing-assets').getPublicUrl(file.name)
+        return { name:file.name, url:publicData.publicUrl, kind:kindFromName(file.name), createdAt:file.created_at, size:file.metadata?.size }
+      })
+      setAssets(media)
     }
-    setLoading(false)
+    setLoadingAssets(false)
   }
 
-  const handleUpload = async (files) => {
-    if (!files || !files.length) return
-    setUploading(true)
-    setError('')
+  useEffect(() => { loadAssets() }, [])
+  useEffect(() => {
     try {
-      for (const file of Array.from(files)) {
-        if (file.size > 5 * 1024 * 1024) {
-          throw new Error('Image file is too large. Please select an image under 5MB.')
-        }
-        const fileName = `product-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-        
-        await new Promise((resolve) => {
-          const reader = new FileReader()
-          reader.onload = (e) => {
-            const dataUrl = e.target.result
-            setReferenceImage(dataUrl)
-            setImages(prev => [{ name: fileName, url: dataUrl }, ...prev])
-            resolve()
-          }
-          reader.readAsDataURL(file)
-        })
+      const stored = JSON.parse(localStorage.getItem('flostudio_active_video_render') || 'null')
+      if (stored?.id && ['queued', 'in_progress'].includes(stored.status)) setVideoJob(stored)
+    } catch {}
+  }, [])
 
-        supabase.storage.from('marketing-assets').upload(fileName, file, { upsert: true }).catch(() => {})
-      }
-    } catch (e) {
-      setError(e.message)
-    }
+  const uploadAsset = async (file, namePrefix = 'source') => {
+    const extension = extensionFor(file.type || file.name || '')
+    const name = `${namePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${extension}`
+    const { error: uploadError } = await supabase.storage.from('marketing-assets').upload(name, file, { contentType:file.type || undefined, upsert:true })
+    if (uploadError) throw uploadError
+    const { data } = supabase.storage.from('marketing-assets').getPublicUrl(name)
+    return { name, url:data.publicUrl, kind:kindFromName(name) }
+  }
+
+  const handleUpload = async files => {
+    const input = Array.from(files || [])
+    if (!input.length) return
+    setUploading(true); setError('')
+    try {
+      const [first] = input
+      if (first.size > 10 * 1024 * 1024) throw new Error('Please choose a reference image smaller than 10MB.')
+      const reader = new FileReader()
+      const reference = await new Promise((resolve, reject) => { reader.onload = event => resolve(event.target.result); reader.onerror = reject; reader.readAsDataURL(first) })
+      setReferenceImage(reference)
+      for (const file of input) await uploadAsset(file, 'brand-source')
+      await loadAssets()
+    } catch (uploadError) { setError(uploadError.message || 'The image could not be uploaded.') }
     setUploading(false)
   }
 
-  const deleteImage = async (name) => {
-    if (!confirm(`Delete "${name}"?`)) return
-    await supabase.storage.from('marketing-assets').remove([name])
-    loadImages()
+  const persistRemoteOutput = async (url, prefix, fallbackKind = 'image') => {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('A generated output could not be saved to your asset bank.')
+    const blob = await response.blob()
+    const saved = await uploadAsset(new File([blob], `${prefix}.${extensionFor(blob.type)}`, { type:blob.type }), prefix)
+    return { ...saved, kind:fallbackKind }
   }
 
-  const generateAI = async () => {
-    const activePrompt = prompt.trim() || (referenceImage ? 'High converting commercial marketing ad featuring uploaded app screenshot' : '')
-    if (!activePrompt && !referenceImage) return
-
-    setGenerating(true)
-    setError('')
-    setGeneratedResults([])
-
+  const generateImages = async () => {
+    if (!prompt.trim() && !referenceImage) { setError('Describe the creative or upload a product image first.'); return }
+    setGenerating(true); setError(''); setGeneratedResults([])
     try {
-      const styleDesc = STYLE_PRESETS.find(s => s.id === stylePreset)?.desc || ''
-      const textOverlayNote = brandOverlay ? ` Feature clear bold promotional text overlay: "${brandOverlay}".` : ''
-      const cleanPrompt = `Commercial marketing asset for high-conversion advertising. Prompt: ${activePrompt}. Style guidelines: ${styleDesc}.${textOverlayNote} Photorealistic, 8K, cinematic commercial production quality.`
-
-      const res = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: cleanPrompt,
-          aspectRatio: aspectRatio,
-          referenceImage: referenceImage
-        })
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Failed to generate ad creatives.')
-      }
-      setGeneratedResults(data.images || [])
-    } catch (e) {
-      setError('Generation failed: ' + e.message)
-    }
+      const tokenCost = 10 * variations
+      const authorized = await useTokens(tokenCost, `AI image creative set (${variations})`)
+      if (!authorized) { setGenerating(false); return }
+      const brief = `${prompt || 'Create a premium product campaign around the uploaded image.'} Style: ${selectedStyle?.label || 'Product hero'} — ${selectedStyle?.desc || ''}`
+      const response = await fetch('/api/generate-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations, referenceImage }) })
+      const data = await response.json()
+      if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
+      const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${index + 1}`)))
+      setGeneratedResults(saved)
+      await loadAssets()
+    } catch (generationError) { setError(generationError.message || 'The creative could not be generated.') }
     setGenerating(false)
   }
 
-  const saveToBank = async (url) => {
+  const startVideo = async () => {
+    if (!videoPrompt.trim()) { setVideoError('Describe the motion, product, setting, and camera direction first.'); return }
+    setVideoError('')
+    const request = { prompt:videoPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage }
     try {
-      const filename = `ad-creative-${Date.now()}.png`
-      const res = await fetch(url)
-      const blob = await res.blob()
-      await supabase.storage.from('marketing-assets').upload(filename, blob, { contentType: 'image/png', upsert: true })
-      await loadImages()
-      alert('Asset successfully saved to your Image & Creative Bank!')
-    } catch (e) {
-      alert('Could not save asset: ' + e.message)
-    }
+      const tokenCost = videoQuality === 'production' ? 60 : 30
+      const authorized = await useTokens(tokenCost, 'AI video render')
+      if (!authorized) return
+      const response = await fetch('/api/generate-video', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(request) })
+      const job = await response.json()
+      if (!response.ok || job.error) throw new Error(job.error || 'Video render could not be started.')
+      const normalized = { ...job, prompt:videoPrompt, size:videoFormat, seconds:videoSeconds, status:job.status || 'queued', createdAt:Date.now() }
+      setVideoJob(normalized)
+      localStorage.setItem('flostudio_active_video_render', JSON.stringify(normalized))
+    } catch (startError) { setVideoError(startError.message || 'Video render could not be started.') }
   }
 
-  return (
-    <Layout title="AI Image & Video Studio">
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .studio-tab { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13); color: rgba(234,229,255,.7); padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; }
-        .studio-tab.active { background: linear-gradient(135deg, #7b61ff, #ef4f9a); color: #fff; border-color: rgba(255,255,255,.22); box-shadow: 0 8px 20px rgba(114,80,255,.32); }
-        .style-card { background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.2s; }
-        .style-card:hover { border-color: rgba(211,199,255,.42); background: rgba(255,255,255,.09); }
-        .style-card.selected { background: rgba(130,99,255,.22); border-color: #a48cff; box-shadow: 0 0 18px rgba(123,97,255,.22); }
-      `}</style>
+  const completeVideo = async job => {
+    const [video, thumbnail] = await Promise.all([
+      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=video`, 'ai-video', 'video'),
+      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=thumbnail`, 'ai-video-thumbnail', 'image'),
+    ])
+    const completed = { ...job, status:'completed', progress:100, videoUrl:video.url, thumbnailUrl:thumbnail.url, savedAt:Date.now() }
+    setVideoJob(completed); localStorage.removeItem('flostudio_active_video_render'); await loadAssets()
+  }
 
-      <div className="flo-page" style={{ maxWidth: 1280, margin: '0 auto', animation: 'fadeIn 0.3s ease-out' }}>
-        <section className="abundance-shell" style={{ position: 'relative', minHeight: 270, marginBottom: 22, color: '#fffaf4', display: 'flex', alignItems: 'stretch' }}>
-          <img src="/visuals/flo-creative-hero.jpg" alt="FloStudio creative direction" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'right center', opacity: .82 }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(30,19,88,.98) 0%, rgba(30,19,88,.75) 45%, rgba(22,10,61,.1) 100%)' }} />
-          <div style={{ position: 'relative', zIndex: 1, padding: '34px 38px', maxWidth: 650 }}>
-            <div className="abundance-eyebrow" style={{ marginBottom: 14 }}>Creative Lab / Art direction</div>
-            <h1 className="abundance-title" style={{ fontSize: 'clamp(32px,4.5vw,52px)', maxWidth: 560 }}>From product signal to <em>scroll-stopping work.</em></h1>
-            <p className="abundance-copy" style={{ marginTop: 14, maxWidth: 520 }}>Bring an app screen, product image, or bare idea. Flo turns it into campaign-ready creative while keeping your visual story coherent.</p>
-          </div>
-          <div style={{ position: 'relative', zIndex: 1, marginLeft: 'auto', alignSelf: 'flex-end', padding: 20, display: 'flex', gap: 7 }}>
-            {['Image', 'Video', 'Assets'].map((item, index) => <span key={item} className="studio-chip" style={{ background: index === 0 ? '#d7f267' : 'rgba(255,255,255,.12)', color: index === 0 ? '#16131d' : '#fff', borderColor: index === 0 ? '#d7f267' : 'rgba(255,255,255,.22)' }}>{item}</span>)}
-          </div>
+  useEffect(() => {
+    if (!videoJob?.id || !['queued', 'in_progress'].includes(videoJob.status)) return undefined
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/generate-video?action=status&id=${encodeURIComponent(videoJob.id)}`)
+        const status = await response.json()
+        if (!response.ok || status.error) throw new Error(status.error || 'Video render status could not be retrieved.')
+        const next = { ...videoJob, ...status }
+        setVideoJob(next); localStorage.setItem('flostudio_active_video_render', JSON.stringify(next))
+        if (status.status === 'completed') await completeVideo(next)
+        if (status.status === 'failed') { localStorage.removeItem('flostudio_active_video_render'); setVideoError(status.error?.message || 'The video provider declined this render. Adjust the prompt or reference image and try again.') }
+      } catch (pollError) { setVideoError(pollError.message) }
+    }, 10000)
+    return () => clearTimeout(timer)
+  }, [videoJob])
+
+  const deleteAsset = async asset => {
+    if (!window.confirm(`Delete ${asset.name}?`)) return
+    await supabase.storage.from('marketing-assets').remove([asset.name]); await loadAssets()
+  }
+
+  const tabs = [{ id:'generate', label:'Image ads', count:imageAssets.length }, { id:'video', label:'Video ads', count:videoAssets.length }, { id:'library', label:'Asset library', count:assets.length }]
+
+  return <Layout title="Creative Lab">
+    <style>{`
+      .creative-tab{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:rgba(240,237,255,.72);border-radius:999px;padding:9px 13px;font:600 11px Manrope,sans-serif}.creative-tab.active{background:linear-gradient(135deg,#ff6198,#7b61ff);border-color:rgba(255,255,255,.28);color:#fff;box-shadow:0 9px 22px rgba(255,88,153,.22)}
+      .media-rail{display:grid;grid-template-columns:repeat(8,minmax(112px,1fr));gap:9px;overflow-x:auto;padding-top:18px}.media-rail-item{height:154px;position:relative;overflow:hidden;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08)}.media-rail-item::after{content:'AI OUTPUT';position:absolute;left:7px;top:7px;padding:3px 5px;border-radius:4px;background:rgba(9,6,28,.7);color:rgba(255,255,255,.86);font:500 8px 'DM Mono',monospace;letter-spacing:.08em}.media-rail-item.video::after{content:'VIDEO RENDER';color:#d9ff75}.asset-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.asset-card{min-height:240px;overflow:hidden;position:relative;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.14);border-radius:16px}.asset-card .asset-footer{position:absolute;inset:auto 0 0 0;padding:10px;background:linear-gradient(transparent,rgba(7,5,23,.92) 48%);padding-top:35px;display:flex;align-items:flex-end;justify-content:space-between;gap:8px;color:#fff}.asset-card video,.asset-card img{min-height:240px}.format-card{border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px;background:rgba(255,255,255,.055);color:rgba(240,237,255,.72);text-align:left}.format-card.active{border-color:#ff8fb9;background:rgba(255,100,143,.15);color:#fff}.format-card small{display:block;margin-top:3px;color:rgba(240,237,255,.5)}@media(max-width:1000px){.creative-workspace{grid-template-columns:1fr!important}.asset-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.media-rail{grid-template-columns:repeat(8,142px)}}@media(max-width:620px){.asset-grid{grid-template-columns:1fr 1fr}.media-rail{grid-template-columns:repeat(8,128px)}}
+    `}</style>
+    <div className="flo-page" style={{ maxWidth:1280, margin:'0 auto', animation:'fadeIn .3s ease-out' }}>
+      <section className="abundance-shell" style={{ padding:'30px 32px 26px', marginBottom:20 }}>
+        <div style={{ position:'relative', zIndex:1, display:'grid', gridTemplateColumns:'minmax(0,1fr) 280px', gap:24, alignItems:'end' }}>
+          <div><div className="abundance-eyebrow">Creative Lab / Media production</div><h1 className="abundance-title" style={{ marginTop:10, maxWidth:730 }}>Make the gallery your <em>campaign proof.</em></h1><p className="abundance-copy" style={{ marginTop:13, maxWidth:660 }}>Every generated ad, product study, and completed video render is saved as a reusable asset—not a blank tool state. Start with a prompt, an app screen, or both.</p></div>
+          <div className="abundance-glass" style={{ padding:15, borderRadius:17 }}><div className="abundance-mini-label">MEDIA LIBRARY</div><div style={{ display:'flex', alignItems:'baseline', gap:7, marginTop:5 }}><b style={{ fontSize:31, letterSpacing:'-.06em' }}>{assets.length}</b><span style={{ color:'rgba(255,255,255,.65)', fontSize:12 }}>saved outputs</span></div><div style={{ display:'flex', gap:7, marginTop:10 }}><span className="abundance-pill"><i/>{imageAssets.length} images</span><span className="abundance-pill">{videoAssets.length} videos</span></div></div>
+        </div>
+        <div className="media-rail">{assets.slice(0,8).map(asset => <div key={asset.name} className={`media-rail-item ${asset.kind}`}><AssetVisual asset={asset} compact /></div>)}{!assets.length && <div className="abundance-glass" style={{ gridColumn:'1 / -1', padding:20, borderRadius:16, color:'rgba(255,255,255,.68)', fontSize:12 }}>Your real generated ads will collect here. The library stays empty until you make or upload a creative—FloStudio does not fill the rail with fake stock outputs.</div>}</div>
+      </section>
+
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', margin:'0 0 20px' }}>{tabs.map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`creative-tab ${activeTab === tab.id ? 'active':''}`}>{tab.label} <span style={{ opacity:.72 }}>({tab.count})</span></button>)}</div>
+
+      {activeTab === 'generate' && <div className="creative-workspace" style={{ display:'grid', gridTemplateColumns:'minmax(0,1.12fr) minmax(360px,.88fr)', gap:20 }}>
+        <section className="abundance-card" style={{ padding:25 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:20 }}><div><div className="abundance-mini-label">IMAGE AD DIRECTOR</div><h2 style={{ fontSize:23, letterSpacing:'-.055em', marginTop:5 }}>Frame the product. Find the reason to stop.</h2></div><span className="abundance-pill">{10 * variations} tokens</span></div>
+          <label style={{ display:'block', color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>WHAT SHOULD THIS AD MAKE PEOPLE FEEL OR DO?</label>
+          <textarea className="studio-input" value={prompt} onChange={event => setPrompt(event.target.value)} rows={4} placeholder="Example: launch a premium fitness coaching app to busy professionals; show calm confidence, a clear product moment, and a decisive download prompt." style={{ resize:'vertical', lineHeight:1.6 }} />
+          <div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:9 }}>VISUAL DIRECTION</div><div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:9 }}>{STYLE_PRESETS.map(style => <button key={style.id} onClick={() => setStylePreset(style.id)} className="format-card" style={{ borderColor:stylePreset === style.id ? '#b5a2ff' : undefined }}><b style={{ display:'block', fontSize:12 }}>{style.label}</b><small>{style.desc}</small></button>)}</div></div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>PLACEMENT</div><select className="studio-input" value={aspectRatio} onChange={event => setAspectRatio(event.target.value)}>{ASPECT_RATIOS.map(ratio => <option key={ratio.id} value={ratio.id}>{ratio.label} / {ratio.visual}</option>)}</select></div><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>VARIATIONS</div><select className="studio-input" value={variations} onChange={event => setVariations(Number(event.target.value))}>{[1,2,3,4].map(count => <option key={count} value={count}>{count} creative{count > 1 ? 's' : ''}</option>)}</select></div></div>
+          <div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>OPTIONAL ON-IMAGE MESSAGE</div><input className="studio-input" value={textOverlay} onChange={event => setTextOverlay(event.target.value)} placeholder="e.g. EARLY ACCESS IS OPEN" /></div>
+          <div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>PRODUCT REFERENCE</div>{referenceImage ? <div className="abundance-glass" style={{ padding:10, borderRadius:13, display:'flex', alignItems:'center', gap:10 }}><img src={referenceImage} alt="Product reference" style={{ width:50, height:50, objectFit:'cover', borderRadius:9 }} /><div style={{ flex:1, color:'rgba(255,255,255,.78)', fontSize:12 }}>Your screenshot is used as the product truth in reference-led creative.</div><button onClick={() => setReferenceImage(null)} className="studio-chip">Remove</button></div> : <label style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:68, border:'1px dashed rgba(255,255,255,.32)', borderRadius:13, color:'rgba(242,239,255,.72)', fontSize:12, cursor:'pointer', background:'rgba(255,255,255,.04)' }}>{uploading ? 'Uploading source...' : 'Upload your app screen or product image'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event => handleUpload(event.target.files)} style={{ display:'none' }} /></label>}</div>
+          {error && <div style={{ marginTop:15, padding:'11px 13px', color:'#ffbdcf', fontSize:12, border:'1px solid rgba(255,100,143,.32)', background:'rgba(255,100,143,.1)', borderRadius:11 }}>{error}</div>}
+          <button onClick={generateImages} disabled={generating || (!prompt.trim() && !referenceImage)} className="studio-button" style={{ width:'100%', marginTop:20, padding:14 }}>{generating ? 'Creating your ad set...' : `Create ${variations} ad creative${variations > 1 ? 's' : ''}`}</button>
         </section>
-        {/* Top Studio Tabs */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-          <button className={`studio-tab ${activeTab === 'generator' ? 'active' : ''}`} onClick={() => setActiveTab('generator')}>
-            AI Ad Image Studio
-          </button>
-          <button className={`studio-tab ${activeTab === 'video' ? 'active' : ''}`} onClick={() => setActiveTab('video')}>
-            AI Video & UGC Studio
-          </button>
-          <button className={`studio-tab ${activeTab === 'library' ? 'active' : ''}`} onClick={() => setActiveTab('library')}>
-            Brand Asset Bank ({images.length})
-          </button>
-        </div>
+        <section className="abundance-card" style={{ padding:22, minHeight:530, display:'flex', flexDirection:'column' }}><div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}><div><div className="abundance-mini-label">LIVE OUTPUT BOARD</div><h2 style={{ fontSize:20, letterSpacing:'-.05em', marginTop:4 }}>Generated creatives</h2></div><span className="abundance-pill">saved automatically</span></div>{generating ? <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center' }}><div><span className="spinner" style={{ width:34, height:34, borderWidth:3 }} /><div style={{ color:'#fff', fontWeight:800, marginTop:15 }}>Building commercial compositions</div><div style={{ color:'rgba(234,229,255,.64)', fontSize:12, marginTop:6 }}>Your output will be added to the permanent media rail.</div></div></div> : generatedResults.length ? <div style={{ display:'grid', gridTemplateColumns:generatedResults.length > 1 ? '1fr 1fr' : '1fr', gap:12 }}>{generatedResults.map(asset => <div key={asset.name} style={{ minHeight:240, borderRadius:14, overflow:'hidden', position:'relative', background:'rgba(255,255,255,.06)' }}><AssetVisual asset={asset} /><a href={asset.url} target="_blank" rel="noreferrer" className="abundance-pill" style={{ position:'absolute', left:9, bottom:9 }}>Open output</a></div>)}</div> : <div className="abundance-glass" style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'flex-end', minHeight:390, padding:18, borderRadius:15, background:'linear-gradient(150deg,rgba(123,97,255,.22),rgba(255,100,143,.09))' }}><div className="abundance-mini-label">OUTPUT READY WHEN YOU ARE</div><h3 style={{ fontSize:24, lineHeight:1.05, letterSpacing:'-.06em', maxWidth:300, marginTop:7 }}>The next ad in your gallery starts with a real brand signal.</h3><p style={{ color:'rgba(234,229,255,.65)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:370 }}>Prompt-only work becomes an original commercial concept. Add a product image when the output must carry your actual screen or product truth.</p></div>}</section>
+      </div>}
 
-        {/* 1. AI AD IMAGE STUDIO TAB */}
-        {activeTab === 'generator' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 28 }}>
-            {/* Left Controls */}
-            <div className="abundance-card" style={{ padding: 28 }}>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#eeeaff', fontSize: 13, fontWeight: 700, marginBottom: 8, letterSpacing: '0.05em' }}>AD CREATIVE PROMPT (OPTIONAL IF IMAGE UPLOADED)</label>
-                <textarea
-                  value={prompt}
-                  onChange={e => setPrompt(e.target.value)}
-                  placeholder="Describe your ad creative or just upload your app screenshot below..."
-                  rows={3}
-                  className="studio-input" style={{ minHeight:92, resize: 'vertical', lineHeight: 1.5 }}
-                />
-              </div>
+      {activeTab === 'video' && <div className="creative-workspace" style={{ display:'grid', gridTemplateColumns:'minmax(0,1.05fr) minmax(360px,.95fr)', gap:20 }}>
+        <section className="abundance-card" style={{ padding:25 }}><div className="abundance-mini-label">VIDEO AD DIRECTOR</div><h2 style={{ fontSize:27, letterSpacing:'-.06em', marginTop:5 }}>Turn the campaign into motion.</h2><p style={{ color:'rgba(234,229,255,.64)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:560 }}>Video is a real asynchronous render, not a stock clip. Describe the camera, product action, setting, and lighting. Product references guide the opening frame where the video provider accepts them.</p><textarea className="studio-input" value={videoPrompt} onChange={event => setVideoPrompt(event.target.value)} rows={5} placeholder="Example: macro close-up of a wellness app screen as lavender light travels across the glass, camera pulls back to reveal a calm morning desk, premium product commercial pacing." style={{ resize:'vertical', lineHeight:1.6, marginTop:18 }} /><div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:9 }}>VIDEO PLACEMENT</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>{VIDEO_FORMATS.map(format => <button key={format.id} onClick={() => setVideoFormat(format.id)} className={`format-card ${videoFormat === format.id ? 'active':''}`}><b>{format.label}</b><small>{format.detail}</small></button>)}</div></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>DURATION</div><select className="studio-input" value={videoSeconds} onChange={event => setVideoSeconds(event.target.value)}>{['4','8','12','16','20'].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></div><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>RENDER QUALITY</div><select className="studio-input" value={videoQuality} onChange={event => setVideoQuality(event.target.value)}><option value="draft">Concept render / 30 tokens</option><option value="production">Production render / 60 tokens</option></select></div></div>{videoError && <div style={{ marginTop:15, padding:'11px 13px', color:'#ffbdcf', fontSize:12, border:'1px solid rgba(255,100,143,.32)', background:'rgba(255,100,143,.1)', borderRadius:11 }}>{videoError}</div>}<div style={{ color:'rgba(234,229,255,.52)', fontSize:10.5, lineHeight:1.55, marginTop:14 }}>Video providers can decline prompts involving real people, copyrighted characters or music, or reference images with human faces. Finished MP4s are saved into your media library.</div><button onClick={startVideo} disabled={!videoPrompt.trim() || ['queued','in_progress'].includes(videoJob?.status)} className="studio-button" style={{ width:'100%', marginTop:18, padding:14 }}>{['queued','in_progress'].includes(videoJob?.status) ? 'Video render in progress...' : 'Start real video render'}</button></section>
+        <section className="abundance-card" style={{ padding:22, minHeight:530, display:'flex', flexDirection:'column' }}><div className="abundance-mini-label">RENDER MONITOR</div>{videoJob?.status === 'completed' && videoJob.videoUrl ? <div style={{ marginTop:15 }}><div style={{ borderRadius:15, overflow:'hidden', background:'#090619', aspectRatio:videoJob.size === '720x1280' ? '9 / 16':'16 / 9' }}><video src={videoJob.videoUrl} poster={videoJob.thumbnailUrl} controls playsInline style={{ width:'100%', height:'100%', objectFit:'cover' }} /></div><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12 }}><div><b style={{ display:'block', fontSize:14 }}>Video render complete</b><span style={{ color:'rgba(234,229,255,.6)', fontSize:11 }}>{videoJob.seconds || videoSeconds}s / saved to Asset Library</span></div><a href={videoJob.videoUrl} target="_blank" rel="noreferrer" className="abundance-pill">Open MP4</a></div></div> : videoJob ? <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center' }}><div><div style={{ fontSize:42, fontWeight:800, letterSpacing:'-.08em', color:'#d9ff75' }}>{Math.max(0, Number(videoJob.progress || 0))}%</div><div style={{ color:'#fff', fontWeight:800, marginTop:6 }}>{videoJob.status === 'queued' ? 'Render queued' : 'Rendering your ad'}</div><div style={{ color:'rgba(234,229,255,.62)', fontSize:12, lineHeight:1.6, maxWidth:310, margin:'8px auto 0' }}>FloStudio is checking this real video job every ten seconds. You can leave the page; the job ID is retained locally for monitoring when you return.</div><div style={{ height:7, background:'rgba(255,255,255,.1)', borderRadius:999, overflow:'hidden', marginTop:18 }}><div style={{ height:'100%', width:`${Math.max(4, Number(videoJob.progress || 4))}%`, background:'linear-gradient(90deg,#ff6198,#7b61ff,#d9ff75)', borderRadius:999 }} /></div></div></div> : <div className="abundance-glass" style={{ flex:1, marginTop:15, borderRadius:16, padding:20, display:'flex', flexDirection:'column', justifyContent:'flex-end', background:'linear-gradient(160deg,rgba(255,100,143,.13),rgba(123,97,255,.21))' }}><div className="abundance-mini-label">NO FAKE VIDEO PREVIEWS</div><h3 style={{ fontSize:26, letterSpacing:'-.065em', lineHeight:1.05, marginTop:8 }}>Your real campaign film will appear here.</h3><p style={{ color:'rgba(234,229,255,.65)', fontSize:12, lineHeight:1.6, marginTop:10 }}>The preview board stays honest: it only becomes a playable video when a render job actually completes.</p></div>}</section>
+      </div>}
 
-              {/* Visual Style Presets */}
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#eeeaff', fontSize: 13, fontWeight: 700, marginBottom: 10, letterSpacing: '0.05em' }}>VISUAL STYLE</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-                  {STYLE_PRESETS.map(s => (
-                    <div
-                      key={s.id}
-                      onClick={() => setStylePreset(s.id)}
-                      className={`style-card ${stylePreset === s.id ? 'selected' : ''}`}
-                    >
-                      <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{s.label}</div>
-                      <div style={{ color: 'rgba(234,229,255,.6)', fontSize: 11, lineHeight: 1.3 }}>{s.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Aspect Ratio & Variations */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-                <div>
-                  <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>ASPECT RATIO</label>
-                  <select
-                    value={aspectRatio}
-                    onChange={e => setAspectRatio(e.target.value)}
-                    style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12, color: '#0f172a', fontSize: 13 }}
-                  >
-                    {ASPECT_RATIOS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>VARIATIONS</label>
-                  <select
-                    value={variationsCount}
-                    onChange={e => setVariationsCount(e.target.value)}
-                    style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12, color: '#0f172a', fontSize: 13 }}
-                  >
-                    <option value="1">1 Creative</option>
-                    <option value="2">2 Creatives</option>
-                    <option value="3">3 Creatives</option>
-                    <option value="4">4 Creatives</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Brand Text Overlay */}
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#eeeaff', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>TEXT OVERLAY (OPTIONAL)</label>
-                <input
-                  type="text"
-                  value={brandOverlay}
-                  onChange={e => setBrandOverlay(e.target.value)}
-                  placeholder="e.g. 50% OFF TODAY or JOIN NOW"
-                  className="studio-input" style={{ padding:12 }}
-                />
-              </div>
-
-              {/* Reference Image Picker & Direct Upload */}
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#eeeaff', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>UPLOAD APP SCREENSHOT OR PRODUCT IMAGE</label>
-                {referenceImage ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,100,143,.1)', border: '1px solid rgba(255,125,174,.32)', borderRadius: 12, padding: 10 }}>
-                    <img src={referenceImage} alt="Ref" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }} />
-                    <div style={{ flex: 1, fontSize: 13, color: '#fff', fontWeight: 600 }}>Reference Asset Included in Ad</div>
-                    <button onClick={() => setReferenceImage(null)} style={{ background: '#ffeeef', border: 'none', color: '#dc2626', borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Remove</button>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={() => setShowPicker(true)} style={{ flex: 1, background: 'rgba(255,255,255,.055)', border: '1px dashed rgba(255,255,255,.3)', borderRadius: 12, padding: 12, color: '#eeeaff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                      Select from Bank
-                    </button>
-                    <label style={{ flex: 1, background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', color: '#fff', border: 'none', borderRadius: 12, padding: 12, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', boxShadow: '0 4px 15px rgba(219,39,119,0.25)' }}>
-                      {uploading ? 'Uploading...' : 'Upload Image'}
-                      <input type="file" accept="image/*" multiple onChange={e => handleUpload(e.target.files)} style={{ display: 'none' }} />
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              {error && (
-                <div style={{ marginBottom: 20, padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#dc2626', fontSize: 13, fontWeight: 600 }}>
-                  {error}
-                </div>
-              )}
-
-              <button
-                onClick={generateAI}
-                disabled={generating || (!prompt.trim() && !referenceImage)}
-                style={{ width: '100%', padding: '14px', background: generating || (!prompt.trim() && !referenceImage) ? '#e2e8f0' : 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 800, cursor: generating || (!prompt.trim() && !referenceImage) ? 'not-allowed' : 'pointer', boxShadow: '0 4px 20px rgba(219,39,119,0.3)' }}
-              >
-                {generating ? 'Generating Ad Creatives...' : 'Generate Ad Creatives (Cost: 10 Tokens)'}
-              </button>
-            </div>
-
-            {/* Right Output Preview */}
-            <div className="abundance-card" style={{ padding: 28, display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 20 }}>Generated Ad Creatives</h3>
-
-              {generating ? (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, minHeight: 350 }}>
-                  <span style={{ width: 36, height: 36, border: '3px solid #e2e8f0', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Synthesizing High-Conversion Ad Creatives...</div>
-                  <div style={{ fontSize: 12, color: 'rgba(234,229,255,.64)' }}>Compositing app screenshot & generating cinematic studio lighting</div>
-                </div>
-              ) : generatedResults.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, overflowY: 'auto' }}>
-                  {generatedResults.map((img, i) => (
-                    <div key={i} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', padding: 12 }}>
-                      <img src={img.url} alt={`Ad ${i+1}`} style={{ width: '100%', height: 'auto', borderRadius: 10, display: 'block', objectFit: 'contain' }} />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>Creative #{i+1}</span>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <a href={img.url} target="_blank" rel="noreferrer" style={{ padding: '6px 12px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#0f172a', fontSize: 12, fontWeight: 700 }}>Open HD</a>
-                          <button onClick={() => saveToBank(img.url)} style={{ padding: '6px 14px', background: '#db2777', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Save to Bank</button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="abundance-glass" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 18, borderRadius: 16 }}>
-                  <div className="studio-kicker" style={{ marginBottom: 8 }}>Output board</div>
-                  <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.045em', color: '#fff', maxWidth: 300 }}>Your next creative set will land here.</div>
-                  <div style={{ fontSize: 12, color: 'rgba(234,229,255,.64)', maxWidth: 350, lineHeight: 1.55, marginTop: 7 }}>Use the reference image as your product truth, then choose a direction that feels native to the campaign.</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 9, marginTop: 20 }}>
-                    {[
-                      ['/visuals/flo-preview-product.jpg', 'Product focus'],
-                      ['/visuals/flo-preview-lifestyle.jpg', 'Human proof'],
-                      ['/visuals/flo-preview-editorial.jpg', 'Editorial pull']
-                    ].map(([src, label]) => <div key={label} style={{ position: 'relative', minHeight: 160, borderRadius: 12, overflow: 'hidden', background: '#ddd' }}><img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} /><div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(22,19,29,.78),transparent 58%)' }} /><span style={{ position: 'absolute', left: 8, bottom: 8, color: '#fff', fontSize: 9.5, fontWeight: 800 }}>{label}</span></div>)}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 2. BRAND ASSET BANK TAB */}
-        {activeTab === 'library' && (
-          <div className="abundance-card" style={{ padding: 28 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <div>
-                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>Brand Asset Bank</h3>
-                <p style={{ fontSize: 13, color: 'rgba(234,229,255,.64)', marginTop: 4 }}>Uploaded app screenshots, logos, and generated ad creatives</p>
-              </div>
-              <label style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 15px rgba(219,39,119,0.25)' }}>
-                {uploading ? 'Uploading...' : 'Upload New Asset'}
-                <input type="file" accept="image/*" multiple onChange={e => handleUpload(e.target.files)} style={{ display: 'none' }} />
-              </label>
-            </div>
-
-            {loading ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 250 }}>
-                <span style={{ width: 30, height: 30, border: '3px solid #e2e8f0', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-              </div>
-            ) : images.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>No assets uploaded yet</div>
-                <div style={{ fontSize: 13, color: 'rgba(234,229,255,.64)' }}>Upload app screenshots or product photos to use them in AI ad generation</div>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
-                {images.map((img, i) => (
-                  <div key={i} className="abundance-glass" style={{ borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ height: 180, background: 'rgba(0,0,0,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                      <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    </div>
-                    <div style={{ padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,.12)' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{img.name}</span>
-                      <button onClick={() => deleteImage(img.name)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Delete</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 3. AI VIDEO & UGC STUDIO TAB */}
-        {activeTab === 'video' && (
-          <div className="abundance-card" style={{ padding: 32, textAlign: 'center' }}>
-            <div style={{ maxWidth: 600, margin: '0 auto', padding: '40px 0' }}>
-              <div style={{ width: 56, height: 56, borderRadius: 18, background: 'rgba(255,100,143,.14)', border:'1px solid rgba(255,125,174,.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#ffb5cf', fontSize: 12, fontWeight: 900, letterSpacing:'.08em' }}>VIDEO</div>
-              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 8 }}>AI Video & UGC Studio</h3>
-              <p style={{ fontSize: 14, color: 'rgba(234,229,255,.64)', marginBottom: 24, lineHeight: 1.6 }}>Generate high-converting video ad scripts, AI voiceovers, and dynamic captions from your app screenshots.</p>
-              <textarea
-                value={videoPrompt}
-                onChange={e => setVideoPrompt(e.target.value)}
-                placeholder="Describe your video ad concept (e.g. 15s UGC testimonial for a fitness app)..."
-                rows={3}
-                className="studio-input" style={{ minHeight:92, resize: 'vertical', marginBottom: 20 }}
-              />
-              <button
-                onClick={() => alert('AI Video generation is queued. Ensure your brand asset is uploaded in the Ad Image Studio first!')}
-                style={{ padding: '12px 28px', background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}
-              >
-                Generate AI Video Ad
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Asset Picker Modal */}
-      {showPicker && (
-        <div onClick={() => setShowPicker(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, maxWidth: 680, width: '90%', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Select Brand Asset for Ad</h3>
-              <button onClick={() => setShowPicker(false)} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer' }}>×</button>
-            </div>
-            {images.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b', fontSize: 14 }}>No assets found in Bank. Upload one first!</div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                {images.map((img, i) => (
-                  <div key={i} onClick={() => { setReferenceImage(img.url); setShowPicker(false) }} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', transition: 'all 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = '#db2777'}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                    <div style={{ height: 140, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    </div>
-                    <div style={{ padding: 10, fontSize: 12, fontWeight: 600, color: '#0f172a', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{img.name}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </Layout>
-  )
+      {activeTab === 'library' && <section className="abundance-card" style={{ padding:23 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', gap:16, marginBottom:18 }}><div><div className="abundance-mini-label">ASSET LIBRARY</div><h2 style={{ fontSize:26, letterSpacing:'-.06em', marginTop:5 }}>Every real output, ready for the next campaign.</h2></div><label className="studio-button" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{uploading ? 'Uploading...' : 'Add brand asset'}<input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={event => handleUpload(event.target.files)} style={{ display:'none' }} /></label></div>{loadingAssets ? <div style={{ minHeight:280, display:'grid', placeItems:'center' }}><span className="spinner" /></div> : assets.length ? <div className="asset-grid">{assets.map(asset => <div key={asset.name} className="asset-card"><AssetVisual asset={asset} compact /><div className="asset-footer"><div style={{ minWidth:0 }}><div style={{ font:'500 9px DM Mono,monospace', color:asset.kind === 'video' ? '#d9ff75':'#ffb5cf', letterSpacing:'.09em' }}>{asset.kind === 'video' ? 'VIDEO RENDER' : 'IMAGE CREATIVE'}</div><div style={{ fontSize:11, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:140, marginTop:3 }}>{asset.name}</div></div><button onClick={() => deleteAsset(asset)} style={{ border:'1px solid rgba(255,255,255,.18)', background:'rgba(8,6,28,.72)', color:'#fff', borderRadius:8, padding:'6px 8px', fontSize:10, fontWeight:700 }}>Delete</button></div></div>)}</div> : <div className="abundance-glass" style={{ minHeight:260, display:'grid', placeItems:'center', borderRadius:16, color:'rgba(234,229,255,.68)', textAlign:'center', padding:20 }}>Upload your product visual or make the first image ad. FloStudio will keep real assets here for reuse across image and video campaigns.</div>}</section>}
+    </div>
+  </Layout>
 }
