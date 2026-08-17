@@ -27,4 +27,4 @@
 - [x] Validate and deploy the unified Agent Studio dark editorial treatment. Production route returned the expected authenticated FloStudio entry state after deployment.
 - [x] Add a default real visual-creative generation or assignment step to campaign post creation.
 - [x] Make Review Queue cards visibly media-first and remove text-only review emphasis.
-- [ ] Validate and deploy the media-first Pipeline workflow to production.
+- [x] Validate and deploy the media-first Pipeline workflow to production.
