@@ -148,21 +148,21 @@ export default function ImageBank() {
     <Layout title="AI Image & Video Studio">
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .studio-tab { background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; }
-        .studio-tab.active { background: linear-gradient(135deg, #db2777, #7c3aed, #4f46e5); color: #fff; border-color: transparent; box-shadow: 0 4px 15px rgba(219,39,119,0.3); }
-        .style-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.2s; }
-        .style-card:hover { border-color: #cbd5e1; background: #f1f5f9; }
-        .style-card.selected { background: #fdf2f8; border-color: #db2777; box-shadow: 0 0 15px rgba(219,39,119,0.15); }
+        .studio-tab { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13); color: rgba(234,229,255,.7); padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+        .studio-tab.active { background: linear-gradient(135deg, #7b61ff, #ef4f9a); color: #fff; border-color: rgba(255,255,255,.22); box-shadow: 0 8px 20px rgba(114,80,255,.32); }
+        .style-card { background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.2s; }
+        .style-card:hover { border-color: rgba(211,199,255,.42); background: rgba(255,255,255,.09); }
+        .style-card.selected { background: rgba(130,99,255,.22); border-color: #a48cff; box-shadow: 0 0 18px rgba(123,97,255,.22); }
       `}</style>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', animation: 'fadeIn 0.3s ease-out' }}>
-        <section style={{ position: 'relative', minHeight: 250, overflow: 'hidden', borderRadius: 28, marginBottom: 22, background: '#17131d', color: '#fffaf4', display: 'flex', alignItems: 'stretch' }}>
+      <div className="flo-page" style={{ maxWidth: 1280, margin: '0 auto', animation: 'fadeIn 0.3s ease-out' }}>
+        <section className="abundance-shell" style={{ position: 'relative', minHeight: 270, marginBottom: 22, color: '#fffaf4', display: 'flex', alignItems: 'stretch' }}>
           <img src="/visuals/flo-creative-hero.jpg" alt="FloStudio creative direction" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'right center', opacity: .82 }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(22,19,29,.98) 0%, rgba(22,19,29,.74) 45%, rgba(22,19,29,.05) 100%)' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(30,19,88,.98) 0%, rgba(30,19,88,.75) 45%, rgba(22,10,61,.1) 100%)' }} />
           <div style={{ position: 'relative', zIndex: 1, padding: '34px 38px', maxWidth: 650 }}>
-            <div className="studio-kicker" style={{ color: '#d7f267', marginBottom: 14 }}>Creative Lab / Art direction</div>
-            <h1 className="studio-display" style={{ fontSize: 'clamp(32px,4.5vw,52px)', maxWidth: 560 }}>From product signal to <span className="studio-serif" style={{ color: '#ffd1c4' }}>scroll-stopping work.</span></h1>
-            <p style={{ marginTop: 14, color: 'rgba(255,250,244,.74)', maxWidth: 520, lineHeight: 1.65, fontSize: 13 }}>Bring an app screen, product image, or bare idea. Flo turns it into campaign-ready creative while keeping your visual story coherent.</p>
+            <div className="abundance-eyebrow" style={{ marginBottom: 14 }}>Creative Lab / Art direction</div>
+            <h1 className="abundance-title" style={{ fontSize: 'clamp(32px,4.5vw,52px)', maxWidth: 560 }}>From product signal to <em>scroll-stopping work.</em></h1>
+            <p className="abundance-copy" style={{ marginTop: 14, maxWidth: 520 }}>Bring an app screen, product image, or bare idea. Flo turns it into campaign-ready creative while keeping your visual story coherent.</p>
           </div>
           <div style={{ position: 'relative', zIndex: 1, marginLeft: 'auto', alignSelf: 'flex-end', padding: 20, display: 'flex', gap: 7 }}>
             {['Image', 'Video', 'Assets'].map((item, index) => <span key={item} className="studio-chip" style={{ background: index === 0 ? '#d7f267' : 'rgba(255,255,255,.12)', color: index === 0 ? '#16131d' : '#fff', borderColor: index === 0 ? '#d7f267' : 'rgba(255,255,255,.22)' }}>{item}</span>)}
@@ -185,21 +185,21 @@ export default function ImageBank() {
         {activeTab === 'generator' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 28 }}>
             {/* Left Controls */}
-            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 28, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div className="abundance-card" style={{ padding: 28 }}>
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8, letterSpacing: '0.05em' }}>AD CREATIVE PROMPT (OPTIONAL IF IMAGE UPLOADED)</label>
+                <label style={{ display: 'block', color: '#eeeaff', fontSize: 13, fontWeight: 700, marginBottom: 8, letterSpacing: '0.05em' }}>AD CREATIVE PROMPT (OPTIONAL IF IMAGE UPLOADED)</label>
                 <textarea
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
                   placeholder="Describe your ad creative or just upload your app screenshot below..."
                   rows={3}
-                  style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: 14, color: '#0f172a', fontSize: 14, outline: 'none', resize: 'vertical', lineHeight: 1.5 }}
+                  className="studio-input" style={{ minHeight:92, resize: 'vertical', lineHeight: 1.5 }}
                 />
               </div>
 
               {/* Visual Style Presets */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 10, letterSpacing: '0.05em' }}>VISUAL STYLE</label>
+                <label style={{ display: 'block', color: '#eeeaff', fontSize: 13, fontWeight: 700, marginBottom: 10, letterSpacing: '0.05em' }}>VISUAL STYLE</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
                   {STYLE_PRESETS.map(s => (
                     <div
@@ -207,8 +207,8 @@ export default function ImageBank() {
                       onClick={() => setStylePreset(s.id)}
                       className={`style-card ${stylePreset === s.id ? 'selected' : ''}`}
                     >
-                      <div style={{ color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{s.label}</div>
-                      <div style={{ color: '#64748b', fontSize: 11, lineHeight: 1.3 }}>{s.desc}</div>
+                      <div style={{ color: '#fff', fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{s.label}</div>
+                      <div style={{ color: 'rgba(234,229,255,.6)', fontSize: 11, lineHeight: 1.3 }}>{s.desc}</div>
                     </div>
                   ))}
                 </div>
@@ -243,28 +243,28 @@ export default function ImageBank() {
 
               {/* Brand Text Overlay */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>TEXT OVERLAY (OPTIONAL)</label>
+                <label style={{ display: 'block', color: '#eeeaff', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>TEXT OVERLAY (OPTIONAL)</label>
                 <input
                   type="text"
                   value={brandOverlay}
                   onChange={e => setBrandOverlay(e.target.value)}
                   placeholder="e.g. 50% OFF TODAY or JOIN NOW"
-                  style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12, color: '#0f172a', fontSize: 13, outline: 'none' }}
+                  className="studio-input" style={{ padding:12 }}
                 />
               </div>
 
               {/* Reference Image Picker & Direct Upload */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>UPLOAD APP SCREENSHOT OR PRODUCT IMAGE</label>
+                <label style={{ display: 'block', color: '#eeeaff', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>UPLOAD APP SCREENSHOT OR PRODUCT IMAGE</label>
                 {referenceImage ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fdf2f8', border: '1px solid rgba(219,39,119,0.3)', borderRadius: 12, padding: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,100,143,.1)', border: '1px solid rgba(255,125,174,.32)', borderRadius: 12, padding: 10 }}>
                     <img src={referenceImage} alt="Ref" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 8 }} />
-                    <div style={{ flex: 1, fontSize: 13, color: '#0f172a', fontWeight: 600 }}>Reference Asset Included in Ad</div>
+                    <div style={{ flex: 1, fontSize: 13, color: '#fff', fontWeight: 600 }}>Reference Asset Included in Ad</div>
                     <button onClick={() => setReferenceImage(null)} style={{ background: '#ffeeef', border: 'none', color: '#dc2626', borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Remove</button>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={() => setShowPicker(true)} style={{ flex: 1, background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: 12, color: '#475569', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                    <button onClick={() => setShowPicker(true)} style={{ flex: 1, background: 'rgba(255,255,255,.055)', border: '1px dashed rgba(255,255,255,.3)', borderRadius: 12, padding: 12, color: '#eeeaff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                       Select from Bank
                     </button>
                     <label style={{ flex: 1, background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', color: '#fff', border: 'none', borderRadius: 12, padding: 12, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', boxShadow: '0 4px 15px rgba(219,39,119,0.25)' }}>
@@ -286,19 +286,19 @@ export default function ImageBank() {
                 disabled={generating || (!prompt.trim() && !referenceImage)}
                 style={{ width: '100%', padding: '14px', background: generating || (!prompt.trim() && !referenceImage) ? '#e2e8f0' : 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 800, cursor: generating || (!prompt.trim() && !referenceImage) ? 'not-allowed' : 'pointer', boxShadow: '0 4px 20px rgba(219,39,119,0.3)' }}
               >
-                {generating ? 'Generating Ad Creatives...' : '✦ Generate Ad Creatives (Cost: 10 Tokens)'}
+                {generating ? 'Generating Ad Creatives...' : 'Generate Ad Creatives (Cost: 10 Tokens)'}
               </button>
             </div>
 
             {/* Right Output Preview */}
-            <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 28, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 20 }}>Generated Ad Creatives</h3>
+            <div className="abundance-card" style={{ padding: 28, display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 20 }}>Generated Ad Creatives</h3>
 
               {generating ? (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, minHeight: 350 }}>
                   <span style={{ width: 36, height: 36, border: '3px solid #e2e8f0', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Synthesizing High-Conversion Ad Creatives...</div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Compositing app screenshot & generating cinematic studio lighting</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Synthesizing High-Conversion Ad Creatives...</div>
+                  <div style={{ fontSize: 12, color: 'rgba(234,229,255,.64)' }}>Compositing app screenshot & generating cinematic studio lighting</div>
                 </div>
               ) : generatedResults.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1, overflowY: 'auto' }}>
@@ -316,10 +316,10 @@ export default function ImageBank() {
                   ))}
                 </div>
               ) : (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 18, borderRadius: 16, background: '#f5f1ec', border: '1px solid #ded9d1' }}>
+                <div className="abundance-glass" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 18, borderRadius: 16 }}>
                   <div className="studio-kicker" style={{ marginBottom: 8 }}>Output board</div>
-                  <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.045em', color: '#16131d', maxWidth: 300 }}>Your next creative set will land here.</div>
-                  <div style={{ fontSize: 12, color: '#5c5666', maxWidth: 350, lineHeight: 1.55, marginTop: 7 }}>Use the reference image as your product truth, then choose a direction that feels native to the campaign.</div>
+                  <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.045em', color: '#fff', maxWidth: 300 }}>Your next creative set will land here.</div>
+                  <div style={{ fontSize: 12, color: 'rgba(234,229,255,.64)', maxWidth: 350, lineHeight: 1.55, marginTop: 7 }}>Use the reference image as your product truth, then choose a direction that feels native to the campaign.</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 9, marginTop: 20 }}>
                     {[
                       ['/visuals/flo-preview-product.jpg', 'Product focus'],
@@ -335,11 +335,11 @@ export default function ImageBank() {
 
         {/* 2. BRAND ASSET BANK TAB */}
         {activeTab === 'library' && (
-          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 28, boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="abundance-card" style={{ padding: 28 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <div>
-                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Brand Asset Bank</h3>
-                <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Uploaded app screenshots, logos, and generated ad creatives</p>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>Brand Asset Bank</h3>
+                <p style={{ fontSize: 13, color: 'rgba(234,229,255,.64)', marginTop: 4 }}>Uploaded app screenshots, logos, and generated ad creatives</p>
               </div>
               <label style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 15px rgba(219,39,119,0.25)' }}>
                 {uploading ? 'Uploading...' : 'Upload New Asset'}
@@ -353,18 +353,18 @@ export default function ImageBank() {
               </div>
             ) : images.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>No assets uploaded yet</div>
-                <div style={{ fontSize: 13, color: '#64748b' }}>Upload app screenshots or product photos to use them in AI ad generation</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>No assets uploaded yet</div>
+                <div style={{ fontSize: 13, color: 'rgba(234,229,255,.64)' }}>Upload app screenshots or product photos to use them in AI ad generation</div>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
                 {images.map((img, i) => (
-                  <div key={i} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ height: 180, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  <div key={i} className="abundance-glass" style={{ borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ height: 180, background: 'rgba(0,0,0,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                       <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
-                    <div style={{ padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{img.name}</span>
+                    <div style={{ padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,.12)' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>{img.name}</span>
                       <button onClick={() => deleteImage(img.name)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Delete</button>
                     </div>
                   </div>
@@ -376,23 +376,23 @@ export default function ImageBank() {
 
         {/* 3. AI VIDEO & UGC STUDIO TAB */}
         {activeTab === 'video' && (
-          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="abundance-card" style={{ padding: 32, textAlign: 'center' }}>
             <div style={{ maxWidth: 600, margin: '0 auto', padding: '40px 0' }}>
-              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#db2777', fontSize: 24, fontWeight: 800 }}>▶</div>
-              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>AI Video & UGC Studio</h3>
-              <p style={{ fontSize: 14, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>Generate high-converting video ad scripts, AI voiceovers, and dynamic captions from your app screenshots.</p>
+              <div style={{ width: 56, height: 56, borderRadius: 18, background: 'rgba(255,100,143,.14)', border:'1px solid rgba(255,125,174,.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#ffb5cf', fontSize: 12, fontWeight: 900, letterSpacing:'.08em' }}>VIDEO</div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 8 }}>AI Video & UGC Studio</h3>
+              <p style={{ fontSize: 14, color: 'rgba(234,229,255,.64)', marginBottom: 24, lineHeight: 1.6 }}>Generate high-converting video ad scripts, AI voiceovers, and dynamic captions from your app screenshots.</p>
               <textarea
                 value={videoPrompt}
                 onChange={e => setVideoPrompt(e.target.value)}
                 placeholder="Describe your video ad concept (e.g. 15s UGC testimonial for a fitness app)..."
                 rows={3}
-                style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: 14, color: '#0f172a', fontSize: 14, outline: 'none', resize: 'vertical', marginBottom: 20 }}
+                className="studio-input" style={{ minHeight:92, resize: 'vertical', marginBottom: 20 }}
               />
               <button
                 onClick={() => alert('AI Video generation is queued. Ensure your brand asset is uploaded in the Ad Image Studio first!')}
                 style={{ padding: '12px 28px', background: 'linear-gradient(135deg, #db2777, #7c3aed, #4f46e5)', border: 'none', borderRadius: 12, color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}
               >
-                ✦ Generate AI Video Ad
+                Generate AI Video Ad
               </button>
             </div>
           </div>

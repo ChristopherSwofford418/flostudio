@@ -115,31 +115,22 @@ export default function Accounts() {
 
   return (
     <Layout title="Connected Accounts">
-      <div style={{ maxWidth: 900, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
+      <div className="flo-page" style={{ maxWidth: 980, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
         <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
         
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: '24px 28px', marginBottom: 28, display: 'flex', gap: 20, alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-          </div>
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 4, letterSpacing: '-0.3px' }}>Social Media Hub & OAuth Integration</h2>
-            <p style={{ color: '#64748b', fontSize: 13.5, lineHeight: 1.5 }}>
-              Connect your professional social channels securely via official OAuth 2.0 authentication to enable automated posting from your pipeline.
-            </p>
-          </div>
-        </div>
+        <section className="abundance-shell" style={{ minHeight:220, marginBottom:24, padding:'28px 30px', display:'grid', gridTemplateColumns:'minmax(0,1fr) 250px', alignItems:'center', gap:24 }}>
+          <div style={{ position:'relative', zIndex:1 }}><div className="abundance-eyebrow">Distribution desk / Channel permissions</div><h1 className="abundance-title" style={{ fontSize:'clamp(31px,4vw,48px)', marginTop:10, maxWidth:530 }}>Give your campaigns a <em>place to land.</em></h1><p className="abundance-copy" style={{ maxWidth:530, marginTop:14 }}>Connect the destinations that turn strategy into a publishing system. Flo keeps every channel visible, permissioned, and ready for your final approval.</p><div className="abundance-rail" style={{ marginTop:18 }}><span className="abundance-pill"><i/> official OAuth</span><span className="abundance-pill">{connected.length} live connection{connected.length === 1 ? '' : 's'}</span></div></div>
+          <div className="abundance-glass" style={{ position:'relative', zIndex:1, padding:'18px', borderRadius:18 }}><div className="abundance-mini-label">CHANNEL HEALTH</div><div style={{ display:'flex', gap:8, marginTop:12 }}>{PLATFORMS.map(p => <span key={p.id} title={p.label} style={{ width:32, height:32, borderRadius:10, display:'grid', placeItems:'center', color:p.color, background:`${p.color}18`, border:`1px solid ${p.color}40` }}>{p.icon}</span>)}</div><div style={{ marginTop:14, fontSize:12, color:'rgba(255,255,255,.78)', lineHeight:1.55 }}>Connections are permissioned before any content can publish.</div></div>
+        </section>
 
         {loading ? (
-          <div style={{ padding: 60, textAlign: 'center', color: '#64748b', fontSize: 14 }}>Loading connected accounts...</div>
+          <div className="abundance-card" style={{ padding: 60, textAlign: 'center', color: 'rgba(234,229,255,.66)', fontSize: 14 }}>Loading connected accounts...</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {PLATFORMS.map(platform => {
               const activeConnection = connected.find(c => c.platform === platform.id)
               return (
-                <div key={platform.id} style={{ background: '#ffffff', borderRadius: 16, padding: 24, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.02)', transition: 'all 0.15s' }}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor='#cbd5e1'}
-                  onMouseLeave={e=>e.currentTarget.style.borderColor='#e2e8f0'}>
+                <div key={platform.id} className="abundance-card" style={{ padding: 24, display: 'flex', alignItems: 'center', gap: 20, transition: 'all 0.15s' }}>
                   
                   <div style={{ width: 52, height: 52, borderRadius: 14, background: `${platform.color}15`, color: platform.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: `1px solid ${platform.color}30` }}>
                     {platform.icon}
@@ -147,18 +138,18 @@ export default function Accounts() {
                   
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                      <h3 style={{ color: '#0f172a', fontSize: 16, fontWeight: 800 }}>{platform.label}</h3>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase', background: activeConnection ? '#ecfdf5' : '#f1f5f9', color: activeConnection ? '#059669' : '#64748b' }}>
+                      <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 800 }}>{platform.label}</h3>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, textTransform: 'uppercase', background: activeConnection ? 'rgba(112,238,216,.14)' : 'rgba(255,255,255,.08)', color: activeConnection ? '#a7ffec' : 'rgba(234,229,255,.62)', border:'1px solid rgba(255,255,255,.12)' }}>
                         {activeConnection ? 'Connected' : 'Not Connected'}
                       </span>
                     </div>
-                    <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.4 }}>
+                    <p style={{ color: 'rgba(234,229,255,.64)', fontSize: 13, lineHeight: 1.4 }}>
                       {activeConnection ? `Connected as ${activeConnection.account_name} (${activeConnection.account_handle})` : platform.description}
                     </p>
                   </div>
 
                   {activeConnection ? (
-                    <button onClick={()=>handleDisconnect(activeConnection.id, platform.label)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <button onClick={()=>handleDisconnect(activeConnection.id, platform.label)} style={{ background: 'rgba(255,100,143,.12)', color: '#ff9cb7', border: '1px solid rgba(255,100,143,.28)', borderRadius: 10, padding: '10px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                       Disconnect
                     </button>
                   ) : (

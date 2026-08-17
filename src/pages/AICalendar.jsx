@@ -114,38 +114,38 @@ export default function AICalendar() {
     <Layout title="AI Calendar">
       <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      <div style={{ maxWidth: 1150, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
+      <div className="flo-page" style={{ maxWidth: 1150, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
 
         {/* Campaign map header */}
-        <section style={{ position:'relative', overflow:'hidden', minHeight:196, marginBottom:22, borderRadius:26, background:'#efebff', display:'grid', gridTemplateColumns:'1fr 300px', border:'1px solid #dfd9ff' }}>
+        <section className="abundance-shell" style={{ minHeight:220, marginBottom:22, display:'grid', gridTemplateColumns:'1fr 300px' }}>
           <div style={{ padding:'25px 30px', position:'relative', zIndex:1, display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
-            <div><div className="studio-kicker">Campaign map / Publishing rhythm</div><h2 style={{ fontSize:34, lineHeight:1, letterSpacing:'-.065em', color:'#16131d', marginTop:8 }}>{MONTHS[month]} <span className="studio-serif">{year}</span></h2><p style={{ fontSize:12.5, color:'#5c5666', marginTop:10 }}>Your cadence is not a list of dates. It is the sequence that lets a campaign build momentum.</p></div>
-            <div style={{ display:'flex', alignItems:'center', gap:9 }}><button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="studio-chip" style={{ width:34, justifyContent:'center', padding:7 }}>←</button><button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="studio-chip" style={{ width:34, justifyContent:'center', padding:7 }}>→</button><span style={{ marginLeft:5, fontFamily:'DM Mono,monospace', fontSize:10, color:'#6144e6' }}>{posts.length} scheduled signals</span></div>
+            <div><div className="abundance-eyebrow">Campaign map / Publishing rhythm</div><h2 className="abundance-title" style={{ fontSize:'clamp(32px,4vw,48px)', marginTop:8 }}>{MONTHS[month]} <em>{year}</em></h2><p className="abundance-copy" style={{ marginTop:10, maxWidth:520 }}>Your cadence is not a list of dates. It is the sequence that lets a campaign build momentum.</p></div>
+            <div style={{ display:'flex', alignItems:'center', gap:9 }}><button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="studio-chip" style={{ width:34, justifyContent:'center', padding:7 }}>←</button><button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="studio-chip" style={{ width:34, justifyContent:'center', padding:7 }}>→</button><span style={{ marginLeft:5, fontFamily:'DM Mono,monospace', fontSize:10, color:'#d9ff75' }}>{posts.length} scheduled signals</span></div>
           </div>
-          <div style={{ position:'relative', overflow:'hidden' }}><img src="/visuals/flo-preview-product.jpg" alt="Campaign planning visual" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} /><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#efebff,transparent 52%)' }} /><button onClick={() => setShowFillModal(true)} disabled={generating} className="studio-button" style={{ position:'absolute', right:18, bottom:18, background:generating?'#8e82df':'#6144e6' }}>{generating ? 'Mapping…' : 'Fill the month →'}</button></div>
+          <div style={{ position:'relative', overflow:'hidden' }}><img src="/visuals/flo-preview-product.jpg" alt="Campaign planning visual" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} /><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#26176a,transparent 52%)' }} /><button onClick={() => setShowFillModal(true)} disabled={generating} className="studio-button" style={{ position:'absolute', right:18, bottom:18 }}>{generating ? 'Mapping…' : 'Fill the month →'}</button></div>
         </section>
 
         {/* Calendar grid */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-            {DAYS.map(d => <div key={d} style={{ padding: '14px 0', textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: '0.05em' }}>{d}</div>)}
+        <div className="abundance-card" style={{ overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', borderBottom: '1px solid rgba(255,255,255,.13)', background: 'rgba(255,255,255,.05)' }}>
+            {DAYS.map(d => <div key={d} style={{ padding: '14px 0', textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'rgba(234,229,255,.67)', letterSpacing: '0.05em' }}>{d}</div>)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
-            {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} style={{ minHeight: 120, borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', background: '#fafafa' }} />)}
+            {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} style={{ minHeight: 120, borderRight: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)', background: 'rgba(0,0,0,.12)' }} />)}
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1
               const dayPosts = getPostsForDay(day)
               const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year
               const isSelected = selectedDate === day
               return (
-                <div key={day} onClick={() => setSelectedDate(isSelected ? null : day)} style={{ minHeight: 120, borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: 10, cursor: 'pointer', background: isSelected ? '#fdf2f8' : 'transparent', transition: 'background 0.15s' }}>
+                <div key={day} onClick={() => setSelectedDate(isSelected ? null : day)} style={{ minHeight: 120, borderRight: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)', padding: 10, cursor: 'pointer', background: isSelected ? 'rgba(126,95,255,.2)' : 'transparent', transition: 'background 0.15s' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: isToday ? 800 : 600, color: isToday ? '#db2777' : '#0f172a', width: 26, height: 26, borderRadius: '50%', background: isToday ? '#fdf2f8' : 'transparent', border: isToday ? '1px solid #db2777' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{day}</span>
-                    {dayPosts.length > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#db2777', background: '#fdf2f8', padding: '1px 6px', borderRadius: 10 }}>{dayPosts.length}</span>}
+                    <span style={{ fontSize: 13, fontWeight: isToday ? 800 : 600, color: isToday ? '#ff9bc2' : '#fff', width: 26, height: 26, borderRadius: '50%', background: isToday ? 'rgba(255,100,143,.16)' : 'transparent', border: isToday ? '1px solid #ff8eba' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{day}</span>
+                    {dayPosts.length > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#ffb5cf', background: 'rgba(255,100,143,.14)', padding: '1px 6px', borderRadius: 10 }}>{dayPosts.length}</span>}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     {dayPosts.slice(0, 3).map(post => (
-                      <div key={post.id} onClick={e => { e.stopPropagation(); setSelectedPost(post) }} style={{ padding: '5px 8px', borderRadius: 6, background: `${PLATFORM_COLORS[post.platform] || '#4f46e5'}10`, borderLeft: `3px solid ${PLATFORM_COLORS[post.platform] || '#4f46e5'}`, fontSize: 11.5, color: '#0f172a', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div key={post.id} onClick={e => { e.stopPropagation(); setSelectedPost(post) }} style={{ padding: '5px 8px', borderRadius: 6, background: `${PLATFORM_COLORS[post.platform] || '#4f46e5'}20`, borderLeft: `3px solid ${PLATFORM_COLORS[post.platform] || '#4f46e5'}`, fontSize: 11.5, color: '#fff', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         <span style={{ fontWeight: 800, color: PLATFORM_COLORS[post.platform] || '#4f46e5', marginRight: 4, textTransform: 'uppercase' }}>{post.platform?.substring(0,2)}</span>
                         {post.content.substring(0, 24)}...
                       </div>
@@ -184,7 +184,7 @@ export default function AICalendar() {
       {showFillModal && (
         <div onClick={() => setShowFillModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, maxWidth: 500, width: '90%', animation: 'fadeIn 0.2s ease', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>✦ AI Fill Month Calendar</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>AI Fill Month Calendar</h3>
             <p style={{ fontSize: 13.5, color: '#64748b', marginBottom: 20, lineHeight: 1.6 }}>Describe your brand or campaign. The AI strategist will populate {MONTHS[month]} with tailored posts across multiple platforms.</p>
             <textarea value={fillPrompt} onChange={e => setFillPrompt(e.target.value)} placeholder="e.g. We are a boutique fitness studio in Austin. We want to drive membership signups and promote morning classes." rows={4} style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '14px 16px', color: '#0f172a', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', marginBottom: 20, boxSizing: 'border-box', lineHeight: 1.6 }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>

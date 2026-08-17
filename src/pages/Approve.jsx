@@ -375,7 +375,7 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                   </div>
                 ) : (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', color: '#a5b4fc', fontSize: 13, fontWeight: 500 }}>
-                    <span>🖼️</span> Add Image
+                    <span style={{ fontFamily:'DM Mono, monospace', fontSize:10 }}>IMG</span> Add Image
                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
                       const file = e.target.files?.[0]
                       if (!file) return

@@ -69,58 +69,56 @@ export default function Dashboard() {
 
   return (
     <Layout title="Dashboard">
-      <div style={{ display:'flex', flexDirection:'column', gap:28, animation:'fadeIn 0.3s ease', maxWidth:1200, margin:'0 auto' }}>
+      <div className="flo-page" style={{ display:'flex', flexDirection:'column', gap:28, animation:'fadeIn 0.3s ease', maxWidth:1200, margin:'0 auto' }}>
         <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
         {/* Editorial performance overview */}
-        <section style={{ display:'grid', gridTemplateColumns:'1.1fr .9fr', minHeight:250, overflow:'hidden', borderRadius:26, background:'#17131d', color:'#fffaf4' }}>
+        <section className="abundance-shell" style={{ display:'grid', gridTemplateColumns:'1.1fr .9fr', minHeight:270 }}>
           <div style={{ padding:'32px 34px', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
             <div><div className="studio-kicker" style={{ color:'#d7f267', marginBottom:13 }}>Performance desk / Live signal</div><h2 className="studio-display" style={{ fontSize:'clamp(31px,4vw,49px)', maxWidth:540 }}>Make the next move <span className="studio-serif" style={{ color:'#ffd1c4' }}>with intent.</span></h2></div>
             <div style={{ display:'flex', alignItems:'flex-start', gap:11, maxWidth:540, paddingTop:20, borderTop:'1px solid rgba(255,255,255,.15)' }}><span style={{ width:8, height:8, borderRadius:99, background:'#d7f267', marginTop:5, flexShrink:0 }}/><div><div style={{ fontFamily:'DM Mono, monospace', color:'#d7f267', fontSize:9.5, letterSpacing:'.1em', marginBottom:5 }}>FLO'S LATEST READ</div><div style={{ fontSize:12.5, color:'rgba(255,250,244,.78)', lineHeight:1.6 }}>{insightLoading ? 'Reading your current creative mix…' : aiInsight}</div></div></div>
           </div>
-          <div style={{ position:'relative', minHeight:250, overflow:'hidden' }}><img src="/visuals/flo-preview-lifestyle.jpg" alt="Campaign creative in progress" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center' }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#17131d 0%,transparent 34%),linear-gradient(to top,rgba(22,19,29,.6),transparent 45%)' }}/><div style={{ position:'absolute', right:18, bottom:18, background:'rgba(255,253,249,.92)', color:'#16131d', padding:'10px 12px', borderRadius:12, minWidth:126 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, color:'#ff5b35', letterSpacing:'.08em' }}>CREATIVE STATUS</div><div style={{ fontWeight:800, fontSize:12, marginTop:3 }}>{stats.pending} ideas need review</div></div></div>
+          <div style={{ position:'relative', minHeight:270, overflow:'hidden' }}><img src="/visuals/flo-preview-lifestyle.jpg" alt="Campaign creative in progress" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center' }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#1d1254 0%,transparent 34%),linear-gradient(to top,rgba(22,19,65,.7),transparent 45%)' }}/><div className="abundance-glass" style={{ position:'absolute', right:18, bottom:18, color:'#fff', padding:'10px 12px', borderRadius:12, minWidth:126 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, color:'#d9ff75', letterSpacing:'.08em' }}>CREATIVE STATUS</div><div style={{ fontWeight:800, fontSize:12, marginTop:3 }}>{stats.pending} ideas need review</div></div></div>
         </section>
 
         {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
           {STAT_CARDS.map((s, i) => (
-            <div key={i} style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:16, padding:'22px 24px', boxShadow:'0 1px 3px rgba(0,0,0,0.02)', transition:'all 0.15s' }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor='#cbd5e1';e.currentTarget.style.boxShadow='0 8px 25px rgba(0,0,0,0.05)'}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor='#e2e8f0';e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.02)'}}>
+            <div key={i} className="abundance-card" style={{ padding:'22px 24px', transition:'all 0.15s' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
                 <span style={{ fontSize:11.5, fontWeight:700, color:s.color, background:`${s.color}12`, padding:'3px 10px', borderRadius:20 }}>{s.badge}</span>
               </div>
-              <div style={{ fontSize:32, fontWeight:800, color:'#0f172a', lineHeight:1, marginBottom:6, letterSpacing:'-0.5px' }}>{s.value}</div>
-              <div style={{ fontSize:12.5, color:'#64748b', fontWeight:600 }}>{s.label}</div>
+              <div style={{ fontSize:32, fontWeight:800, color:'#fff', lineHeight:1, marginBottom:6, letterSpacing:'-0.5px' }}>{s.value}</div>
+              <div style={{ fontSize:12.5, color:'rgba(234,229,255,.64)', fontWeight:600 }}>{s.label}</div>
             </div>
           ))}
         </div>
 
         {/* Recent posts */}
-        <div style={{ background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:16, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ padding:'20px 24px', borderBottom:'1px solid #e2e8f0', display:'flex', justifyContent:'space-between', alignItems:'center', background:'#f8fafc' }}>
-            <div style={{ fontWeight:800, fontSize:15, color:'#0f172a' }}>Recent Campaign Posts</div>
+        <div className="abundance-card" style={{ overflow:'hidden' }}>
+          <div style={{ padding:'20px 24px', borderBottom:'1px solid rgba(255,255,255,.12)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(255,255,255,.045)' }}>
+            <div style={{ fontWeight:800, fontSize:15, color:'#fff' }}>Recent Campaign Posts</div>
             <button onClick={()=>navigate('/pipeline')} style={{ fontSize:13, color:'#db2777', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>View full pipeline →</button>
           </div>
           {loading ? (
             <div style={{ padding:50, textAlign:'center', color:'#64748b', fontSize:14 }}>Loading posts...</div>
           ) : recentPosts.length === 0 ? (
             <div style={{ padding:60, textAlign:'center' }}>
-              <div style={{ fontSize:15, fontWeight:700, color:'#0f172a', marginBottom:6 }}>No posts in your pipeline yet</div>
-              <div style={{ fontSize:13, color:'#64748b', marginBottom:20 }}>Use Agent HQ or Ask Flo to generate your first campaign.</div>
+              <div style={{ fontSize:15, fontWeight:700, color:'#fff', marginBottom:6 }}>No posts in your pipeline yet</div>
+              <div style={{ fontSize:13, color:'rgba(234,229,255,.64)', marginBottom:20 }}>Use Agent HQ or Ask Flo to generate your first campaign.</div>
               <button onClick={()=>navigate('/agent')} style={{ background:'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', color:'#fff', border:'none', borderRadius:10, padding:'10px 22px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 15px rgba(219,39,119,0.25)' }}>Launch AI Agent</button>
             </div>
           ) : (
             <div>
               {recentPosts.map((post, i) => (
-                <div key={post.id} onClick={()=>navigate('/pipeline')} style={{ padding:'16px 24px', borderBottom:i<recentPosts.length-1?'1px solid #f1f5f9':'none', display:'flex', alignItems:'center', gap:16, cursor:'pointer', transition:'background 0.15s' }}
-                  onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
+                <div key={post.id} onClick={()=>navigate('/pipeline')} style={{ padding:'16px 24px', borderBottom:i<recentPosts.length-1?'1px solid rgba(255,255,255,.09)':'none', display:'flex', alignItems:'center', gap:16, cursor:'pointer', transition:'background 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.045)'}
                   onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                   <div style={{ width:38, height:38, borderRadius:10, background:`${PLATFORM_COLORS[post.platform]||'#4f46e5'}15`, display:'flex', alignItems:'center', justifyContent:'center', color:PLATFORM_COLORS[post.platform]||'#4f46e5', fontWeight:800, fontSize:12, textTransform:'uppercase', flexShrink:0 }}>
                     {post.platform?.substring(0,2)}
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:14, color:'#0f172a', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:4 }}>{post.content || 'No content'}</div>
+                    <div style={{ fontSize:14, color:'#fff', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:4 }}>{post.content || 'No content'}</div>
                     <div style={{ display:'flex', gap:10, alignItems:'center' }}>
                       <span style={{ fontSize:12, color:'#64748b', textTransform:'capitalize', fontWeight:500 }}>{post.platform}</span>
                       <span style={{ fontSize:12, color:'#cbd5e1' }}>·</span>

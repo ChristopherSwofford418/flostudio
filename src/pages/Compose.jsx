@@ -47,7 +47,7 @@ export default function Compose() {
         body: JSON.stringify({
           model: 'gpt-4o',
           messages: [
-            { role: 'system', content: `You are an expert social media copywriter. Generate exactly 3 distinct post variants for ${platform}. Each variant should be different in approach. Format your response as JSON array: [{"variant":1,"content":"...","hashtags":"...","hook":"..."},{"variant":2,...},{"variant":3,...}]. Keep content within ${charLimit} characters. Include relevant emojis. Make each variant genuinely different.` },
+            { role: 'system', content: `You are an expert social media copywriter. Generate exactly 3 distinct post variants for ${platform}. Each variant should be different in approach. Format your response as JSON array: [{"variant":1,"content":"...","hashtags":"...","hook":"..."},{"variant":2,...},{"variant":3,...}]. Keep content within ${charLimit} characters. Avoid emojis unless the user explicitly requests them. Make each variant genuinely different.` },
             { role: 'user', content: `Platform: ${platform}\nTopic: ${topic}\nTone: ${tone}\nPost type: ${postType}\n\nGenerate 3 variants.` }
           ],
           max_tokens: 1200,
@@ -65,7 +65,7 @@ export default function Compose() {
         setContent(text)
       }
     } catch (e) {
-      setContent(`✨ ${topic}\n\nHere's a great ${tone.toLowerCase()} post about ${topic} for ${platform}!\n\n#${topic.replace(/\s+/g,'').toLowerCase()} #socialmedia #content`)
+      setContent(`${topic}\n\nHere's a great ${tone.toLowerCase()} post about ${topic} for ${platform}!\n\n#${topic.replace(/\s+/g,'').toLowerCase()} #socialmedia #content`)
     }
     setGenerating(false)
   }
@@ -119,7 +119,7 @@ export default function Compose() {
               <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center' }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
               </div>
-              <div style={{ fontWeight:700, fontSize:14, color:'#a5b4fc' }}>✦ AI Content Generator</div>
+              <div style={{ fontWeight:700, fontSize:14, color:'#a5b4fc' }}>AI Content Generator</div>
             </div>
 
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
@@ -207,7 +207,7 @@ export default function Compose() {
 
           {/* AI Optimal time tip */}
           <div style={{ padding:'14px 16px', background:'rgba(16,185,129,0.06)', border:'1px solid rgba(16,185,129,0.15)', borderRadius:12 }}>
-            <div style={{ fontSize:11, fontWeight:600, color:'#34d399', marginBottom:5 }}>✦ AI OPTIMAL TIME</div>
+            <div style={{ fontSize:11, fontWeight:600, color:'#34d399', marginBottom:5 }}>AI OPTIMAL TIME</div>
             <div style={{ fontSize:12.5, color:'#94a3b8', lineHeight:1.5 }}>
               {platform==='instagram'?'Best times: Tue-Fri 9-11am, 6-8pm':platform==='twitter'?'Best times: Weekdays 9am, 12pm, 5-6pm':platform==='linkedin'?'Best times: Tue-Thu 8-10am, 12pm':platform==='facebook'?'Best times: Wed 11am-1pm, Thu-Fri 1-4pm':'Best times: Tue-Fri 7-9am, 7-9pm'}
             </div>
@@ -221,13 +221,13 @@ export default function Compose() {
             ) : (
               <>
                 <button onClick={()=>savePost('pending')} disabled={!content.trim()||saving} style={{ padding:'12px', borderRadius:10, background:'linear-gradient(135deg,#6366f1,#8b5cf6)', border:'none', color:'#fff', fontSize:14, fontWeight:700, cursor:content.trim()?'pointer':'not-allowed', fontFamily:'inherit', boxShadow:'0 4px 14px rgba(99,102,241,0.35)', opacity:content.trim()?1:0.5 }}>
-                  {saving?'Saving...':'✦ Save for Review'}
+                  {saving?'Saving...':'Save for Review'}
                 </button>
                 <button onClick={()=>savePost('scheduled')} disabled={!content.trim()||saving||!scheduleDate} style={{ padding:'12px', borderRadius:10, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)', color:'#94a3b8', fontSize:14, fontWeight:600, cursor:(content.trim()&&scheduleDate)?'pointer':'not-allowed', fontFamily:'inherit', opacity:(content.trim()&&scheduleDate)?1:0.4 }}>
-                  📅 Schedule Post
+                  Schedule Post
                 </button>
                 <button onClick={()=>savePost('published')} disabled={!content.trim()||saving} style={{ padding:'12px', borderRadius:10, background:'rgba(16,185,129,0.08)', border:'1px solid rgba(16,185,129,0.2)', color:'#34d399', fontSize:14, fontWeight:600, cursor:content.trim()?'pointer':'not-allowed', fontFamily:'inherit', opacity:content.trim()?1:0.4 }}>
-                  ✅ Publish Now
+                  Publish Now
                 </button>
               </>
             )}

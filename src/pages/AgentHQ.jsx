@@ -115,7 +115,7 @@ export default function AgentHQ() {
 
   return <Layout title="Agent Studio">
     <style>{`@keyframes agentEnter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}} @media(max-width:1040px){.agent-grid{grid-template-columns:1fr!important}.quick-grid{grid-template-columns:1fr!important}.hero-tools{position:static!important;margin-top:28px;justify-content:flex-start!important}.agent-hero{padding:28px!important}.brief-grid{grid-template-columns:1fr!important}}`}</style>
-    <div style={{ maxWidth: 1360, margin: '0 auto', animation: 'agentEnter .42s var(--ease-out)' }}>
+    <div className="flo-page" style={{ maxWidth: 1360, margin: '0 auto', animation: 'agentEnter .42s var(--ease-out)' }}>
       <section className="studio-dark agent-hero" style={{ position: 'relative', overflow: 'hidden', minHeight: 358, padding: '40px 44px', marginBottom: 20 }}>
         <div style={{ position: 'absolute', width: 420, height: 420, borderRadius: '50%', right: -145, top: -235, background: 'radial-gradient(circle at center,#ff845f 0%,#ff5b35 24%,rgba(255,91,53,0) 68%)', opacity: .92 }} />
         <div style={{ position: 'absolute', width: 265, height: 265, borderRadius: 48, right: 84, bottom: -122, background: 'linear-gradient(135deg,#d7f267,#73ddca)', transform: 'rotate(28deg)', opacity: .88 }} />
