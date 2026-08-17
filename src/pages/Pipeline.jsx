@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 import { listMediaAssets, updateMediaAsset } from '../lib/mediaAssets'
+import { generateVisualForPost } from '../lib/postVisuals'
+import { useWorkspace } from '../context/WorkspaceContext'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIicgLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NjIwMjU0OCwiZXhwIjoyMDkxNzc4NTQ4f5.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 
@@ -19,6 +21,7 @@ const PLATFORM_COLORS = { instagram: '#db2777', twitter: '#0284c7', linkedin: '#
 const STATUS_TABS = ['pending', 'approved', 'published', 'all']
 
 export default function Pipeline() {
+  const { useTokens } = useWorkspace()
   const [posts, setPosts] = useState([])
   const [allPosts, setAllPosts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -31,6 +34,8 @@ export default function Pipeline() {
   const [aiScoring, setAiScoring] = useState({})
   const [mediaAssets, setMediaAssets] = useState([])
   const [showAssetPicker, setShowAssetPicker] = useState(false)
+  const [visualGenerating, setVisualGenerating] = useState({})
+  const [batchVisualProgress, setBatchVisualProgress] = useState(null)
 
   useEffect(() => { loadPosts() }, [activeTab])
 
@@ -75,6 +80,43 @@ export default function Pipeline() {
 
   const detachAsset = async asset => {
     await updateMediaAsset(asset.id, { campaign_post_id:null })
+    await loadPosts()
+  }
+
+  const generateVisual = async post => {
+    if (visualGenerating[post.id] === 'working') return
+    setVisualGenerating(previous => ({ ...previous, [post.id]:'working' }))
+    try {
+      const authorized = await useTokens(10, 'Campaign visual')
+      if (!authorized) { setVisualGenerating(previous => ({ ...previous, [post.id]:null })); return }
+      await generateVisualForPost(post)
+      setVisualGenerating(previous => ({ ...previous, [post.id]:'done' }))
+      await loadPosts()
+    } catch (visualError) {
+      setVisualGenerating(previous => ({ ...previous, [post.id]:`error:${visualError.message || 'Generation failed'}` }))
+    }
+  }
+
+  const generateQueueVisuals = async () => {
+    const targets = posts.filter(post => attachedAssets(post.id).length === 0).slice(0, 5)
+    if (!targets.length) return
+    setBatchVisualProgress({ complete:0, total:targets.length, failed:0 })
+    let complete = 0
+    let failed = 0
+    for (const post of targets) {
+      setVisualGenerating(previous => ({ ...previous, [post.id]:'working' }))
+      try {
+        const authorized = await useTokens(10, 'Campaign visual')
+        if (!authorized) break
+        await generateVisualForPost(post)
+        complete += 1
+        setVisualGenerating(previous => ({ ...previous, [post.id]:'done' }))
+      } catch (visualError) {
+        failed += 1
+        setVisualGenerating(previous => ({ ...previous, [post.id]:`error:${visualError.message || 'Generation failed'}` }))
+      }
+      setBatchVisualProgress({ complete, total:targets.length, failed })
+    }
     await loadPosts()
   }
 
@@ -146,7 +188,7 @@ export default function Pipeline() {
         <section className="abundance-shell" style={{ display:'grid', gridTemplateColumns:'1.18fr .82fr', minHeight:230, marginBottom:24 }}>
           <div style={{ padding:'27px 30px', position:'relative', zIndex:1, display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
             <div><div className="abundance-eyebrow">Review queue / Decision desk</div><h1 className="abundance-title" style={{ fontSize:'clamp(32px,4vw,48px)', maxWidth:500, marginTop:10 }}>Strong ideas need a <em>final call.</em></h1><p className="abundance-copy" style={{ marginTop:14, maxWidth:490 }}>Score what is worth shipping, revise what needs a sharper edge, and keep your brand’s creative quality high.</p></div>
-            {counts.pending > 0 && <button onClick={bulkApproveAll} disabled={bulkApproving} className="studio-button" style={{ alignSelf:'flex-start' }}>{bulkApproving ? 'Approving drafts…' : `Approve all pending (${counts.pending}) →`}</button>}
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center' }}>{counts.pending > 0 && <button onClick={bulkApproveAll} disabled={bulkApproving} className="studio-button" style={{ alignSelf:'flex-start' }}>{bulkApproving ? 'Approving drafts…' : `Approve all pending (${counts.pending}) →`}</button>}<button onClick={generateQueueVisuals} disabled={Boolean(batchVisualProgress && batchVisualProgress.complete < batchVisualProgress.total)} className="studio-chip" style={{ background:'rgba(255,255,255,.12)', color:'#fff', borderColor:'rgba(255,255,255,.25)', padding:'10px 13px' }}>{batchVisualProgress ? `Creating visuals ${batchVisualProgress.complete}/${batchVisualProgress.total}` : 'Create visuals for next 5'}</button></div>
           </div>
           <div style={{ position:'relative', minHeight:230, overflow:'hidden' }}><img src="/visuals/flo-preview-editorial.jpg" alt="Creative review moodboard" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', opacity:.9 }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#21155f 0%,rgba(33,21,95,.15) 55%,rgba(6,4,24,.1))' }} /><div className="abundance-glass" style={{ position:'absolute', right:18, bottom:18, color:'#fff', padding:'10px 12px', borderRadius:12 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, letterSpacing:'.08em', color:'#d7ff75' }}>IN REVIEW</div><b style={{ display:'block', marginTop:2, fontSize:12 }}>{counts.pending} decision{counts.pending === 1 ? '' : 's'} waiting</b></div></div>
         </section>
@@ -184,16 +226,17 @@ export default function Pipeline() {
               const score = aiScoring[post.id]
               const postAssets = attachedAssets(post.id)
               return (
-                <div key={post.id} className="abundance-card" style={{ padding: '20px 24px', display: 'flex', gap: 20, alignItems: 'flex-start', transition: 'all 0.15s' }}>
+                <div key={post.id} className="abundance-card" style={{ padding: '16px 18px', display: 'flex', gap: 16, alignItems: 'stretch', transition: 'all 0.15s' }}>
                   
                   {/* Platform badge */}
                   <div style={{ width: 42, height: 42, borderRadius: 10, background: `${PLATFORM_COLORS[post.platform] || '#4f46e5'}12`, border: `1px solid ${PLATFORM_COLORS[post.platform] || '#4f46e5'}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                     <span style={{ fontSize: 12, fontWeight: 800, color: PLATFORM_COLORS[post.platform] || '#4f46e5', textTransform: 'uppercase' }}>{post.platform?.substring(0,2)}</span>
                   </div>
 
+                  <div style={{ width:126, minHeight:126, borderRadius:12, overflow:'hidden', flexShrink:0, background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.14)', position:'relative' }}>{postAssets.length > 0 ? (postAssets[0].kind === 'video' ? <video src={postAssets[0].asset_url} controls playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={postAssets[0].asset_url} alt="Campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />) : <div style={{ height:'100%', padding:12, display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(145deg,rgba(124,97,255,.34),rgba(255,91,53,.16))' }}><div style={{ font:'700 9px DM Mono,monospace', letterSpacing:'.08em', color:'#d9ff75' }}>VISUAL NEEDED</div><button onClick={() => generateVisual(post)} disabled={visualGenerating[post.id] === 'working'} style={{ border:'1px solid rgba(255,255,255,.22)', background:'rgba(8,6,30,.54)', color:'#fff', borderRadius:7, padding:'7px 5px', fontSize:10, fontWeight:800, cursor:'pointer' }}>{visualGenerating[post.id] === 'working' ? 'CREATING…' : 'GENERATE · 10'}</button></div>}</div>
+
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    {postAssets.length > 0 && <div style={{ display:'flex', gap:7, marginBottom:11, overflowX:'auto' }}>{postAssets.map(asset => <div key={asset.id} style={{ width:52, height:52, borderRadius:9, overflow:'hidden', border:'1px solid rgba(255,255,255,.2)', flexShrink:0, background:'rgba(255,255,255,.07)' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Attached creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</div>)}</div>}
                     <div style={{ fontSize: 14, color: '#fff', lineHeight: 1.6, marginBottom: 10, fontWeight: 500 }}>{post.content}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                       {post.scheduled_at && <span style={{ fontSize: 12, color: 'rgba(234,229,255,.64)', fontWeight: 500 }}>{new Date(post.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
@@ -207,7 +250,7 @@ export default function Pipeline() {
                     <button onClick={() => scorePost(post)} title="AI Score" style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                       {score === 'loading' ? <span style={{ width: 12, height: 12, border: '2px solid #cbd5e1', borderTopColor: '#8c74ff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : 'Score'}
                     </button>
-                    <button onClick={() => openPost(post)} title="Edit" style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{postAssets.length ? `Creative ${postAssets.length}` : 'Attach Creative'}</button>
+                    <button onClick={() => openPost(post)} title="Attach or change campaign creative" style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{postAssets.length ? `Creative ${postAssets.length}` : 'Choose Creative'}</button>
                     {post.status === 'pending' && <button onClick={() => updateStatus(post.id, 'approved')} title="Approve" style={{ padding: '8px 16px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Approve</button>}
                     {post.status === 'approved' && <button onClick={() => updateStatus(post.id, 'published')} title="Publish" style={{ padding: '8px 16px', borderRadius: 8, background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#4f46e5', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Publish</button>}
                     <button onClick={() => deletePost(post.id)} title="Delete" style={{ padding: '8px 12px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Delete</button>
