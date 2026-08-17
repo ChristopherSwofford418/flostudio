@@ -20,3 +20,14 @@
 
 - FloStudio has campaign post creation and persistence, a content calendar, review states, real asset records, GPT-image generation, an asynchronous video-provider route, Meta OAuth initiation, token gating, a cross-workspace media library, and media-first review-card generation.
 - It lacks the coherent end-to-end inputs and control layers that make the leaders feel complete: URL ingestion and Brand DNA, multi-scene ad composition/editing, personas/avatars/voices, creative research and scoring grounded in evidence, bulk generation with experiment tracking, production template systems, and actual paid-media launch/measurement loops.
+
+## Creative Intelligence and Continuous Brand Learning
+
+- Adobe defines creative intelligence as understanding why audiences engage with creative content, including automatically cataloging creative decisions and correlating them with outcomes. It argues that teams should connect pre-testing, production, and post-campaign learning rather than treating asset generation as the end of the process. Source: https://business.adobe.com/blog/why-creative-intelligence-is-the-next-frontier-in-marketing-and-advertising-performance
+- Adobe Brand Intelligence describes a structured brand ontology that learns from approved assets, briefs, review decisions, annotations, and feedback; it then applies that knowledge automatically to creation and review. Source: https://business.adobe.com/products/brand-intelligence.html
+- Innovid's creative intelligence product emphasizes automated/custom metadata tagging, direct links between creative content, performance, and audiences, and recommendations derived from creative metadata. Source: https://www.innovid.com/platform/creative-intelligence
+
+## FloStudio Differentiation Implication
+
+- The defensible edge should be **Creative Memory for product portfolios**. FloStudio already owns the natural inputs absent from a standalone generator: Brand DNA, product facts, campaign concepts, post approvals, visual variants, calendar decisions, and cross-app workspace context.
+- The first reliable implementation must record observable human decisions (approved/rejected/revised/selected), declared creative attributes (hook, proof, CTA, format, visual recipe), and eventual connected-channel outcome metrics. FloStudio should make transparent, evidence-linked recommendations rather than claim prediction before outcome data exists.

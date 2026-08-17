@@ -35,3 +35,7 @@
 - [x] Build a guided Product-to-Campaign Engine with product intake, editable Brand DNA, and campaign-angle selection.
 - [x] Build a campaign board that owns concepts, real creative variants, review state, and calendar linkage.
 - [x] Validate and deploy the Product-to-Campaign Engine to the live FloStudio domain.
+- [x] Research and formalize FloStudio's defensible Creative Memory differentiation strategy.
+- [x] Add durable campaign learning records and brand-level memory to FloStudio's data model.
+- [x] Surface a transparent Next Best Creative briefing inside the Campaign Engine.
+- [ ] Validate and deploy the first Creative Memory foundation to production.

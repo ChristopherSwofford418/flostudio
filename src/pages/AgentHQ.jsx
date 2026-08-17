@@ -4,6 +4,7 @@ import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { createCampaign, createCampaignPosts, generateCampaignVariant, listCampaignMedia, loadCampaignWorkspace, saveBrandAndProduct, saveCampaignConcepts, selectCampaignConcept } from '../lib/campaignEngine'
+import { buildNextBestCreative, recordMemoryEvent } from '../lib/creativeMemory'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWYiOiJ4eGtwdm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5Nzc3MDI1NDh9.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 const platforms = ['instagram', 'facebook', 'linkedin', 'tiktok']
@@ -32,6 +33,8 @@ export default function AgentHQ() {
   const [stage, setStage] = useState('intake')
   const [userId, setUserId] = useState(null)
   const [workspace, setWorkspace] = useState({ brands:[], products:[], campaigns:[], media:[] })
+  const [activeBrandId, setActiveBrandId] = useState(null)
+  const [memoryBrief, setMemoryBrief] = useState(null)
   const [brandName, setBrandName] = useState(activeApp?.name || '')
   const [websiteUrl, setWebsiteUrl] = useState(activeApp?.url || '')
   const [productName, setProductName] = useState(activeApp?.name || '')
@@ -59,11 +62,22 @@ export default function AgentHQ() {
     supabase.auth.getUser().then(async ({ data:{ user } }) => {
       if (!user) return
       setUserId(user.id)
-      try { setWorkspace(await loadCampaignWorkspace(user.id)) } catch {}
+      try {
+        const loaded = await loadCampaignWorkspace(user.id)
+        setWorkspace(loaded)
+        if (loaded.brands[0]) {
+          setActiveBrandId(loaded.brands[0].id)
+          setMemoryBrief(await buildNextBestCreative({ userId:user.id, brandId:loaded.brands[0].id }))
+        }
+      } catch {}
     })
   }, [])
 
   const refreshWorkspace = async () => { if (userId) setWorkspace(await loadCampaignWorkspace(userId)) }
+  const refreshMemory = async brandId => {
+    if (!userId || !brandId) return
+    try { setMemoryBrief(await buildNextBestCreative({ userId, brandId })) } catch {}
+  }
   const togglePlatform = platform => setSelectedPlatforms(previous => previous.includes(platform) ? previous.filter(item => item !== platform) : [...previous, platform])
 
   const analyzeUrl = async () => {
@@ -98,7 +112,7 @@ export default function AgentHQ() {
       try { const match = generated.replace(/```json|```/g, '').match(/\[[\s\S]*\]/); parsed = match ? JSON.parse(match[0]) : [] } catch {}
       if (!Array.isArray(parsed) || parsed.length < 3) parsed = fallbackConcepts({ brand:brandName, product:productName, offer:offerText })
       const stored = await saveCampaignConcepts({ userId, campaignId:newCampaign.id, concepts:parsed.slice(0,3) })
-      setCampaign(newCampaign); setConcepts(stored); setStage('angles'); await refreshWorkspace()
+      setActiveBrandId(brand.id); setCampaign(newCampaign); setConcepts(stored); setStage('angles'); await refreshWorkspace(); await refreshMemory(brand.id)
     } catch (campaignError) { setError(campaignError.message || 'Flo could not create campaign angles. Please try again.') }
     finally { setBusy('') }
   }
@@ -109,7 +123,8 @@ export default function AgentHQ() {
     try {
       const result = await selectCampaignConcept(campaign.id, concept.id)
       const posts = await createCampaignPosts({ userId, campaignId:campaign.id, concept, platforms:selectedPlatforms.length ? selectedPlatforms : ['instagram'] })
-      setCampaign(result.campaign); setSelectedConcept(result.concept); setCampaignPosts(posts); setStage('board'); await refreshWorkspace()
+      await recordMemoryEvent({ userId, brandId:result.campaign.brand_id, campaignId:campaign.id, conceptId:concept.id, eventType:'concept_selected', attributes:{ title:concept.title, angle:concept.angle, hook:concept.hook } })
+      setCampaign(result.campaign); setSelectedConcept(result.concept); setCampaignPosts(posts); setStage('board'); await refreshWorkspace(); await refreshMemory(result.campaign.brand_id)
     } catch (chooseError) { setError(chooseError.message || 'Flo could not create your campaign board.') }
     finally { setBusy('') }
   }
@@ -129,7 +144,7 @@ export default function AgentHQ() {
       } catch (renderError) { failed += 1; setError(renderError.message || 'One campaign visual could not be rendered.') }
       setRenderProgress({ complete, total:targets.length, failed })
     }
-    setCampaignAssets(previous => [...created, ...previous]); await refreshWorkspace()
+    setCampaignAssets(previous => [...created, ...previous]); await refreshWorkspace(); await refreshMemory(campaign.brand_id)
   }
 
   const openExistingCampaign = async item => {
@@ -139,7 +154,7 @@ export default function AgentHQ() {
       const postsResult = await supabase.from('campaign_posts').select('*').eq('campaign_id', item.id).order('created_at')
       const assets = await listCampaignMedia(item.id)
       const selected = conceptsResult.data?.find(concept => concept.id === item.selected_concept_id) || conceptsResult.data?.find(concept => concept.status === 'selected') || null
-      setCampaign(item); setConcepts(conceptsResult.data || []); setSelectedConcept(selected); setCampaignPosts(postsResult.data || []); setCampaignAssets(assets); setStage(selected ? 'board' : 'angles')
+      setActiveBrandId(item.brand_id); setCampaign(item); setConcepts(conceptsResult.data || []); setSelectedConcept(selected); setCampaignPosts(postsResult.data || []); setCampaignAssets(assets); setStage(selected ? 'board' : 'angles'); await refreshMemory(item.brand_id)
     } catch (openError) { setError(openError.message || 'Flo could not load that campaign.') }
     finally { setBusy('') }
   }
@@ -211,7 +226,8 @@ export default function AgentHQ() {
 
         <aside style={{ display:'grid', gap:18 }}>
           <section className="studio-dark" style={{ padding:20 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}><span className="studio-kicker" style={{ color:'#d9ff75' }}>Engine status</span><span className="status-dot" /></div><div style={{ color:'#fff', fontSize:21, fontWeight:850, letterSpacing:'-.06em', marginTop:15 }}>{stage === 'intake' ? 'Start with what is true.' : stage === 'dna' ? 'Set the creative guardrails.' : stage === 'angles' ? 'Choose the strongest point of view.' : 'The work is connected now.'}</div><p style={{ color:'rgba(255,250,244,.65)', fontSize:11.5, lineHeight:1.65, marginTop:10 }}>{stage === 'board' ? 'Post copy, assets, render jobs, and campaign context now share one durable record system.' : 'Flo keeps inputs visible so you can correct the strategy before it turns into expensive production.'}</p></section>
-          <section className="studio-panel" style={{ padding:18, background:'rgba(255,255,255,.74)' }}><div className="studio-kicker">Recent campaign memory</div>{workspace.campaigns.length ? <div style={{ display:'grid', gap:9, marginTop:12 }}>{workspace.campaigns.slice(0,4).map(item => <button key={item.id} onClick={() => openExistingCampaign(item)} style={{ textAlign:'left', background:'transparent', border:'none', borderTop:'1px solid rgba(22,19,29,.11)', padding:'10px 0', cursor:'pointer', fontFamily:'inherit' }}><div style={{ fontSize:11.5, color:'#18152a', fontWeight:800, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.name}</div><div style={{ fontSize:9.5, color:'#746f80', marginTop:3 }}>{item.status.replaceAll('_',' ')} · {new Date(item.created_at).toLocaleDateString()}</div></button>)}</div> : <p style={{ color:'#746f80', fontSize:11.5, lineHeight:1.55, marginTop:10 }}>The campaigns you build here become reusable institutional memory for each brand and product.</p>}</section>
+          <section className="studio-panel" style={{ padding:18, background:'linear-gradient(145deg,#171131,#25154a)', borderColor:'rgba(215,242,103,.23)' }}><div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}><div className="studio-kicker" style={{ color:'#d9ff75' }}>Creative Memory</div><span style={{ width:8, height:8, borderRadius:'50%', background:'#d9ff75', boxShadow:'0 0 14px #d9ff75' }} /></div>{memoryBrief ? <><div style={{ color:'#fff', fontSize:15, fontWeight:850, letterSpacing:'-.045em', marginTop:12, lineHeight:1.25 }}>{memoryBrief.headline}</div><div style={{ color:'#bff5e8', fontSize:10.5, fontWeight:800, marginTop:10, lineHeight:1.5 }}>{memoryBrief.state}</div><p style={{ color:'rgba(244,240,255,.7)', fontSize:10.5, lineHeight:1.55, marginTop:7 }}>{memoryBrief.nextAction}</p><div style={{ borderTop:'1px solid rgba(255,255,255,.11)', marginTop:12, paddingTop:10, color:'rgba(244,240,255,.51)', fontSize:9.5, lineHeight:1.5 }}>{memoryBrief.rationale}</div>{memoryBrief.evidence?.length ? <div style={{ display:'flex', gap:5, flexWrap:'wrap', marginTop:10 }}>{memoryBrief.evidence.map(item => <span key={item} style={{ border:'1px solid rgba(215,242,103,.2)', color:'#e9ffc1', background:'rgba(215,242,103,.07)', padding:'4px 6px', borderRadius:6, fontSize:8.5 }}>{item}</span>)}</div> : null}</> : <p style={{ color:'rgba(244,240,255,.62)', fontSize:10.5, lineHeight:1.55, marginTop:10 }}>Flo will show evidence-linked creative guidance here after the first brand, campaign, or review decision.</p>}</section>
+          <section className="studio-panel" style={{ padding:18, background:'rgba(23,17,49,.84)', borderColor:'rgba(255,255,255,.13)' }}><div className="studio-kicker" style={{ color:'#ffb4ce' }}>Recent campaign memory</div>{workspace.campaigns.length ? <div style={{ display:'grid', gap:9, marginTop:12 }}>{workspace.campaigns.slice(0,4).map(item => <button key={item.id} onClick={() => openExistingCampaign(item)} style={{ textAlign:'left', background:'transparent', border:'none', borderTop:'1px solid rgba(255,255,255,.1)', padding:'10px 0', cursor:'pointer', fontFamily:'inherit' }}><div style={{ fontSize:11.5, color:'#fff', fontWeight:800, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.name}</div><div style={{ fontSize:9.5, color:'rgba(244,240,255,.56)', marginTop:3 }}>{item.status.replaceAll('_',' ')} · {new Date(item.created_at).toLocaleDateString()}</div></button>)}</div> : <p style={{ color:'rgba(244,240,255,.58)', fontSize:11, lineHeight:1.55, marginTop:10 }}>The campaigns you build here become reusable institutional memory for each brand and product.</p>}</section>
         </aside>
       </div>
     </div>

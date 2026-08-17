@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
-import { createMediaAsset, updateMediaAsset } from './mediaAssets'
+import { createMediaAsset } from './mediaAssets'
+import { recordMemoryEvent } from './creativeMemory'
 
 const platformTimes = { instagram:'09:00', linkedin:'08:00', facebook:'13:00', tiktok:'19:00', twitter:'12:00' }
 
@@ -40,12 +41,17 @@ export async function saveBrandAndProduct({ userId, brandName, websiteUrl, produ
     if (insert.error) throw insert.error
     product = insert.data
   }
+  await Promise.all([
+    recordMemoryEvent({ userId, brandId:brand.id, productId:product.id, eventType:'brand_dna_saved', attributes:{ voice:brandDna?.voice || '', visualDirection:brandDna?.visualDirection || '', proofPoints:Boolean(brandDna?.proofPoints), restrictedClaims:Boolean(brandDna?.restrictedClaims) } }),
+    recordMemoryEvent({ userId, brandId:brand.id, productId:product.id, eventType:'product_ingested', attributes:{ url:Boolean(websiteUrl), sourceFactCount:Object.keys(sourceFacts || {}).filter(key => Boolean(sourceFacts[key])).length } }),
+  ])
   return { brand, product }
 }
 
 export async function createCampaign({ userId, brand, product, name, objective, audience, offerText, platforms, brief }) {
   const response = await supabase.from('campaigns').insert([{ user_id:userId, brand_id:brand.id, product_id:product.id, name, objective, audience, offer_text:offerText, platforms, brief, status:'concepting' }]).select().single()
   if (response.error) throw response.error
+  await recordMemoryEvent({ userId, brandId:brand.id, productId:product.id, campaignId:response.data.id, eventType:'campaign_created', attributes:{ objective, platforms, offerText } })
   return response.data
 }
 
@@ -53,7 +59,9 @@ export async function saveCampaignConcepts({ userId, campaignId, concepts }) {
   const payload = concepts.map(concept => ({ user_id:userId, campaign_id:campaignId, title:concept.title, angle:concept.angle, hook:concept.hook, proof:concept.proof, cta:concept.cta, visual_recipe:concept.visual_recipe || {}, script:concept.script || {}, status:'proposed' }))
   const response = await supabase.from('campaign_concepts').insert(payload).select()
   if (response.error) throw response.error
-  return response.data || []
+  const stored = response.data || []
+  await Promise.all(stored.map(concept => recordMemoryEvent({ userId, campaignId, conceptId:concept.id, eventType:'concept_generated', attributes:{ title:concept.title, angle:concept.angle, hook:concept.hook } })))
+  return stored
 }
 
 export async function selectCampaignConcept(campaignId, conceptId) {
@@ -78,7 +86,9 @@ export async function createCampaignPosts({ userId, campaignId, concept, platfor
   })
   const response = await supabase.from('campaign_posts').insert(rows).select()
   if (response.error) throw response.error
-  return response.data || []
+  const posts = response.data || []
+  await Promise.all(posts.map(post => recordMemoryEvent({ userId, campaignId, conceptId:concept.id, eventType:'post_created', attributes:{ platform:post.platform, scheduledAt:post.scheduled_at } })))
+  return posts
 }
 
 export async function generateCampaignVariant({ userId, campaign, concept, post, variation }) {
@@ -102,6 +112,7 @@ export async function generateCampaignVariant({ userId, campaign, concept, post,
     const asset = await createMediaAsset({ user_id:userId, kind:'image', source:'ai_image', provider:'openai_gpt_image', render_status:'completed', prompt, asset_url:publicData.publicUrl, storage_path:storagePath, campaign_post_id:post.id, campaign_id:campaign.id, concept_id:concept.id, render_job_id:job.id, metadata:{ variation, platform:post.platform, origin:'campaign-engine', ratio:'4:5' }, completed_at:new Date().toISOString() })
     await supabase.from('campaign_media').insert([{ user_id:userId, campaign_id:campaign.id, concept_id:concept.id, media_asset_id:asset.id, role:'variant' }])
     await supabase.from('render_jobs').update({ status:'completed', settled_tokens:10, media_asset_id:asset.id, completed_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', job.id)
+    await recordMemoryEvent({ userId, campaignId:campaign.id, conceptId:concept.id, mediaAssetId:asset.id, eventType:'asset_rendered', attributes:{ provider:'openai_gpt_image', platform:post.platform, variation, visualDirection:concept.visual_recipe?.direction || '' } })
     return asset
   } catch (error) {
     await supabase.from('render_jobs').update({ status:'failed', failure_message:error.message || 'Campaign render failed', updated_at:new Date().toISOString() }).eq('id', job.id)

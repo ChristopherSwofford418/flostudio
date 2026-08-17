@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { listMediaAssets, updateMediaAsset } from '../lib/mediaAssets'
 import { generateVisualForPost } from '../lib/postVisuals'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { recordMemoryEvent } from '../lib/creativeMemory'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIicgLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NjIwMjU0OCwiZXhwIjoyMDkxNzc4NTQ4f5.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 
@@ -73,6 +74,8 @@ export default function Pipeline() {
   const attachAsset = async asset => {
     if (!selectedPost) return
     await updateMediaAsset(asset.id, { campaign_post_id:selectedPost.id })
+    const { data:{ user } } = await supabase.auth.getUser()
+    if (user && selectedPost.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:selectedPost.campaign_id, mediaAssetId:asset.id, eventType:'asset_attached', attributes:{ platform:selectedPost.platform, method:'review_queue' } })
     setShowAssetPicker(false)
     await loadPosts()
     setSelectedPost(previous => previous ? { ...previous } : previous)
@@ -123,12 +126,17 @@ export default function Pipeline() {
   const saveEdit = async () => {
     if (!selectedPost) return
     await supabase.from('campaign_posts').update({ content: editContent }).eq('id', selectedPost.id)
+    const { data:{ user } } = await supabase.auth.getUser()
+    if (user && selectedPost.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:selectedPost.campaign_id, eventType:'post_rewritten', attributes:{ platform:selectedPost.platform, changed:Boolean(editContent !== selectedPost.content) } })
     setSelectedPost(null)
     await loadPosts()
   }
 
   const updateStatus = async (id, status) => {
+    const post = allPosts.find(item => item.id === id)
     await supabase.from('campaign_posts').update({ status }).eq('id', id)
+    const { data:{ user } } = await supabase.auth.getUser()
+    if (user && post?.campaign_id && (status === 'approved' || status === 'published')) await recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:status === 'approved' ? 'post_approved' : 'campaign_scheduled', attributes:{ platform:post.platform, postId:id, status } })
     if (selectedPost?.id === id) setSelectedPost(null)
     await loadPosts()
   }
@@ -144,6 +152,8 @@ export default function Pipeline() {
     const pendingIds = allPosts.filter(p => p.status === 'pending').map(p => p.id)
     if (pendingIds.length > 0) {
       await supabase.from('campaign_posts').update({ status: 'approved' }).in('id', pendingIds)
+      const { data:{ user } } = await supabase.auth.getUser()
+      if (user) await Promise.all(allPosts.filter(post => pendingIds.includes(post.id) && post.campaign_id).map(post => recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:'post_approved', attributes:{ platform:post.platform, postId:post.id, method:'bulk_review' } })))
     }
     await loadPosts()
     setBulkApproving(false)
