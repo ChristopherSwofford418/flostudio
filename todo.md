@@ -31,3 +31,7 @@
 - [x] Research Creatify and comparable AI advertising platforms using current primary sources.
 - [x] Audit FloStudio against the resulting creative-production capability matrix.
 - [x] Produce a prioritized product, technical architecture, and token-economics roadmap to reach competitive depth.
+- [x] Create durable Brand DNA, product, campaign, campaign concept, and render-job foundations.
+- [x] Build a guided Product-to-Campaign Engine with product intake, editable Brand DNA, and campaign-angle selection.
+- [x] Build a campaign board that owns concepts, real creative variants, review state, and calendar linkage.
+- [ ] Validate and deploy the Product-to-Campaign Engine to the live FloStudio domain.
