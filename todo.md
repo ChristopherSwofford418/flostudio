@@ -39,3 +39,6 @@
 - [x] Add durable campaign learning records and brand-level memory to FloStudio's data model.
 - [x] Surface a transparent Next Best Creative briefing inside the Campaign Engine.
 - [x] Validate and deploy the first Creative Memory foundation to production.
+
+- [ ] Correct project tooling so FloStudio checkpoints and validation target /home/ubuntu/flostudio and flostudio-web, never Auto Wizard/Syllabus Agent.
+- [ ] Create a valid FloStudio project checkpoint after repository and production state are confirmed.
