@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { createMediaAsset, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
 
 const STYLE_PRESETS = [
   { id: 'product', label: 'Product hero', desc: 'Sculptural product focus with commercial light' },
@@ -65,13 +66,17 @@ export default function ImageBank() {
 
   const loadAssets = async () => {
     setLoadingAssets(true)
-    const { data, error: listError } = await supabase.storage.from('marketing-assets').list('', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } })
-    if (!listError && data) {
-      const media = data.filter(file => /\.(jpg|jpeg|png|webp|gif|mp4|webm|mov)$/i.test(file.name)).map(file => {
-        const { data: publicData } = supabase.storage.from('marketing-assets').getPublicUrl(file.name)
-        return { name:file.name, url:publicData.publicUrl, kind:kindFromName(file.name), createdAt:file.created_at, size:file.metadata?.size }
-      })
-      setAssets(media)
+    try {
+      const records = await listMediaAssets()
+      setAssets(records.map(record => ({
+        ...record,
+        name: record.storage_path?.split('/').pop() || `${record.kind}-asset`,
+        url: record.asset_url,
+        kind: record.kind,
+        createdAt: record.created_at,
+      })).filter(asset => asset.url))
+    } catch (loadError) {
+      setError(loadError.message || 'Your media library could not be loaded.')
     }
     setLoadingAssets(false)
   }
@@ -84,13 +89,27 @@ export default function ImageBank() {
     } catch {}
   }, [])
 
-  const uploadAsset = async (file, namePrefix = 'source') => {
+  const uploadAsset = async (file, namePrefix = 'source', details = {}) => {
     const extension = extensionFor(file.type || file.name || '')
-    const name = `${namePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${extension}`
-    const { error: uploadError } = await supabase.storage.from('marketing-assets').upload(name, file, { contentType:file.type || undefined, upsert:true })
+    const storagePath = `media/${namePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${extension}`
+    const { error: uploadError } = await supabase.storage.from('marketing-assets').upload(storagePath, file, { contentType:file.type || undefined, upsert:true })
     if (uploadError) throw uploadError
-    const { data } = supabase.storage.from('marketing-assets').getPublicUrl(name)
-    return { name, url:data.publicUrl, kind:kindFromName(name) }
+    const { data } = supabase.storage.from('marketing-assets').getPublicUrl(storagePath)
+    const kind = details.kind || kindFromName(storagePath)
+    if (details.persistRecord === false) return { name:storagePath.split('/').pop(), url:data.publicUrl, kind, storage_path:storagePath }
+    const record = await createMediaAsset({
+      kind,
+      source: details.source || 'upload',
+      provider: details.provider || null,
+      render_status: details.renderStatus || 'ready',
+      prompt: details.prompt || null,
+      asset_url: data.publicUrl,
+      storage_path: storagePath,
+      reference_asset_id: details.referenceAssetId || null,
+      metadata: { ...details.metadata, fileName:file.name, contentType:file.type || null, sizeBytes:file.size || null },
+      completed_at: details.renderStatus === 'ready' ? new Date().toISOString() : null,
+    })
+    return { ...record, name:storagePath.split('/').pop(), url:data.publicUrl, kind, createdAt:record.created_at }
   }
 
   const handleUpload = async files => {
@@ -103,17 +122,17 @@ export default function ImageBank() {
       const reader = new FileReader()
       const reference = await new Promise((resolve, reject) => { reader.onload = event => resolve(event.target.result); reader.onerror = reject; reader.readAsDataURL(first) })
       setReferenceImage(reference)
-      for (const file of input) await uploadAsset(file, 'brand-source')
+      for (const file of input) await uploadAsset(file, 'brand-source', { source:'upload', kind:'image' })
       await loadAssets()
     } catch (uploadError) { setError(uploadError.message || 'The image could not be uploaded.') }
     setUploading(false)
   }
 
-  const persistRemoteOutput = async (url, prefix, fallbackKind = 'image') => {
+  const persistRemoteOutput = async (url, prefix, fallbackKind = 'image', details = {}) => {
     const response = await fetch(url)
     if (!response.ok) throw new Error('A generated output could not be saved to your asset bank.')
     const blob = await response.blob()
-    const saved = await uploadAsset(new File([blob], `${prefix}.${extensionFor(blob.type)}`, { type:blob.type }), prefix)
+    const saved = await uploadAsset(new File([blob], `${prefix}.${extensionFor(blob.type)}`, { type:blob.type }), prefix, { kind:fallbackKind, ...details })
     return { ...saved, kind:fallbackKind }
   }
 
@@ -128,7 +147,7 @@ export default function ImageBank() {
       const response = await fetch('/api/generate-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations, referenceImage }) })
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
-      const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${index + 1}`)))
+      const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${index + 1}`, 'image', { source:'ai_image', provider:'openai', prompt:brief, metadata:{ aspectRatio, stylePreset, textOverlay, variation:index + 1 } })))
       setGeneratedResults(saved)
       await loadAssets()
     } catch (generationError) { setError(generationError.message || 'The creative could not be generated.') }
@@ -139,24 +158,37 @@ export default function ImageBank() {
     if (!videoPrompt.trim()) { setVideoError('Describe the motion, product, setting, and camera direction first.'); return }
     setVideoError('')
     const request = { prompt:videoPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage }
+    let renderAsset = null
     try {
       const tokenCost = videoQuality === 'production' ? 60 : 30
       const authorized = await useTokens(tokenCost, 'AI video render')
       if (!authorized) return
+      renderAsset = await createMediaAsset({
+        kind:'video', source:'ai_video', provider:'openai', render_status:'queued', prompt:videoPrompt,
+        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, referenceIncluded:Boolean(referenceImage) },
+      })
       const response = await fetch('/api/generate-video', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(request) })
       const job = await response.json()
       if (!response.ok || job.error) throw new Error(job.error || 'Video render could not be started.')
-      const normalized = { ...job, prompt:videoPrompt, size:videoFormat, seconds:videoSeconds, status:job.status || 'queued', createdAt:Date.now() }
+      const persisted = await updateMediaAsset(renderAsset.id, { provider_job_id:job.id, render_status:job.status || 'queued', metadata:{ ...renderAsset.metadata, providerModel:job.model || null, size:videoFormat, seconds:videoSeconds, quality:videoQuality } })
+      const normalized = { ...job, mediaAssetId:persisted.id, prompt:videoPrompt, size:videoFormat, seconds:videoSeconds, status:job.status || 'queued', createdAt:Date.now() }
       setVideoJob(normalized)
       localStorage.setItem('flostudio_active_video_render', JSON.stringify(normalized))
-    } catch (startError) { setVideoError(startError.message || 'Video render could not be started.') }
+      await loadAssets()
+    } catch (startError) {
+      if (renderAsset?.id) await updateMediaAsset(renderAsset.id, { render_status:'failed', error_message:startError.message || 'Video render could not be started.' }).catch(() => {})
+      setVideoError(startError.message || 'Video render could not be started.')
+    }
   }
 
   const completeVideo = async job => {
     const [video, thumbnail] = await Promise.all([
-      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=video`, 'ai-video', 'video'),
-      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=thumbnail`, 'ai-video-thumbnail', 'image'),
+      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=video`, 'ai-video', 'video', { persistRecord:false, source:'ai_video', provider:'openai', prompt:job.prompt, metadata:{ providerJobId:job.id, role:'completed-video' } }),
+      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=thumbnail`, 'ai-video-thumbnail', 'image', { persistRecord:false, source:'ai_video', provider:'openai', prompt:job.prompt, metadata:{ providerJobId:job.id, role:'video-thumbnail' } }),
     ])
+    if (job.mediaAssetId) {
+      await updateMediaAsset(job.mediaAssetId, { render_status:'completed', asset_url:video.url, storage_path:video.storage_path, thumbnail_url:thumbnail.url, thumbnail_path:thumbnail.storage_path, completed_at:new Date().toISOString(), error_message:null })
+    }
     const completed = { ...job, status:'completed', progress:100, videoUrl:video.url, thumbnailUrl:thumbnail.url, savedAt:Date.now() }
     setVideoJob(completed); localStorage.removeItem('flostudio_active_video_render'); await loadAssets()
   }
@@ -171,7 +203,12 @@ export default function ImageBank() {
         const next = { ...videoJob, ...status }
         setVideoJob(next); localStorage.setItem('flostudio_active_video_render', JSON.stringify(next))
         if (status.status === 'completed') await completeVideo(next)
-        if (status.status === 'failed') { localStorage.removeItem('flostudio_active_video_render'); setVideoError(status.error?.message || 'The video provider declined this render. Adjust the prompt or reference image and try again.') }
+        if (status.status === 'failed') {
+          localStorage.removeItem('flostudio_active_video_render')
+          if (videoJob.mediaAssetId) await updateMediaAsset(videoJob.mediaAssetId, { render_status:'failed', error_message:status.error?.message || 'The video provider declined this render.' })
+          setVideoError(status.error?.message || 'The video provider declined this render. Adjust the prompt or reference image and try again.')
+          await loadAssets()
+        }
       } catch (pollError) { setVideoError(pollError.message) }
     }, 10000)
     return () => clearTimeout(timer)

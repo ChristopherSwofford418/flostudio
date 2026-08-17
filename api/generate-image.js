@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { resolveImageProvider } from './media-provider.js';
 
 export const maxDuration = 60;
 
@@ -50,8 +50,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: 'Image generation is not configured yet. Add OPENAI_API_KEY to the production environment.' });
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
     const prompt = String(body.prompt || '').trim();
     if (!prompt && !body.referenceImage) return res.status(400).json({ error: 'Describe the ad creative or upload a product image first.' });
@@ -59,20 +57,15 @@ export default async function handler(req, res) {
     const size = SIZE_BY_RATIO[body.aspectRatio] || SIZE_BY_RATIO['1:1'];
     const count = Math.max(1, Math.min(Number(body.variations) || 2, 4));
     const referenceImage = await fetchImageAsDataUrl(body.referenceImage).catch(() => null);
-    const openai = new OpenAI({ apiKey });
+    const provider = resolveImageProvider();
     const creativeAngles = ['bold product hero composition', 'editorial lifestyle campaign composition', 'direct-response social ad composition', 'premium launch announcement composition'];
     const images = [];
 
     for (let index = 0; index < count; index += 1) {
-      const response = await openai.images.generate({
-        model: 'gpt-image-2',
+      const generated = await provider.create({
         prompt: `Create a finished, high-conversion commercial advertising image. Core brief: ${prompt || 'Use the supplied product image as the hero.'}. Art direction: ${creativeAngles[index]}. The creative must have a strong focal point, professional studio lighting, a deliberate brand-safe composition, and no generic stock aesthetic. Do not render text unless the brief specifically requests exact on-image copy.`,
-        n: 1,
         size,
-        quality: 'low',
       });
-      const generated = response.data?.[0]?.b64_json ? `data:image/png;base64,${response.data[0].b64_json}` : response.data?.[0]?.url;
-      if (!generated) throw new Error('The image provider returned no creative output.');
       const composed = referenceImage
         ? createReferenceComposition(generated, referenceImage, body.textOverlay || prompt || 'Made for your next move', index % 2 ? '#ff6696' : '#7d61ff', size)
         : generated;

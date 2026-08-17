@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
+import { listMediaAssets, updateMediaAsset } from '../lib/mediaAssets'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWYiOiJ4eGtwdm5va2hxYnBicWVmZWd4YSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzc2MjAyNTQ4LCJleHAiOjIwOTc3MDI1NDh9.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 const platforms = ['instagram', 'linkedin', 'facebook', 'tiktok', 'twitter']
@@ -34,10 +35,13 @@ export default function AgentHQ() {
   const [quickPlatform, setQuickPlatform] = useState('instagram')
   const [quickRunning, setQuickRunning] = useState(false)
   const [quickSuccess, setQuickSuccess] = useState('')
+  const [mediaAssets, setMediaAssets] = useState([])
+  const [selectedMediaAsset, setSelectedMediaAsset] = useState(null)
   const briefRef = useRef(null)
   const liveRef = useRef(null)
 
   useEffect(() => liveRef.current?.scrollIntoView({ behavior: 'smooth' }), [notes])
+  useEffect(() => { listMediaAssets().then(assets => setMediaAssets(assets.filter(asset => asset.render_status === 'ready' || asset.render_status === 'completed'))).catch(() => {}) }, [])
   const addNote = (title, body, tone = 'neutral') => setNotes(previous => [...previous, { title, body, tone }])
   const togglePlatform = platform => setSelectedPlatforms(previous => previous.includes(platform) ? previous.filter(x => x !== platform) : [...previous, platform])
 
@@ -73,11 +77,14 @@ export default function AgentHQ() {
       addNote('Review queue populated', 'Sequencing new creative at each channel’s recommended window.', 'violet')
       const { data: { user } } = await supabase.auth.getUser()
       let saved = 0
+      let primaryPostId = null
       for (const post of scheduled) {
-        const { error: insertError } = await supabase.from('campaign_posts').insert([{ user_id: user?.id || null, platform: post.platform, content: `${post.content}${post.hashtags ? `\n\n${post.hashtags}` : ''}`, status: 'pending', scheduled_at: post.scheduled_at, created_at: new Date().toISOString() }])
+        const { data: inserted, error: insertError } = await supabase.from('campaign_posts').insert([{ user_id: user?.id || null, platform: post.platform, content: `${post.content}${post.hashtags ? `\n\n${post.hashtags}` : ''}`, status: 'pending', scheduled_at: post.scheduled_at, created_at: new Date().toISOString() }]).select('id').single()
         if (insertError) throw insertError
+        if (!primaryPostId) primaryPostId = inserted?.id || null
         saved += 1
       }
+      if (selectedMediaAsset?.id && primaryPostId) await updateMediaAsset(selectedMediaAsset.id, { campaign_post_id:primaryPostId })
       setResult({ strategy, posts: scheduled, saved })
       addNote('Campaign ready', `${saved} draft posts are waiting in Review Queue.`, 'success')
       setActiveStep(-1)
@@ -158,6 +165,7 @@ export default function AgentHQ() {
               <label style={{ display: 'grid', gap: 8 }}><span style={{ fontSize: 12, fontWeight: 800 }}>What are you building momentum for?</span><textarea className="studio-input" value={brand} onChange={e => setBrand(e.target.value)} rows={4} placeholder="Describe the product, launch, offer, or market moment in your own words." style={{ resize: 'vertical', lineHeight: 1.6 }} /></label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}><label style={{ display: 'grid', gap: 8 }}><span style={{ fontSize: 12, fontWeight: 800 }}>Who needs to care?</span><input className="studio-input" value={audience} onChange={e => setAudience(e.target.value)} placeholder="Audience and context" /></label><label style={{ display: 'grid', gap: 8 }}><span style={{ fontSize: 12, fontWeight: 800 }}>What should change?</span><input className="studio-input" value={goal} onChange={e => setGoal(e.target.value)} placeholder="Awareness, leads, revenue…" /></label></div>
               <div><div style={{ fontSize: 12, fontWeight: 800, marginBottom: 9 }}>Select the places this needs to land</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>{platforms.map(platform => <button key={platform} onClick={() => togglePlatform(platform)} className={`studio-chip ${selectedPlatforms.includes(platform) ? 'active' : ''}`}>{platformLabel[platform]}</button>)}</div></div>
+              <div style={{ padding:14, borderRadius:13, background:'#f8f6ff', border:'1px solid #dfd9ff' }}><div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}><div><div style={{ fontSize:12, fontWeight:800 }}>Campaign visual</div><div style={{ fontSize:10.5, color:'var(--ink-soft)', marginTop:3 }}>{selectedMediaAsset ? 'This real asset will attach to the lead post in your new campaign.' : 'Choose a Creative Lab asset to carry into the campaign.'}</div></div><button onClick={() => navigate('/images')} className="studio-chip">Open Creative Lab</button></div>{mediaAssets.length ? <div style={{ display:'flex', gap:7, overflowX:'auto', marginTop:10 }}>{mediaAssets.slice(0,6).map(asset => <button key={asset.id} onClick={() => setSelectedMediaAsset(selectedMediaAsset?.id === asset.id ? null : asset)} style={{ width:54, height:54, padding:0, borderRadius:9, overflow:'hidden', flexShrink:0, cursor:'pointer', border:selectedMediaAsset?.id === asset.id ? '3px solid #6144e6' : '1px solid #d8d1ff', background:'#fff' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Campaign visual choice" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</button>)}</div> : <div style={{ fontSize:10.5, color:'var(--ink-soft)', marginTop:9 }}>No saved assets yet. Make the first image or video in Creative Lab.</div>}</div>
               <div style={{ padding: 16, background: '#f1effd', borderRadius: 14, border: '1px solid #e0dcff' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}><span style={{ fontSize: 12, fontWeight: 800 }}>Creative frequency</span><span style={{ fontFamily: 'DM Mono, monospace', color: 'var(--violet)', fontSize: 12 }}>{volume} / week</span></div><input type="range" min={3} max={14} value={volume} onChange={e => setVolume(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--violet)' }} /></div>
               <button onClick={runAgent} disabled={running} className="studio-button" style={{ width: '100%', padding: 15 }}>{running ? 'Flo is building your campaign…' : 'Build complete campaign →'}</button>
               {error && <div style={{ background: '#fff0ec', color: '#b5391e', padding: '11px 12px', borderRadius: 11, fontSize: 11.5, fontWeight: 700 }}>{error}</div>}

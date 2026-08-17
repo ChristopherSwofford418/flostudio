@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
+import { listMediaAssets } from '../lib/mediaAssets'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 
@@ -27,6 +28,7 @@ export default function AICalendar() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [fillPrompt, setFillPrompt] = useState('')
   const [showFillModal, setShowFillModal] = useState(false)
+  const [mediaAssets, setMediaAssets] = useState([])
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -39,8 +41,12 @@ export default function AICalendar() {
     setLoading(true)
     const start = new Date(year, month, 1).toISOString()
     const end = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
-    const { data } = await supabase.from('campaign_posts').select('*').gte('scheduled_at', start).lte('scheduled_at', end).order('scheduled_at')
+    const [{ data }, mediaResult] = await Promise.all([
+      supabase.from('campaign_posts').select('*').gte('scheduled_at', start).lte('scheduled_at', end).order('scheduled_at'),
+      listMediaAssets().catch(() => []),
+    ])
     setPosts(data || [])
+    setMediaAssets(mediaResult.filter(asset => asset.render_status === 'ready' || asset.render_status === 'completed'))
     setLoading(false)
   }
 
@@ -51,6 +57,8 @@ export default function AICalendar() {
       return pd.getDate() === day && pd.getMonth() === month && pd.getFullYear() === year
     })
   }
+
+  const getMediaForPost = id => mediaAssets.filter(asset => asset.campaign_post_id === id)
 
   const fillMonth = async () => {
     if (!fillPrompt.trim()) return
@@ -147,6 +155,7 @@ export default function AICalendar() {
                     {dayPosts.slice(0, 3).map(post => (
                       <div key={post.id} onClick={e => { e.stopPropagation(); setSelectedPost(post) }} style={{ padding: '5px 8px', borderRadius: 6, background: `${PLATFORM_COLORS[post.platform] || '#4f46e5'}20`, borderLeft: `3px solid ${PLATFORM_COLORS[post.platform] || '#4f46e5'}`, fontSize: 11.5, color: '#fff', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         <span style={{ fontWeight: 800, color: PLATFORM_COLORS[post.platform] || '#4f46e5', marginRight: 4, textTransform: 'uppercase' }}>{post.platform?.substring(0,2)}</span>
+                        {getMediaForPost(post.id).length > 0 && <span style={{ color:'#d9ff75', marginRight:4 }}>MEDIA</span>}
                         {post.content.substring(0, 24)}...
                       </div>
                     ))}
@@ -171,6 +180,7 @@ export default function AICalendar() {
               <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 22 }}>×</button>
             </div>
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', marginBottom: 18, fontSize: 14, color: '#0f172a', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedPost.content}</div>
+            {getMediaForPost(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:9, overflowX:'auto', marginBottom:16 }}>{getMediaForPost(selectedPost.id).map(asset => <div key={asset.id} style={{ width:112, height:112, borderRadius:10, overflow:'hidden', background:'#e2e8f0', flexShrink:0 }}>{asset.kind === 'video' ? <video src={asset.asset_url} controls playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Scheduled campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</div>)}</div>}
             {selectedPost.scheduled_at && <div style={{ fontSize: 12, color: '#64748b', marginBottom: 20, fontWeight: 500 }}>Scheduled: {new Date(selectedPost.scheduled_at).toLocaleString()}</div>}
             <div style={{ display: 'flex', gap: 12 }}>
               {selectedPost.status !== 'approved' && <button onClick={() => approvePost(selectedPost.id)} style={{ flex: 1, padding: '10px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, color: '#059669', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Approve Post</button>}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
+import { listMediaAssets, updateMediaAsset } from '../lib/mediaAssets'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIicgLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NjIwMjU0OCwiZXhwIjoyMDkxNzc4NTQ4f5.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 
@@ -28,12 +29,18 @@ export default function Pipeline() {
   const [aiSuggestion, setAiSuggestion] = useState('')
   const [bulkApproving, setBulkApproving] = useState(false)
   const [aiScoring, setAiScoring] = useState({})
+  const [mediaAssets, setMediaAssets] = useState([])
+  const [showAssetPicker, setShowAssetPicker] = useState(false)
 
   useEffect(() => { loadPosts() }, [activeTab])
 
   const loadPosts = async () => {
     setLoading(true)
-    const { data: allData, error } = await supabase.from('campaign_posts').select('*').order('scheduled_at', { ascending: true })
+    const [{ data: allData, error }, mediaResult] = await Promise.all([
+      supabase.from('campaign_posts').select('*').order('scheduled_at', { ascending: true }),
+      listMediaAssets().catch(() => []),
+    ])
+    setMediaAssets(mediaResult.filter(asset => asset.render_status === 'ready' || asset.render_status === 'completed'))
     if (!error && allData) {
       setAllPosts(allData)
       if (activeTab === 'all') {
@@ -52,6 +59,23 @@ export default function Pipeline() {
     setSelectedPost(post)
     setEditContent(post.content)
     setAiSuggestion('')
+    setShowAssetPicker(false)
+  }
+
+  const attachedAssets = postId => mediaAssets.filter(asset => asset.campaign_post_id === postId)
+  const availableAssets = mediaAssets.filter(asset => !asset.campaign_post_id)
+
+  const attachAsset = async asset => {
+    if (!selectedPost) return
+    await updateMediaAsset(asset.id, { campaign_post_id:selectedPost.id })
+    setShowAssetPicker(false)
+    await loadPosts()
+    setSelectedPost(previous => previous ? { ...previous } : previous)
+  }
+
+  const detachAsset = async asset => {
+    await updateMediaAsset(asset.id, { campaign_post_id:null })
+    await loadPosts()
   }
 
   const saveEdit = async () => {
@@ -158,6 +182,7 @@ export default function Pipeline() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {posts.map(post => {
               const score = aiScoring[post.id]
+              const postAssets = attachedAssets(post.id)
               return (
                 <div key={post.id} className="abundance-card" style={{ padding: '20px 24px', display: 'flex', gap: 20, alignItems: 'flex-start', transition: 'all 0.15s' }}>
                   
@@ -168,6 +193,7 @@ export default function Pipeline() {
 
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
+                    {postAssets.length > 0 && <div style={{ display:'flex', gap:7, marginBottom:11, overflowX:'auto' }}>{postAssets.map(asset => <div key={asset.id} style={{ width:52, height:52, borderRadius:9, overflow:'hidden', border:'1px solid rgba(255,255,255,.2)', flexShrink:0, background:'rgba(255,255,255,.07)' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Attached creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</div>)}</div>}
                     <div style={{ fontSize: 14, color: '#fff', lineHeight: 1.6, marginBottom: 10, fontWeight: 500 }}>{post.content}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                       {post.scheduled_at && <span style={{ fontSize: 12, color: 'rgba(234,229,255,.64)', fontWeight: 500 }}>{new Date(post.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
@@ -181,7 +207,7 @@ export default function Pipeline() {
                     <button onClick={() => scorePost(post)} title="AI Score" style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                       {score === 'loading' ? <span style={{ width: 12, height: 12, border: '2px solid #cbd5e1', borderTopColor: '#8c74ff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : 'Score'}
                     </button>
-                    <button onClick={() => openPost(post)} title="Edit" style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Edit</button>
+                    <button onClick={() => openPost(post)} title="Edit" style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{postAssets.length ? `Creative ${postAssets.length}` : 'Attach Creative'}</button>
                     {post.status === 'pending' && <button onClick={() => updateStatus(post.id, 'approved')} title="Approve" style={{ padding: '8px 16px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Approve</button>}
                     {post.status === 'approved' && <button onClick={() => updateStatus(post.id, 'published')} title="Publish" style={{ padding: '8px 16px', borderRadius: 8, background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#4f46e5', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Publish</button>}
                     <button onClick={() => deletePost(post.id)} title="Delete" style={{ padding: '8px 12px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Delete</button>
@@ -205,6 +231,11 @@ export default function Pipeline() {
               <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 22 }}>×</button>
             </div>
             <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={6} style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '14px 16px', color: '#0f172a', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.7 }} />
+            <div style={{ marginTop:14, borderTop:'1px solid #e2e8f0', paddingTop:14 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}><div><div style={{ fontSize:11, fontWeight:800, color:'#4f46e5', letterSpacing:'.06em' }}>CAMPAIGN MEDIA</div><div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>Attach an image or video from your durable Creative Lab library.</div></div><button onClick={() => setShowAssetPicker(value => !value)} style={{ padding:'8px 11px', border:'1px solid #c7d2fe', background:'#eef2ff', color:'#4f46e5', borderRadius:8, fontSize:12, fontWeight:800 }}>{showAssetPicker ? 'Close media' : 'Add from Creative Lab'}</button></div>
+              {attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:10, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:74, height:74, flexShrink:0, borderRadius:9, overflow:'hidden', background:'#f1f5f9' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Attached creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}<button onClick={() => detachAsset(asset)} style={{ position:'absolute', top:4, right:4, border:'none', borderRadius:6, background:'rgba(15,23,42,.76)', color:'#fff', fontSize:10, padding:'3px 5px' }}>Remove</button></div>)}</div>}
+              {showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button key={asset.id} onClick={() => attachAsset(asset)} style={{ padding:0, height:88, overflow:'hidden', border:'1px solid #cbd5e1', borderRadius:9, background:'#f8fafc', cursor:'pointer' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Available campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</button>) : <div style={{ gridColumn:'1 / -1', color:'#64748b', fontSize:12, padding:'10px 0' }}>No unattached media yet. Generate or upload it in Creative Lab first.</div>}</div>}
+            </div>
             {aiSuggestion && (
               <div style={{ marginTop: 14, padding: '14px 16px', background: '#e0e7ff', border: '1px solid #c7d2fe', borderRadius: 12 }}>
                 <div style={{ fontSize: 11.5, color: '#b9a8ff', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase' }}>AI Rewritten Suggestion</div>

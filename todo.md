@@ -18,3 +18,8 @@
 - [x] Implement a real video-ad creation workflow with durable generation status and output handling.
 - [x] Rebuild Creative Lab around a rich, dense gallery of image and video ad outputs.
 - [x] Validate image uploads, generation, gallery state, and production deployment end to end.
+- [x] Verify the production Creative Lab route and remove any visibility or deployment mismatch.
+- [x] Add a durable media_assets database model for generated images, videos, ownership, and render status.
+- [x] Build a provider-agnostic media render service with durable asynchronous job tracking and storage finalization.
+- [x] Surface reusable media assets in campaign creation, review, calendar, and planning workflows.
+- [ ] Validate and deploy the long-term media platform to the live FloStudio domain.
