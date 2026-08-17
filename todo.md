@@ -28,3 +28,6 @@
 - [x] Add a default real visual-creative generation or assignment step to campaign post creation.
 - [x] Make Review Queue cards visibly media-first and remove text-only review emphasis.
 - [x] Validate and deploy the media-first Pipeline workflow to production.
+- [x] Research Creatify and comparable AI advertising platforms using current primary sources.
+- [x] Audit FloStudio against the resulting creative-production capability matrix.
+- [x] Produce a prioritized product, technical architecture, and token-economics roadmap to reach competitive depth.
