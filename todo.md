@@ -17,4 +17,4 @@
 - [x] Audit and repair the existing image-generation service and media persistence flow.
 - [x] Implement a real video-ad creation workflow with durable generation status and output handling.
 - [x] Rebuild Creative Lab around a rich, dense gallery of image and video ad outputs.
-- [ ] Validate image uploads, generation, gallery state, and production deployment end to end.
+- [x] Validate image uploads, generation, gallery state, and production deployment end to end.
