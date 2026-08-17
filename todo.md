@@ -23,3 +23,5 @@
 - [x] Build a provider-agnostic media render service with durable asynchronous job tracking and storage finalization.
 - [x] Surface reusable media assets in campaign creation, review, calendar, and planning workflows.
 - [x] Validate and deploy the long-term media platform to the live FloStudio domain.
+- [x] Remove the mismatched white surfaces and redundant empty-state styling from Agent Studio's live workflow.
+- [ ] Validate and deploy the unified Agent Studio dark editorial treatment.
