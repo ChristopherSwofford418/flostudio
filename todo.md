@@ -22,4 +22,4 @@
 - [x] Add a durable media_assets database model for generated images, videos, ownership, and render status.
 - [x] Build a provider-agnostic media render service with durable asynchronous job tracking and storage finalization.
 - [x] Surface reusable media assets in campaign creation, review, calendar, and planning workflows.
-- [ ] Validate and deploy the long-term media platform to the live FloStudio domain.
+- [x] Validate and deploy the long-term media platform to the live FloStudio domain.
