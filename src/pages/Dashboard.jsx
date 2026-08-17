@@ -72,21 +72,14 @@ export default function Dashboard() {
       <div style={{ display:'flex', flexDirection:'column', gap:28, animation:'fadeIn 0.3s ease', maxWidth:1200, margin:'0 auto' }}>
         <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-        {/* Welcome & AI Insight */}
-        <div>
-          <h2 style={{ fontSize:24, fontWeight:800, color:'#0f172a', marginBottom:4, letterSpacing:'-0.5px' }}>Workspace Command Center</h2>
-          <p style={{ fontSize:13.5, color:'#64748b', marginBottom:18 }}>Real-time overview of your multi-channel AI marketing pipeline.</p>
-          
-          <div style={{ padding:'18px 22px', background:'#ffffff', border:'1px solid #e2e8f0', borderRadius:16, display:'flex', alignItems:'flex-start', gap:14, boxShadow:'0 1px 3px rgba(0,0,0,0.02)' }}>
-            <div style={{ width:38, height:38, borderRadius:'50%', background:'linear-gradient(135deg,#db2777,#7c3aed)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-            </div>
-            <div>
-              <div style={{ fontSize:11, color:'#db2777', fontWeight:800, marginBottom:4, letterSpacing:'0.05em' }}>✦ FLO AI STRATEGIST INSIGHT</div>
-              <div style={{ fontSize:13.5, color:'#0f172a', lineHeight:1.6, fontWeight:500 }}>{insightLoading ? 'Analyzing your workspace performance...' : aiInsight}</div>
-            </div>
+        {/* Editorial performance overview */}
+        <section style={{ display:'grid', gridTemplateColumns:'1.1fr .9fr', minHeight:250, overflow:'hidden', borderRadius:26, background:'#17131d', color:'#fffaf4' }}>
+          <div style={{ padding:'32px 34px', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
+            <div><div className="studio-kicker" style={{ color:'#d7f267', marginBottom:13 }}>Performance desk / Live signal</div><h2 className="studio-display" style={{ fontSize:'clamp(31px,4vw,49px)', maxWidth:540 }}>Make the next move <span className="studio-serif" style={{ color:'#ffd1c4' }}>with intent.</span></h2></div>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:11, maxWidth:540, paddingTop:20, borderTop:'1px solid rgba(255,255,255,.15)' }}><span style={{ width:8, height:8, borderRadius:99, background:'#d7f267', marginTop:5, flexShrink:0 }}/><div><div style={{ fontFamily:'DM Mono, monospace', color:'#d7f267', fontSize:9.5, letterSpacing:'.1em', marginBottom:5 }}>FLO'S LATEST READ</div><div style={{ fontSize:12.5, color:'rgba(255,250,244,.78)', lineHeight:1.6 }}>{insightLoading ? 'Reading your current creative mix…' : aiInsight}</div></div></div>
           </div>
-        </div>
+          <div style={{ position:'relative', minHeight:250, overflow:'hidden' }}><img src="/visuals/flo-preview-lifestyle.jpg" alt="Campaign creative in progress" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center' }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#17131d 0%,transparent 34%),linear-gradient(to top,rgba(22,19,29,.6),transparent 45%)' }}/><div style={{ position:'absolute', right:18, bottom:18, background:'rgba(255,253,249,.92)', color:'#16131d', padding:'10px 12px', borderRadius:12, minWidth:126 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, color:'#ff5b35', letterSpacing:'.08em' }}>CREATIVE STATUS</div><div style={{ fontWeight:800, fontSize:12, marginTop:3 }}>{stats.pending} ideas need review</div></div></div>
+        </section>
 
         {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>

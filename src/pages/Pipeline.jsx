@@ -118,22 +118,17 @@ export default function Pipeline() {
 
       <div style={{ maxWidth: 1100, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
 
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>Content Pipeline</h1>
-            <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 4 }}>Review, optimize, and approve AI-generated marketing assets</p>
+        {/* Decision desk */}
+        <section style={{ position:'relative', overflow:'hidden', display:'grid', gridTemplateColumns:'1.18fr .82fr', minHeight:210, marginBottom:24, borderRadius:26, background:'#fffdf9', border:'1px solid #ded9d1' }}>
+          <div style={{ padding:'27px 30px', position:'relative', zIndex:1, display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
+            <div><div className="studio-kicker">Review queue / Decision desk</div><h1 style={{ fontSize:34, lineHeight:1, letterSpacing:'-.065em', color:'#16131d', marginTop:8 }}>Strong ideas need a <span className="studio-serif">final call.</span></h1><p style={{ fontSize:12.5, color:'#5c5666', marginTop:12, maxWidth:490, lineHeight:1.6 }}>Score what is worth shipping, revise what needs a sharper edge, and keep your brand’s creative quality high.</p></div>
+            {counts.pending > 0 && <button onClick={bulkApproveAll} disabled={bulkApproving} className="studio-button" style={{ alignSelf:'flex-start', background: bulkApproving ? '#ded9d1' : '#16131d' }}>{bulkApproving ? 'Approving drafts…' : `Approve all pending (${counts.pending}) →`}</button>}
           </div>
-          {counts.pending > 0 && (
-            <button onClick={bulkApproveAll} disabled={bulkApproving} style={{ padding: '10px 20px', background: bulkApproving ? '#f1f5f9' : 'linear-gradient(135deg,#059669,#10b981)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: bulkApproving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(16,185,129,0.3)' }}>
-              {bulkApproving ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> : null}
-              Approve All Pending ({counts.pending})
-            </button>
-          )}
-        </div>
+          <div style={{ position:'relative', minHeight:210, overflow:'hidden' }}><img src="/visuals/flo-preview-editorial.jpg" alt="Creative review moodboard" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#fffdf9 0%,transparent 42%)' }} /><div style={{ position:'absolute', right:18, bottom:18, background:'rgba(22,19,29,.93)', color:'#fffaf4', padding:'10px 12px', borderRadius:12 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, letterSpacing:'.08em', color:'#d7f267' }}>IN REVIEW</div><b style={{ display:'block', marginTop:2, fontSize:12 }}>{counts.pending} decision{counts.pending === 1 ? '' : 's'} waiting</b></div></div>
+        </section>
 
         {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 22 }}>
           {[['pending','Pending Review','#f59e0b'],['approved','Approved','#059669'],['published','Published','#4f46e5']].map(([s,label,c]) => (
             <div key={s} onClick={() => setActiveTab(s)} style={{ background: '#ffffff', border: `1px solid ${activeTab === s ? c : '#e2e8f0'}`, borderRadius: 14, padding: '20px 24px', cursor: 'pointer', transition: 'all 0.15s ease', boxShadow: activeTab === s ? `0 4px 20px ${c}15` : '0 1px 3px rgba(0,0,0,0.02)' }}>
               <div style={{ fontSize: 26, fontWeight: 800, color: activeTab === s ? c : '#0f172a', letterSpacing: '-0.5px' }}>{counts[s] || 0}</div>

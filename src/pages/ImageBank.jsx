@@ -156,8 +156,20 @@ export default function ImageBank() {
       `}</style>
 
       <div style={{ maxWidth: 1280, margin: '0 auto', animation: 'fadeIn 0.3s ease-out' }}>
+        <section style={{ position: 'relative', minHeight: 250, overflow: 'hidden', borderRadius: 28, marginBottom: 22, background: '#17131d', color: '#fffaf4', display: 'flex', alignItems: 'stretch' }}>
+          <img src="/visuals/flo-creative-hero.jpg" alt="FloStudio creative direction" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'right center', opacity: .82 }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(22,19,29,.98) 0%, rgba(22,19,29,.74) 45%, rgba(22,19,29,.05) 100%)' }} />
+          <div style={{ position: 'relative', zIndex: 1, padding: '34px 38px', maxWidth: 650 }}>
+            <div className="studio-kicker" style={{ color: '#d7f267', marginBottom: 14 }}>Creative Lab / Art direction</div>
+            <h1 className="studio-display" style={{ fontSize: 'clamp(32px,4.5vw,52px)', maxWidth: 560 }}>From product signal to <span className="studio-serif" style={{ color: '#ffd1c4' }}>scroll-stopping work.</span></h1>
+            <p style={{ marginTop: 14, color: 'rgba(255,250,244,.74)', maxWidth: 520, lineHeight: 1.65, fontSize: 13 }}>Bring an app screen, product image, or bare idea. Flo turns it into campaign-ready creative while keeping your visual story coherent.</p>
+          </div>
+          <div style={{ position: 'relative', zIndex: 1, marginLeft: 'auto', alignSelf: 'flex-end', padding: 20, display: 'flex', gap: 7 }}>
+            {['Image', 'Video', 'Assets'].map((item, index) => <span key={item} className="studio-chip" style={{ background: index === 0 ? '#d7f267' : 'rgba(255,255,255,.12)', color: index === 0 ? '#16131d' : '#fff', borderColor: index === 0 ? '#d7f267' : 'rgba(255,255,255,.22)' }}>{item}</span>)}
+          </div>
+        </section>
         {/* Top Studio Tabs */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
           <button className={`studio-tab ${activeTab === 'generator' ? 'active' : ''}`} onClick={() => setActiveTab('generator')}>
             AI Ad Image Studio
           </button>
@@ -304,10 +316,17 @@ export default function ImageBank() {
                   ))}
                 </div>
               ) : (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 40, border: '2px dashed #e2e8f0', borderRadius: 16, background: '#f8fafc' }}>
-                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, color: '#db2777', fontWeight: 800 }}>✦</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>Ready for High-Converting Ad Generation</div>
-                  <div style={{ fontSize: 13, color: '#64748b', maxWidth: 280, lineHeight: 1.5 }}>Upload your app screenshot or product photo (prompt optional) and generate professional marketing creatives instantly.</div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 18, borderRadius: 16, background: '#f5f1ec', border: '1px solid #ded9d1' }}>
+                  <div className="studio-kicker" style={{ marginBottom: 8 }}>Output board</div>
+                  <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-.045em', color: '#16131d', maxWidth: 300 }}>Your next creative set will land here.</div>
+                  <div style={{ fontSize: 12, color: '#5c5666', maxWidth: 350, lineHeight: 1.55, marginTop: 7 }}>Use the reference image as your product truth, then choose a direction that feels native to the campaign.</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 9, marginTop: 20 }}>
+                    {[
+                      ['/visuals/flo-preview-product.jpg', 'Product focus'],
+                      ['/visuals/flo-preview-lifestyle.jpg', 'Human proof'],
+                      ['/visuals/flo-preview-editorial.jpg', 'Editorial pull']
+                    ].map(([src, label]) => <div key={label} style={{ position: 'relative', minHeight: 160, borderRadius: 12, overflow: 'hidden', background: '#ddd' }}><img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} /><div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(22,19,29,.78),transparent 58%)' }} /><span style={{ position: 'absolute', left: 8, bottom: 8, color: '#fff', fontSize: 9.5, fontWeight: 800 }}>{label}</span></div>)}
+                  </div>
                 </div>
               )}
             </div>

@@ -40,7 +40,7 @@ function AgentDrawer({ onClose }) {
   const [steps, setSteps] = useState([])
   const historyRef = useRef([])
   const endRef = useRef()
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages, loading, steps])
+  useEffect(() => { try { endRef.current?.scrollIntoView({ behavior: 'smooth' }) } catch {} }, [messages, loading, steps])
 
   const send = async (override) => {
     const text = (override || input).trim()
@@ -50,12 +50,17 @@ function AgentDrawer({ onClose }) {
     setLoading(true)
     setSteps(['Reading your workspace signal…'])
     try {
-      const result = await runFloAgent(historyRef.current, text, (step) => setSteps(prev => [...prev, step]), (action) => setSteps(prev => [...prev, `Completed ${action.tool.replaceAll('_', ' ')}`]))
+      const result = await runFloAgent(
+        historyRef.current,
+        text,
+        (step) => setSteps(prev => [...prev, typeof step === 'string' ? step : 'Processing...']),
+        (action) => setSteps(prev => [...prev, `Completed ${String(action?.tool || 'action').replaceAll('_', ' ')}`])
+      )
       const reply = result?.reply || 'I completed that request.'
       historyRef.current = [...historyRef.current, { role: 'user', content: text }, { role: 'assistant', content: reply }]
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, actions: result?.actions || [] }])
+      setMessages(prev => [...prev, { role: 'assistant', content: reply, actions: Array.isArray(result?.actions) ? result.actions : [] }])
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `I could not complete that action: ${error.message || 'please try again.'}` }])
+      setMessages(prev => [...prev, { role: 'assistant', content: `I could not complete that action: ${error?.message || 'please try again.'}` }])
     } finally {
       setLoading(false)
       setSteps([])
@@ -77,7 +82,7 @@ function AgentDrawer({ onClose }) {
         {messages.map((m, index) => (
           <div key={index} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '86%', padding: '12px 14px', borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '4px 16px 16px 16px', background: m.role === 'user' ? 'linear-gradient(135deg,#ff4fa3,#8d55ff)' : 'rgba(255,255,255,.1)', border: m.role === 'user' ? 0 : '1px solid rgba(255,255,255,.1)', lineHeight: 1.55, fontSize: 13, whiteSpace: 'pre-wrap' }}>
             {m.content}
-            {m.actions?.length > 0 && <div style={{ marginTop: 9, display: 'flex', gap: 5, flexWrap: 'wrap' }}>{m.actions.map((a, i) => <span key={i} style={{ fontSize: 10, fontWeight: 700, background: 'rgba(11,191,154,.16)', color: '#75f0d2', border: '1px solid rgba(117,240,210,.25)', borderRadius: 99, padding: '3px 7px' }}>✓ {a.tool.replaceAll('_', ' ')}</span>)}</div>}
+            {Array.isArray(m.actions) && m.actions.length > 0 && <div style={{ marginTop: 9, display: 'flex', gap: 5, flexWrap: 'wrap' }}>{m.actions.map((a, i) => <span key={i} style={{ fontSize: 10, fontWeight: 700, background: 'rgba(11,191,154,.16)', color: '#75f0d2', border: '1px solid rgba(117,240,210,.25)', borderRadius: 99, padding: '3px 7px' }}>✓ {String(a?.tool || 'action').replaceAll('_', ' ')}</span>)}</div>}
           </div>
         ))}
         {loading && <div style={{ padding: '12px 14px', maxWidth: '86%', background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.1)', borderRadius: '4px 16px 16px 16px' }}><div style={{ display: 'flex', gap: 5, alignItems: 'center', marginBottom: 8 }}>{[0,1,2].map(i => <span key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: '#ff8fc4', animation: `dot 1.25s ${i*.16}s infinite` }} />)}<span style={{ fontSize: 11, marginLeft: 4, opacity: .75 }}>Flo is working</span></div>{steps.slice(-3).map((s, i) => <div key={i} style={{ fontSize: 11, opacity: i === steps.slice(-3).length - 1 ? 1 : .55, marginTop: 4 }}>· {s}</div>)}</div>}

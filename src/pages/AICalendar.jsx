@@ -116,21 +116,14 @@ export default function AICalendar() {
 
       <div style={{ maxWidth: 1150, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
 
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} style={{ width: 36, height: 36, borderRadius: 10, background: '#ffffff', border: '1px solid #e2e8f0', color: '#0f172a', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>‹</button>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', minWidth: 200, textAlign: 'center', letterSpacing: '-0.5px' }}>{MONTHS[month]} {year}</h2>
-            <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} style={{ width: 36, height: 36, borderRadius: 10, background: '#ffffff', border: '1px solid #e2e8f0', color: '#0f172a', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>›</button>
+        {/* Campaign map header */}
+        <section style={{ position:'relative', overflow:'hidden', minHeight:196, marginBottom:22, borderRadius:26, background:'#efebff', display:'grid', gridTemplateColumns:'1fr 300px', border:'1px solid #dfd9ff' }}>
+          <div style={{ padding:'25px 30px', position:'relative', zIndex:1, display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
+            <div><div className="studio-kicker">Campaign map / Publishing rhythm</div><h2 style={{ fontSize:34, lineHeight:1, letterSpacing:'-.065em', color:'#16131d', marginTop:8 }}>{MONTHS[month]} <span className="studio-serif">{year}</span></h2><p style={{ fontSize:12.5, color:'#5c5666', marginTop:10 }}>Your cadence is not a list of dates. It is the sequence that lets a campaign build momentum.</p></div>
+            <div style={{ display:'flex', alignItems:'center', gap:9 }}><button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="studio-chip" style={{ width:34, justifyContent:'center', padding:7 }}>←</button><button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="studio-chip" style={{ width:34, justifyContent:'center', padding:7 }}>→</button><span style={{ marginLeft:5, fontFamily:'DM Mono,monospace', fontSize:10, color:'#6144e6' }}>{posts.length} scheduled signals</span></div>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{posts.length} scheduled posts</div>
-            <button onClick={() => setShowFillModal(true)} disabled={generating} style={{ padding: '10px 20px', background: generating ? '#f1f5f9' : 'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}>
-              {generating ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }}/> : null}
-              ✦ AI Fill Month
-            </button>
-          </div>
-        </div>
+          <div style={{ position:'relative', overflow:'hidden' }}><img src="/visuals/flo-preview-product.jpg" alt="Campaign planning visual" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} /><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#efebff,transparent 52%)' }} /><button onClick={() => setShowFillModal(true)} disabled={generating} className="studio-button" style={{ position:'absolute', right:18, bottom:18, background:generating?'#8e82df':'#6144e6' }}>{generating ? 'Mapping…' : 'Fill the month →'}</button></div>
+        </section>
 
         {/* Calendar grid */}
         <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
