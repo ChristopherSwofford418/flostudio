@@ -24,6 +24,22 @@ export default function ResetPassword() {
     setLoading(false)
   }
 
+  useEffect(() => {
+    let mounted = true
+    const checkRecovery = async () => {
+      const { data:{ session } } = await supabase.auth.getSession()
+      if (!mounted) return
+      if (session) setRecoveryReady(true)
+      else setError('This password reset link is missing or expired. Request a new reset email and open the newest link in this browser.')
+    }
+    checkRecovery()
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return
+      if (event === 'PASSWORD_RECOVERY' || session) { setRecoveryReady(true); setError('') }
+    })
+    return () => { mounted = false; subscription.unsubscribe() }
+  }, [])
+
   return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at 76% 12%,rgba(125,89,255,.65),transparent 24rem),radial-gradient(circle at 15% 84%,rgba(255,95,150,.25),transparent 30rem),linear-gradient(135deg,#060518,#110936 55%,#29114b)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ width: '100%', maxWidth: 420 }}>
@@ -73,18 +89,3 @@ export default function ResetPassword() {
     </div>
   )
 }
-  useEffect(() => {
-    let mounted = true
-    const checkRecovery = async () => {
-      const { data:{ session } } = await supabase.auth.getSession()
-      if (!mounted) return
-      if (session) setRecoveryReady(true)
-      else setError('This password reset link is missing or expired. Request a new reset email and open the newest link in this browser.')
-    }
-    checkRecovery()
-    const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return
-      if (event === 'PASSWORD_RECOVERY' || session) { setRecoveryReady(true); setError('') }
-    })
-    return () => { mounted = false; subscription.unsubscribe() }
-  }, [])

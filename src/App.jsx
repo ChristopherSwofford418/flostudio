@@ -20,26 +20,42 @@ import Experiments from './pages/Experiments.jsx'
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [bootMessage, setBootMessage] = useState('Restoring your secure workspace…')
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session || null)
-      setLoading(false)
-    }).catch(() => {
-      setSession(null)
-      setLoading(false)
-    })
+    let active = true
+    const restoreSession = async () => {
+      try {
+        const result = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise((_, reject) => window.setTimeout(() => reject(new Error('session_restore_timeout')), 3500)),
+        ])
+        if (!active) return
+        setSession(result?.data?.session || null)
+      } catch (error) {
+        if (!active) return
+        console.warn('FloStudio session restore fell back to sign-in.', error)
+        setSession(null)
+        setBootMessage('Taking you to secure sign-in…')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    restoreSession()
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return
       setSession(nextSession || null)
       setLoading(false)
     })
-    return () => subscription.unsubscribe()
+    return () => { active = false; subscription.unsubscribe() }
   }, [])
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#080e1a' }}>
-      <div style={{ width: 32, height: 32, border: '3px solid rgba(255,255,255,0.1)', borderTop: '3px solid #6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    <div style={{ display: 'flex', flexDirection:'column', gap:16, alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'radial-gradient(circle at 70% 12%,rgba(125,89,255,.55),transparent 24rem),linear-gradient(135deg,#060518,#110936 55%,#29114b)', color:'#fff', fontFamily:'Inter, sans-serif' }}>
+      <div style={{ width: 34, height: 34, border: '3px solid rgba(255,255,255,0.16)', borderTop: '3px solid #f472b6', borderRadius: '50%', animation: 'flo-spin 0.8s linear infinite' }} />
+      <strong style={{ fontSize:16 }}>FloStudio</strong>
+      <span style={{ color:'rgba(255,255,255,.65)', fontSize:13 }}>{bootMessage}</span>
+      <style>{`@keyframes flo-spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 
@@ -63,6 +79,7 @@ export default function App() {
         <Route path="/accounts" element={session ? <Accounts /> : <Navigate to="/auth" />} />
         <Route path="/approve" element={session ? <Approve /> : <Navigate to="/auth" />} />
         <Route path="/dashboard" element={session ? <Dashboard /> : <Navigate to="/auth" />} />
+        <Route path="*" element={<Navigate to={session ? '/portfolio' : '/auth'} replace />} />
       </Routes>
     </WorkspaceProvider>
   )

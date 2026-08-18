@@ -72,3 +72,5 @@
 - [ ] Replace social-publishing placeholders with provider-approved OAuth, token storage, media-hosting validation, rate-limit awareness, and truthful status reporting.
 - [x] Audit and repair FloStudio sign-in, sign-up, session restoration, password reset, protected-route redirects, and personal-workspace provisioning.
 - [x] Add clear, actionable authentication error states and ensure a failed sign-in never leaves the product on a blank screen.
+- [x] Diagnose and eliminate the production blank-screen regression affecting FloStudio's homepage and authenticated routes.
+- [x] Add a resilient application error boundary and route-safe fallback so future runtime failures do not leave customers on an empty screen.

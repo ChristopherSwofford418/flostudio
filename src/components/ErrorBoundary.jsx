@@ -26,8 +26,8 @@ export default class ErrorBoundary extends React.Component {
             <div style={{ background: '#f1f5f9', borderRadius: 12, padding: 12, fontSize: 11.5, fontFamily: 'monospace', color: '#e11d48', marginBottom: 20, wordBreak: 'break-all' }}>
               {this.state.error?.message || 'Unknown runtime error'}
             </div>
-            <button onClick={() => window.location.href = '/agent'} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg,#6366f1,#ec4899)', color: '#fff', border: 0, fontWeight: 800, fontSize: 13.5, cursor: 'pointer', boxShadow: '0 10px 20px rgba(99,102,241,0.25)' }}>
-              Return to Agent Studio →
+            <button onClick={() => window.location.href = '/auth'} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg,#6366f1,#ec4899)', color: '#fff', border: 0, fontWeight: 800, fontSize: 13.5, cursor: 'pointer', boxShadow: '0 10px 20px rgba(99,102,241,0.25)' }}>
+              Return to secure sign-in →
             </button>
           </div>
         </div>
