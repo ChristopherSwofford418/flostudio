@@ -83,3 +83,6 @@
 - [x] Audit Arcads’ media-first creative-production workflow and identify transferable product patterns for FloStudio.
 - [x] Rebuild FloStudio’s primary creative workflow around real media, creator formats, ad scripts, and render-ready production controls.
 - [x] Validate and deploy the Arcads-informed, non-template FloStudio studio experience.
+- [ ] Audit FloStudio’s image-generation path and remove the empty/static production-desk experience.
+- [ ] Add product-aware AI image concepts, changing creative results, and image-result interactions to the Portfolio Ad Room.
+- [ ] Validate and deploy dynamic AI-image output for FloStudio production.

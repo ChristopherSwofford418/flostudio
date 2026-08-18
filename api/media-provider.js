@@ -10,6 +10,12 @@ function providerError(message) {
   return error
 }
 
+function dataUrlToBlob(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:([^;,]+);base64,(.+)$/)
+  if (!match) return null
+  return new Blob([Buffer.from(match[2], 'base64')], { type:match[1] })
+}
+
 export function resolveVideoProvider() {
   const configured = process.env.FLOSTUDIO_VIDEO_PROVIDER || 'openai_sora'
   const apiKey = process.env.OPENAI_API_KEY
@@ -60,14 +66,27 @@ export function resolveImageProvider() {
 
   return {
     id:'openai_gpt_image',
-    async create({ prompt, size }) {
-      const response = await fetch('https://api.openai.com/v1/images/generations', {
-        method:'POST',
-        headers:{ ...authorizationHeader(apiKey), 'Content-Type':'application/json' },
-        body:JSON.stringify({ model:'gpt-image-2', prompt, n:1, size, quality:'low', response_format:'b64_json' }),
-      })
+    async create({ prompt, size, referenceImage = null }) {
+      const referenceBlob = dataUrlToBlob(referenceImage)
+      const endpoint = referenceBlob ? 'https://api.openai.com/v1/images/edits' : 'https://api.openai.com/v1/images/generations'
+      let response
+      if (referenceBlob) {
+        const form = new FormData()
+        form.append('model', 'gpt-image-2')
+        form.append('prompt', prompt)
+        form.append('image', referenceBlob, 'flostudio-product-reference.png')
+        form.append('size', size)
+        form.append('quality', 'low')
+        response = await fetch(endpoint, { method:'POST', headers:authorizationHeader(apiKey), body:form })
+      } else {
+        response = await fetch(endpoint, {
+          method:'POST',
+          headers:{ ...authorizationHeader(apiKey), 'Content-Type':'application/json' },
+          body:JSON.stringify({ model:'gpt-image-2', prompt, n:1, size, quality:'low', response_format:'b64_json' }),
+        })
+      }
       const payload = await response.json()
-      if (!response.ok) throw new Error(payload?.error?.message || 'Image creative could not be generated.')
+      if (!response.ok) throw new Error(payload?.error?.message || 'Image creative could not be generated. Your product reference was not replaced with a template.')
       const output = payload.data?.[0]?.b64_json ? `data:image/png;base64,${payload.data[0].b64_json}` : payload.data?.[0]?.url
       if (!output) throw new Error('The image provider returned no creative output.')
       return output
