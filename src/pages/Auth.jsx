@@ -11,95 +11,52 @@ export default function Auth() {
   const [message, setMessage] = useState('')
   const navigate = useNavigate()
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setMessage('')
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setLoading(true); setError(''); setMessage('')
     try {
       if (mode === 'forgot') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`
-        })
-        if (error) setError(error.message)
-        else setMessage('Password reset email sent! Check your inbox.')
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` })
+        if (resetError) setError(resetError.message)
+        else setMessage('Password reset email sent. Open the newest email in this browser to continue.')
       } else {
-        const { data, error } = mode === 'signup'
+        const { data, error: authError } = mode === 'signup'
           ? await supabase.auth.signUp({ email, password })
           : await supabase.auth.signInWithPassword({ email, password })
-        if (error) setError(error.message)
+        if (authError) setError(authError.message)
         else if (data?.session) navigate('/portfolio', { replace:true })
-        else if (mode === 'signup') setError('Your Supabase project currently requires email confirmation. Disable Confirm email in Supabase Auth settings to enable immediate FloStudio access.')
+        else if (mode === 'signup') setError('This workspace requires an email-confirmation setting change before new accounts can enter immediately.')
       }
-    } catch (e) {
-      setError(e.message)
-    }
+    } catch (requestError) { setError(requestError.message) }
     finally { setLoading(false) }
   }
 
+  const title = mode === 'signin' ? 'Enter the ledger.' : mode === 'signup' ? 'Open a workspace.' : 'Recover access.'
+  const helper = mode === 'signin' ? 'A private operating system for portfolio-scale creative work.' : mode === 'signup' ? 'Create a private workspace for the products you own.' : 'We will send a secure recovery route to your inbox.'
+
   return (
-    <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at 76% 12%,rgba(125,89,255,.65),transparent 24rem),radial-gradient(circle at 15% 84%,rgba(255,95,150,.25),transparent 30rem),linear-gradient(135deg,#060518,#110936 55%,#29114b)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, position:'relative', overflow:'hidden' }}>
-      <div style={{ width: '100%', maxWidth: 420 }}>
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div style={{ width: 56, height: 56, background: 'linear-gradient(135deg, #ff789d, #896bff 55%,#54e0cd)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight:900, color:'#fff', margin: '0 auto 16px', boxShadow:'0 14px 30px rgba(137,107,255,.35)' }}>F</div>
-          <h1 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 4 }}>FloStudio</h1>
-          <p style={{ color: 'rgba(226,220,255,.62)', fontSize: 15 }}>AI Social Media Scheduler</p>
-        </div>
-
-        <div style={{ background: 'linear-gradient(145deg,rgba(38,29,92,.88),rgba(13,10,42,.88))', borderRadius: 24, padding: 32, border: '1px solid rgba(255,255,255,.14)', boxShadow:'0 28px 70px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.1)', backdropFilter:'blur(20px)' }}>
-          <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 700, marginBottom: 24 }}>
-            {mode === 'signin' ? 'Welcome back' : mode === 'signup' ? 'Create your account' : 'Reset your password'}
-          </h2>
-
-          {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '10px 14px', color: '#f87171', fontSize: 14, marginBottom: 16 }}>{error}</div>}
-          {message && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 10, padding: '10px 14px', color: '#4ade80', fontSize: 14, marginBottom: 16 }}>{message}</div>}
-
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ color: 'rgba(230,225,255,.7)', fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 6 }}>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                style={{ width: '100%', background: 'rgba(3,2,18,.38)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
-                placeholder="you@company.com" />
-            </div>
-            {mode !== 'forgot' && (
-              <div style={{ marginBottom: 8 }}>
-                <label style={{ color: 'rgba(230,225,255,.7)', fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 6 }}>Password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-                  style={{ width: '100%', background: 'rgba(3,2,18,.38)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
-                  placeholder="••••••••" />
-              </div>
-            )}
-            {mode === 'signin' && (
-              <div style={{ textAlign: 'right', marginBottom: 16 }}>
-                <button type="button" onClick={() => { setMode('forgot'); setError(''); setMessage('') }}
-                  style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 13, cursor: 'pointer', padding: 0 }}>
-                  Forgot password?
-                </button>
-              </div>
-            )}
-            {mode !== 'signin' && <div style={{ marginBottom: 20 }} />}
-            <button type="submit" disabled={loading}
-              style={{ width: '100%', background: 'linear-gradient(135deg,#ff6198,#7b61ff)', color: '#fff', border: 'none', borderRadius: 12, padding: '13px', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: loading ? 0.7 : 1, boxShadow:'0 10px 22px rgba(123,97,255,.28)' }}>
-              {loading ? 'Please wait...' : mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Email'}
-            </button>
-          </form>
-
-          <div style={{ textAlign: 'center', marginTop: 20 }}>
-            {mode === 'forgot' ? (
-              <button onClick={() => { setMode('signin'); setError(''); setMessage('') }}
-                style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 14, cursor: 'pointer' }}>
-                Back to Sign In
-              </button>
-            ) : (
-              <button onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setMessage('') }}
-                style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 14, cursor: 'pointer' }}>
-                {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <main className="auth-ledger">
+      <div className="auth-ledger__measure" aria-hidden="true">PORTFOLIO MARKETING OS / SIGNAL LEDGER</div>
+      <section className="auth-ledger__panel">
+        <header className="auth-ledger__brand">
+          <div className="auth-ledger__mark">F</div>
+          <div><div className="auth-ledger__eyebrow">FLOSTUDIO / SIGNAL LEDGER</div><h1>FloStudio</h1></div>
+        </header>
+        <div className="auth-ledger__intro"><span className="signal-stamp">PRIVATE WORKSPACE</span><h2>{title}</h2><p>{helper}</p></div>
+        {error && <div className="auth-ledger__notice auth-ledger__notice--error">{error}</div>}
+        {message && <div className="auth-ledger__notice auth-ledger__notice--success">{message}</div>}
+        <form onSubmit={handleSubmit} className="auth-ledger__form">
+          <label>Email<input className="auth-ledger__input" type="email" value={email} onChange={event => setEmail(event.target.value)} required placeholder="you@company.com" /></label>
+          {mode !== 'forgot' && <label>Password<input className="auth-ledger__input" type="password" value={password} onChange={event => setPassword(event.target.value)} required placeholder="••••••••" /></label>}
+          {mode === 'signin' && <button className="auth-ledger__link" type="button" onClick={() => { setMode('forgot'); setError(''); setMessage('') }}>Forgot password?</button>}
+          <button className="auth-ledger__submit" type="submit" disabled={loading}>{loading ? 'Checking workspace…' : mode === 'signin' ? 'Enter FloStudio' : mode === 'signup' ? 'Create workspace' : 'Send recovery email'}</button>
+        </form>
+        <footer className="auth-ledger__footer">
+          {mode === 'forgot'
+            ? <button className="auth-ledger__link" onClick={() => { setMode('signin'); setError(''); setMessage('') }}>Return to sign in</button>
+            : <button className="auth-ledger__link" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setMessage('') }}>{mode === 'signin' ? 'Create a new workspace' : 'I already have a workspace'}</button>}
+        </footer>
+      </section>
+    </main>
   )
 }

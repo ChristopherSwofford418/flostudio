@@ -74,3 +74,9 @@
 - [x] Add clear, actionable authentication error states and ensure a failed sign-in never leaves the product on a blank screen.
 - [x] Diagnose and eliminate the production blank-screen regression affecting FloStudio's homepage and authenticated routes.
 - [x] Add a resilient application error boundary and route-safe fallback so future runtime failures do not leave customers on an empty screen.
+- [x] Provision a dedicated full-access Supabase test account and workspace for end-to-end FloStudio validation.
+- [x] Validate production sign-in and Portfolio access with the dedicated test account.
+- [ ] Research a distinctive visual-identity direction for FloStudio that avoids generic AI-tool templates.
+- [ ] Redesign FloStudio’s cross-product visual system and high-traffic workflows around the new unique direction.
+- [ ] Validate and deploy the differentiated FloStudio visual redesign to production without reintroducing routing failures.
+- [x] Repair the Campaign Engine `number is not defined` runtime failure discovered during redesigned-flow validation.
