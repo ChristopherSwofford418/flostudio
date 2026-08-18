@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../supabase'
+import { useNavigate } from 'react-router-dom'
 
 export default function Auth() {
   const [mode, setMode] = useState('signin')
@@ -8,6 +9,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -22,15 +24,17 @@ export default function Auth() {
         if (error) setError(error.message)
         else setMessage('Password reset email sent! Check your inbox.')
       } else {
-        const { error } = mode === 'signup'
+        const { data, error } = mode === 'signup'
           ? await supabase.auth.signUp({ email, password })
           : await supabase.auth.signInWithPassword({ email, password })
         if (error) setError(error.message)
+        else if (data?.session) navigate('/portfolio', { replace:true })
+        else if (mode === 'signup') setError('Your Supabase project currently requires email confirmation. Disable Confirm email in Supabase Auth settings to enable immediate FloStudio access.')
       }
     } catch (e) {
       setError(e.message)
     }
-    setLoading(false)
+    finally { setLoading(false) }
   }
 
   return (

@@ -35,10 +35,15 @@ export async function fetchUserTokens(userId) {
     .eq('user_id', userId)
     .single()
   
-  if (error || !data) {
-    // Initialize default row if missing
-    await supabase.from('user_tokens').insert([{ user_id: userId, balance: 50, tier: 'free' }])
-    return { balance: 50, tier: 'free' }
+  if (error && error.code !== 'PGRST116') throw error
+  if (!data) {
+    const { data:created, error:insertError } = await supabase
+      .from('user_tokens')
+      .insert([{ user_id: userId, balance: 50, tier: 'free' }])
+      .select('balance, tier')
+      .single()
+    if (insertError) throw insertError
+    return created
   }
   return data
 }

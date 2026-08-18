@@ -13,6 +13,8 @@ export function WorkspaceProvider({ children }) {
   const [tier, setTier] = useState('free')
   const [showTopUp, setShowTopUp] = useState(false)
   const [notification, setNotification] = useState(null)
+  const [workspaceLoading, setWorkspaceLoading] = useState(true)
+  const [workspaceError, setWorkspaceError] = useState('')
 
   const refreshApps = useCallback(async (preferredId = null) => {
     if (!workspaceId) return []
@@ -22,26 +24,55 @@ export function WorkspaceProvider({ children }) {
     return nextApps
   }, [workspaceId])
 
+  const clearWorkspace = useCallback(() => {
+    setApps([])
+    setActiveApp(null)
+    setWorkspaceId(null)
+    setTokens(50)
+    setTier('free')
+    setWorkspaceError('')
+    setWorkspaceLoading(false)
+  }, [])
+
+  const initializeWorkspace = useCallback(async user => {
+    if (!user) { clearWorkspace(); return }
+    setWorkspaceLoading(true)
+    setWorkspaceError('')
+    try {
+      const workspace = await ensurePersonalWorkspace()
+      const [tokenState, nextApps] = await Promise.all([fetchUserTokens(user.id), listPortfolioApps(workspace)])
+      setWorkspaceId(workspace)
+      setTokens(tokenState.balance)
+      setTier(tokenState.tier)
+      setApps(nextApps)
+      setActiveApp(current => nextApps.find(app => app.id === current?.id) || nextApps[0] || null)
+    } catch (error) {
+      console.error('FloStudio workspace initialization failed', error)
+      setWorkspaceError(error?.message || 'We could not finish setting up your workspace. Refresh or sign in again.')
+    } finally {
+      setWorkspaceLoading(false)
+    }
+  }, [clearWorkspace])
+
   useEffect(() => {
     let mounted = true
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!mounted || !user) return
-      try {
-        const [workspace, tokenState] = await Promise.all([ensurePersonalWorkspace(), fetchUserTokens(user.id)])
+    const boot = async () => {
+      const { data:{ user } } = await supabase.auth.getUser()
+      if (mounted) await initializeWorkspace(user)
+    }
+    boot()
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return
+      // Supabase auth callbacks should remain synchronous; defer database work so
+      // workspace provisioning cannot block the auth client’s session transition.
+      window.setTimeout(() => {
         if (!mounted) return
-        setWorkspaceId(workspace)
-        setTokens(tokenState.balance)
-        setTier(tokenState.tier)
-        const nextApps = await listPortfolioApps(workspace)
-        if (!mounted) return
-        setApps(nextApps)
-        setActiveApp(nextApps[0] || null)
-      } catch (error) {
-        console.error('FloStudio workspace initialization failed', error)
-      }
+        if (session?.user) initializeWorkspace(session.user)
+        else clearWorkspace()
+      }, 0)
     })
-    return () => { mounted = false }
-  }, [])
+    return () => { mounted = false; subscription.unsubscribe() }
+  }, [clearWorkspace, initializeWorkspace])
 
   const notify = (msg) => {
     setNotification(msg)
@@ -79,7 +110,7 @@ export function WorkspaceProvider({ children }) {
   }
 
   return (
-    <WorkspaceContext.Provider value={{ apps, activeApp, setActiveApp, workspaceId, refreshApps, tokens, tier, useTokens, addTokens, showTopUp, setShowTopUp }}>
+      <WorkspaceContext.Provider value={{ apps, activeApp, setActiveApp, workspaceId, refreshApps, workspaceLoading, workspaceError, initializeWorkspace, tokens, tier, useTokens, addTokens, showTopUp, setShowTopUp }}>
       {children}
       {notification && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(99,102,241,0.3)', color: '#f1f5f9', padding: '12px 20px', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(10px)' }}>

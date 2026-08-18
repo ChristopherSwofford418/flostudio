@@ -23,11 +23,15 @@ export default function App() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
+      setSession(session || null)
+      setLoading(false)
+    }).catch(() => {
+      setSession(null)
       setLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession || null)
+      setLoading(false)
     })
     return () => subscription.unsubscribe()
   }, [])

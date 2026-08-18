@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../supabase'
 import { useNavigate } from 'react-router-dom'
 
@@ -8,12 +8,14 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  const [recoveryReady, setRecoveryReady] = useState(false)
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (password !== confirm) { setError('Passwords do not match'); return }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (!recoveryReady) { setError('Open a valid password recovery link before updating your password.'); return }
     setLoading(true)
     setError('')
     const { error } = await supabase.auth.updateUser({ password })
@@ -59,9 +61,9 @@ export default function ResetPassword() {
                     style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
                     placeholder="••••••••" />
                 </div>
-                <button type="submit" disabled={loading}
+                <button type="submit" disabled={loading || !recoveryReady}
                   style={{ width: '100%', background: 'linear-gradient(135deg,#ff6198,#7b61ff)', color: '#fff', border: 'none', borderRadius: 12, padding: '13px', fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
-                  {loading ? 'Updating...' : 'Update Password'}
+                  {loading ? 'Updating...' : recoveryReady ? 'Update Password' : 'Waiting for recovery link'}
                 </button>
               </form>
             </>
@@ -71,3 +73,18 @@ export default function ResetPassword() {
     </div>
   )
 }
+  useEffect(() => {
+    let mounted = true
+    const checkRecovery = async () => {
+      const { data:{ session } } = await supabase.auth.getSession()
+      if (!mounted) return
+      if (session) setRecoveryReady(true)
+      else setError('This password reset link is missing or expired. Request a new reset email and open the newest link in this browser.')
+    }
+    checkRecovery()
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return
+      if (event === 'PASSWORD_RECOVERY' || session) { setRecoveryReady(true); setError('') }
+    })
+    return () => { mounted = false; subscription.unsubscribe() }
+  }, [])

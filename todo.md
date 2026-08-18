@@ -70,3 +70,5 @@
 - [x] Build a continuous experiment workspace that turns hypotheses into ad and store-listing variants, collects real outcomes, and promotes evidence into Creative Memory.
 - [ ] Add a per-app SEO intelligence workflow that uses Search Console data and people-first content safeguards rather than volume-only AI content generation.
 - [ ] Replace social-publishing placeholders with provider-approved OAuth, token storage, media-hosting validation, rate-limit awareness, and truthful status reporting.
+- [x] Audit and repair FloStudio sign-in, sign-up, session restoration, password reset, protected-route redirects, and personal-workspace provisioning.
+- [x] Add clear, actionable authentication error states and ensure a failed sign-in never leaves the product on a blank screen.
