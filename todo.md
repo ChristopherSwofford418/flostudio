@@ -86,3 +86,4 @@
 - [ ] Audit FloStudio’s image-generation path and remove the empty/static production-desk experience.
 - [ ] Add product-aware AI image concepts, changing creative results, and image-result interactions to the Portfolio Ad Room.
 - [ ] Validate and deploy dynamic AI-image output for FloStudio production.
+- [ ] Remove the unsupported GPT Image request parameter and restore test tokens when an AI-image render is rejected before output creation.

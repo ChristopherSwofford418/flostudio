@@ -68,6 +68,23 @@ export async function consumeTokens(userId, cost, actionName) {
   return newBalance
 }
 
+// Restore credits only when FloStudio failed before delivering a usable output.
+export async function refundTokens(userId, amount, actionName) {
+  const credit = Math.max(0, Number(amount) || 0)
+  if (!credit) return (await fetchUserTokens(userId)).balance
+  const current = await fetchUserTokens(userId)
+  const newBalance = current.balance + credit
+  const { error } = await supabase
+    .from('user_tokens')
+    .update({ balance: newBalance })
+    .eq('user_id', userId)
+  if (error) throw error
+  await supabase
+    .from('token_transactions')
+    .insert([{ user_id: userId, amount: credit, action_type: 'generation_refund', description: `Restored after unsuccessful ${actionName}` }])
+  return newBalance
+}
+
 // Simulate Stripe Checkout redirection for web
 export async function initiateStripeCheckout(tierId, price, tokens) {
   // In production, this calls backend to create Stripe Checkout Session.

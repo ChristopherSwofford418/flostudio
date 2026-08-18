@@ -47,7 +47,7 @@ function AssetVisual({ asset, compact = false }) {
 }
 
 export default function ImageBank() {
-  const { useTokens, activeApp, apps, setActiveApp } = useWorkspace()
+  const { useTokens, refundTokens, activeApp, apps, setActiveApp } = useWorkspace()
   const [activeTab, setActiveTab] = useState('generate')
   const [assets, setAssets] = useState([])
   const [loadingAssets, setLoadingAssets] = useState(true)
@@ -159,10 +159,12 @@ export default function ImageBank() {
   const generateImages = async () => {
     if (!prompt.trim() && !referenceImage) { setError('Describe the creative or upload a product image first.'); return }
     setGenerating(true); setError(''); setGeneratedResults([])
+    let chargedTokens = 0
     try {
       const tokenCost = 10 * variations
       const authorized = await useTokens(tokenCost, `AI image creative set (${variations})`)
       if (!authorized) { setGenerating(false); return }
+      chargedTokens = tokenCost
       const productContext = activeApp ? `Product: ${activeApp.name}. Category: ${activeApp.category || 'not specified'}. Description: ${activeApp.description || 'not specified'}.` : ''
       const brief = `Ad format: ${selectedRunbook.label}. ${prompt || selectedRunbook.prompt} Hook: ${hook || 'derive an honest scroll-stopping hook from the supplied product truth.'} Proof: ${proof || 'use only credible product details and avoid unsupported claims.'} ${productContext} Style: ${selectedStyle?.label || 'Product hero'} — ${selectedStyle?.desc || ''}`
       const nextRound = creativeRound + 1
@@ -173,7 +175,10 @@ export default function ImageBank() {
       setGeneratedResults(saved)
       setCreativeRound(nextRound)
       await loadAssets()
-    } catch (generationError) { setError(generationError.message || 'The creative could not be generated.') }
+    } catch (generationError) {
+      if (chargedTokens) await refundTokens(chargedTokens, 'the AI image render').catch(() => {})
+      setError(generationError.message || 'The creative could not be generated.')
+    }
     setGenerating(false)
   }
 

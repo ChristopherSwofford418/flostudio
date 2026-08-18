@@ -82,7 +82,7 @@ export function resolveImageProvider() {
         response = await fetch(endpoint, {
           method:'POST',
           headers:{ ...authorizationHeader(apiKey), 'Content-Type':'application/json' },
-          body:JSON.stringify({ model:'gpt-image-2', prompt, n:1, size, quality:'low', response_format:'b64_json' }),
+          body:JSON.stringify({ model:'gpt-image-2', prompt, n:1, size, quality:'low' }),
         })
       }
       const payload = await response.json()

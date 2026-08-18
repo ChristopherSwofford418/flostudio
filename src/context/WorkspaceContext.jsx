@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabase'
-import { fetchUserTokens, consumeTokens as backendConsumeTokens } from '../lib/billing'
+import { fetchUserTokens, consumeTokens as backendConsumeTokens, refundTokens as backendRefundTokens } from '../lib/billing'
 import { ensurePersonalWorkspace, listPortfolioApps } from '../lib/portfolio'
 
 const WorkspaceContext = createContext(null)
@@ -103,6 +103,15 @@ export function WorkspaceProvider({ children }) {
     return true
   }
 
+  const refundTokens = async (amount, actionName) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return null
+    const newBalance = await backendRefundTokens(user.id, amount, actionName)
+    setTokens(newBalance)
+    notify(`Restored ${amount} tokens because ${actionName} did not produce an output.`)
+    return newBalance
+  }
+
   const addTokens = (amount) => {
     setTokens(prev => prev + amount)
     setShowTopUp(false)
@@ -110,7 +119,7 @@ export function WorkspaceProvider({ children }) {
   }
 
   return (
-      <WorkspaceContext.Provider value={{ apps, activeApp, setActiveApp, workspaceId, refreshApps, workspaceLoading, workspaceError, initializeWorkspace, tokens, tier, useTokens, addTokens, showTopUp, setShowTopUp }}>
+      <WorkspaceContext.Provider value={{ apps, activeApp, setActiveApp, workspaceId, refreshApps, workspaceLoading, workspaceError, initializeWorkspace, tokens, tier, useTokens, refundTokens, addTokens, showTopUp, setShowTopUp }}>
       {children}
       {notification && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(99,102,241,0.3)', color: '#f1f5f9', padding: '12px 20px', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(10px)' }}>
