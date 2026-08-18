@@ -11,3 +11,7 @@ The Creative Lab and Review Queue routes also render successfully in the authent
 ## Design validation
 
 The updated product does not use the former purple/pink gradient template. The visual language now centers on an ownable **Signal Ledger** system: structural rules, operation codes, a lime signal marker, vermilion creative emphasis, editorial serif moments, and compact mono metadata. Authentication, Portfolio, navigation, Campaign Engine, Creative Memory, and campaign run surfaces participate in the system.
+
+## Production validation
+
+The `main` branch release `7ff50f2` was confirmed live on `https://www.flostudio.io`. Production Portfolio serves the Signal Ledger shell and Portfolio redesign. Production Campaign Engine renders the repaired stage rail, intake workflow, Creative Memory panel, and signal-ledger treatment without the prior `number is not defined` failure.
