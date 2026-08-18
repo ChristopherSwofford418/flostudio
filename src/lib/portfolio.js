@@ -25,9 +25,9 @@ export async function listPortfolioApps(workspaceId) {
   }))
 }
 
-export async function savePortfolioApp({ workspaceId, userId, productId, brandId, name, websiteUrl, description, offerText, audience, category, autopilot, brandDna }) {
+export async function savePortfolioApp({ workspaceId, userId, productId, brandId, name, websiteUrl, description, offerText, audience, category, autopilot, brandDna, sourceFacts }) {
   if (!workspaceId || !userId || !name.trim()) throw new Error('An app name is required.')
-  const facts = { category:category?.trim() || 'Product portfolio', autopilot: autopilot || { enabled:false, cadence:20, platforms:['instagram'], creativeMix:{ image:70, video:30 }, approvalMode:'review' } }
+  const facts = { ...(sourceFacts || {}), category:category?.trim() || 'Product portfolio', autopilot: autopilot || { enabled:false, cadence:20, platforms:['instagram'], creativeMix:{ image:70, video:30 }, approvalMode:'review' } }
   const brandPayload = { name:name.trim(), brand_dna:brandDna || { voice:'', visualDirection:'', proofPoints:'', restrictedClaims:'' }, workspace_id:workspaceId, user_id:userId }
   let brand
   if (brandId) {

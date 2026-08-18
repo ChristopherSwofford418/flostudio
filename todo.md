@@ -52,4 +52,7 @@
 - [x] Build self-serve My Portfolio workspace for tenant-isolated app management.
 - [x] Implement user-owned brand intelligence, monthly autopilot configuration, and secure tenant workspaces.
 - [x] Add one-click monthly autopilot batch content generation across user portfolio apps.
-- [ ] Run production validation and deploy the commercially ready multi-tenant release to www.flostudio.io.
+- [x] Run production validation and deploy the commercially ready multi-tenant release to www.flostudio.io.
+
+- [x] Implement URL-first AI app intake for Apple App Store, Google Play, and web listings in Portfolio.
+- [x] Add 'Learn App with AI' action that auto-populates product name, category, description, offer, audience, and Brand DNA.
