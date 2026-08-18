@@ -80,3 +80,6 @@
 - [x] Redesign FloStudio’s cross-product visual system and high-traffic workflows around the new unique direction.
 - [x] Validate and deploy the differentiated FloStudio visual redesign to production without reintroducing routing failures.
 - [x] Repair the Campaign Engine `number is not defined` runtime failure discovered during redesigned-flow validation.
+- [x] Audit Arcads’ media-first creative-production workflow and identify transferable product patterns for FloStudio.
+- [x] Rebuild FloStudio’s primary creative workflow around real media, creator formats, ad scripts, and render-ready production controls.
+- [ ] Validate and deploy the Arcads-informed, non-template FloStudio studio experience.
