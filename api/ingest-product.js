@@ -72,6 +72,18 @@ const storeKind = candidate => {
   return 'web'
 }
 
+async function readReaderListing(candidate, source = 'Product website') {
+  const readerUrl = `https://r.jina.ai/http://${candidate.hostname}${candidate.pathname}${candidate.search}`
+  const response = await fetchWithTimeout(readerUrl, { headers: { Accept: 'text/plain' } }, 12000)
+  if (!response.ok) return null
+  const markdown = (await response.text()).slice(0, 400000)
+  const title = decode(markdown.match(/^Title:\s*(.+)$/im)?.[1] || '')
+  const headings = [...markdown.matchAll(/^#{1,3}\s+(.+)$/gm)].map(match => decode(match[1])).filter(Boolean).slice(0, 20)
+  const image = markdown.match(/!\[[^\]]*\]\((https?:\/\/[^)]+)\)/)?.[1] || ''
+  const pageText = markdown.replace(/^Title:.*$/gim, '').replace(/^URL Source:.*$/gim, '').replace(/^Markdown Content:\s*/gim, '').replace(/\s+/g, ' ').trim().slice(0, 18000)
+  return { source, name:title, description:pageText.slice(0, 800), category:'', image, siteName:source, storeUrl:candidate.toString(), headings, pageText }
+}
+
 async function readAppleListing(candidate) {
   const appId = candidate.pathname.match(/(?:^|\/)id(\d+)/i)?.[1]
   if (!appId) return null
@@ -101,47 +113,37 @@ async function readAppleListing(candidate) {
 }
 
 async function readGoogleListing(candidate) {
-  const response = await fetchWithTimeout(candidate.toString(), {}, 9000)
-  if (!response.ok) return null
-  const html = (await response.text()).slice(0, 300000)
-  const structured = jsonLd(html)
-  const name = structured.name || meta(html, 'og:title') || meta(html, 'twitter:title') || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || ''
-  const description = structured.description || meta(html, 'og:description') || meta(html, 'description') || ''
-  return {
-    source: 'Google Play',
-    name: decode(name).replace(/\s+- Apps on Google Play$/i, '').trim(),
-    description: decode(description),
-    category: meta(html, 'genre') || structured.applicationCategory || '',
-    image: structured.image || meta(html, 'og:image') || '',
-    siteName: 'Google Play',
-    developer: structured.author?.name || meta(html, 'author') || '',
-    rating: structured.aggregateRating?.ratingValue ? `${structured.aggregateRating.ratingValue}/5` : '',
-    ratingCount: structured.aggregateRating?.ratingCount || 0,
-    price: structured.offers?.price === '0' ? 'Free' : structured.offers?.price || '',
-    storeUrl: candidate.toString(),
-    pageText: stripHtml(html)
+  const googleUrl = new URL(candidate.toString())
+  googleUrl.searchParams.set('hl', 'en')
+  googleUrl.searchParams.set('gl', 'US')
+  const response = await fetchWithTimeout(googleUrl.toString(), {}, 9000)
+  if (response.ok) {
+    const html = (await response.text()).slice(0, 300000)
+    const structured = jsonLd(html)
+    const name = decode(structured.name || meta(html, 'og:title') || meta(html, 'twitter:title') || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '').replace(/\s+- Apps on Google Play$/i, '').trim()
+    const description = decode(structured.description || meta(html, 'og:description') || meta(html, 'description') || '')
+    if (name && name !== 'My App' && description) {
+      return {
+        source: 'Google Play', name, description, category: meta(html, 'genre') || structured.applicationCategory || '', image: structured.image || meta(html, 'og:image') || '', siteName: 'Google Play', developer: structured.author?.name || meta(html, 'author') || '', rating: structured.aggregateRating?.ratingValue ? `${structured.aggregateRating.ratingValue}/5` : '', ratingCount: structured.aggregateRating?.ratingCount || 0, price: structured.offers?.price === '0' ? 'Free' : structured.offers?.price || '', storeUrl: candidate.toString(), pageText: stripHtml(html)
+      }
+    }
   }
+  return readReaderListing(candidate, 'Google Play')
 }
 
 async function readWebListing(candidate) {
   const response = await fetchWithTimeout(candidate.toString(), {}, 10000)
-  if (!response.ok) return null
-  const contentType = response.headers.get('content-type') || ''
-  if (!contentType.includes('text/html')) return null
-  const html = (await response.text()).slice(0, 350000)
-  const structured = jsonLd(html)
-  const headings = [...html.matchAll(/<h[123][^>]*>([\s\S]*?)<\/h[123]>/gi)].map(m => decode(m[1].replace(/<[^>]+>/g, ''))).filter(Boolean).slice(0, 15)
-  return {
-    source: 'Product website',
-    name: structured.name || meta(html, 'og:title') || meta(html, 'twitter:title') || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '',
-    description: structured.description || meta(html, 'og:description') || meta(html, 'description') || meta(html, 'twitter:description') || '',
-    category: structured.applicationCategory || meta(html, 'genre') || '',
-    image: structured.image || meta(html, 'og:image') || '',
-    siteName: meta(html, 'og:site_name') || candidate.hostname,
-    storeUrl: candidate.toString(),
-    headings,
-    pageText: stripHtml(html)
+  if (response.ok && (response.headers.get('content-type') || '').includes('text/html')) {
+    const html = (await response.text()).slice(0, 350000)
+    const structured = jsonLd(html)
+    const headings = [...html.matchAll(/<h[123][^>]*>([\s\S]*?)<\/h[123]>/gi)].map(m => decode(m[1].replace(/<[^>]+>/g, ''))).filter(Boolean).slice(0, 15)
+    const name = decode(structured.name || meta(html, 'og:title') || meta(html, 'twitter:title') || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '')
+    const description = decode(structured.description || meta(html, 'og:description') || meta(html, 'description') || meta(html, 'twitter:description') || '')
+    if (name || description || headings.length) {
+      return { source:'Product website', name, description, category:structured.applicationCategory || meta(html, 'genre') || '', image:structured.image || meta(html, 'og:image') || '', siteName:meta(html, 'og:site_name') || candidate.hostname, storeUrl:candidate.toString(), headings, pageText:stripHtml(html) }
+    }
   }
+  return readReaderListing(candidate, 'Product website')
 }
 
 export default async function handler(req, res) {
@@ -157,7 +159,13 @@ export default async function handler(req, res) {
     }
 
     const kind = storeKind(candidate)
-    const listing = kind === 'apple' ? await readAppleListing(candidate) : kind === 'google' ? await readGoogleListing(candidate) : await readWebListing(candidate)
+    let listing = null
+    try {
+      listing = kind === 'apple' ? await readAppleListing(candidate) : kind === 'google' ? await readGoogleListing(candidate) : await readWebListing(candidate)
+    } catch {
+      listing = null
+    }
+    if (!listing && kind === 'web') listing = await readReaderListing(candidate, 'Product website')
     if (!listing) return res.status(422).json({ error: 'FloStudio could not read that link. Check the URL and try again, or fill the fields manually.' })
 
     const sourceText = [

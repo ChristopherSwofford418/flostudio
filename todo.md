@@ -56,3 +56,5 @@
 
 - [x] Implement URL-first AI app intake for Apple App Store, Google Play, and web listings in Portfolio.
 - [x] Add 'Learn App with AI' action that auto-populates product name, category, description, offer, audience, and Brand DNA.
+
+- [x] Confirm FloStudio repository (`ChristopherSwofford418/flostudio`) and Vercel project (`flostudio-web` targeting www.flostudio.io) without touching Syllabus Agent.
