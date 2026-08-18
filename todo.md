@@ -42,3 +42,14 @@
 
 - [ ] Correct project tooling so FloStudio checkpoints and validation target /home/ubuntu/flostudio and flostudio-web, never Auto Wizard/Syllabus Agent.
 - [ ] Create a valid FloStudio project checkpoint after repository and production state are confirmed.
+
+- [x] Remove any hard-coded portfolio, app, brand, or campaign data from customer-facing flows.
+- [x] Add a self-serve Portfolio workspace for users to create, edit, archive, and switch their own apps.
+- [x] Add per-portfolio monthly autopilot settings for cadence, platforms, creative mix, and approval mode.
+- [x] Verify clean tenant isolation for a newly registered user before production deployment.
+
+- [x] Remove all hard-coded internal portfolio data from customer-facing routes.
+- [x] Build self-serve My Portfolio workspace for tenant-isolated app management.
+- [x] Implement user-owned brand intelligence, monthly autopilot configuration, and secure tenant workspaces.
+- [x] Add one-click monthly autopilot batch content generation across user portfolio apps.
+- [ ] Run production validation and deploy the commercially ready multi-tenant release to www.flostudio.io.

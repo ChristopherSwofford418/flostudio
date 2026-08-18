@@ -1,6 +1,7 @@
 import { supabase } from '../supabase'
 import { createMediaAsset } from './mediaAssets'
 import { recordMemoryEvent } from './creativeMemory'
+import { ensurePersonalWorkspace } from './portfolio'
 
 const platformTimes = { instagram:'09:00', linkedin:'08:00', facebook:'13:00', tiktok:'19:00', twitter:'12:00' }
 
@@ -17,27 +18,28 @@ export async function loadCampaignWorkspace(userId) {
 }
 
 export async function saveBrandAndProduct({ userId, brandName, websiteUrl, productName, description, offerText, audience, brandDna, sourceFacts }) {
-  const existingBrand = await supabase.from('brands').select('*').eq('user_id', userId).eq('name', brandName).maybeSingle()
+  const workspaceId = await ensurePersonalWorkspace()
+  const existingBrand = await supabase.from('brands').select('*').eq('user_id', userId).eq('workspace_id', workspaceId).eq('name', brandName).maybeSingle()
   let brand
   if (existingBrand.data) {
-    const update = await supabase.from('brands').update({ website_url:websiteUrl || null, brand_dna:brandDna, updated_at:new Date().toISOString() }).eq('id', existingBrand.data.id).select().single()
+    const update = await supabase.from('brands').update({ workspace_id:workspaceId, website_url:websiteUrl || null, brand_dna:brandDna, updated_at:new Date().toISOString() }).eq('id', existingBrand.data.id).select().single()
     if (update.error) throw update.error
     brand = update.data
   } else {
-    const insert = await supabase.from('brands').insert([{ user_id:userId, name:brandName, website_url:websiteUrl || null, brand_dna:brandDna }]).select().single()
+    const insert = await supabase.from('brands').insert([{ user_id:userId, workspace_id:workspaceId, name:brandName, website_url:websiteUrl || null, brand_dna:brandDna }]).select().single()
     if (insert.error) throw insert.error
     brand = insert.data
   }
 
-  const existingProduct = await supabase.from('products').select('*').eq('user_id', userId).eq('brand_id', brand.id).eq('name', productName).maybeSingle()
-  const productPayload = { brand_id:brand.id, product_url:websiteUrl || null, description:description || null, offer_text:offerText || null, audience:audience || null, source_facts:sourceFacts || {}, updated_at:new Date().toISOString() }
+  const existingProduct = await supabase.from('products').select('*').eq('user_id', userId).eq('workspace_id', workspaceId).eq('brand_id', brand.id).eq('name', productName).maybeSingle()
+  const productPayload = { workspace_id:workspaceId, brand_id:brand.id, product_url:websiteUrl || null, description:description || null, offer_text:offerText || null, audience:audience || null, source_facts:sourceFacts || {}, updated_at:new Date().toISOString() }
   let product
   if (existingProduct.data) {
     const update = await supabase.from('products').update(productPayload).eq('id', existingProduct.data.id).select().single()
     if (update.error) throw update.error
     product = update.data
   } else {
-    const insert = await supabase.from('products').insert([{ user_id:userId, name:productName, ...productPayload }]).select().single()
+    const insert = await supabase.from('products').insert([{ user_id:userId, workspace_id:workspaceId, name:productName, ...productPayload }]).select().single()
     if (insert.error) throw insert.error
     product = insert.data
   }
@@ -49,7 +51,8 @@ export async function saveBrandAndProduct({ userId, brandName, websiteUrl, produ
 }
 
 export async function createCampaign({ userId, brand, product, name, objective, audience, offerText, platforms, brief }) {
-  const response = await supabase.from('campaigns').insert([{ user_id:userId, brand_id:brand.id, product_id:product.id, name, objective, audience, offer_text:offerText, platforms, brief, status:'concepting' }]).select().single()
+  const workspaceId = brand.workspace_id || product.workspace_id || await ensurePersonalWorkspace()
+  const response = await supabase.from('campaigns').insert([{ user_id:userId, workspace_id:workspaceId, brand_id:brand.id, product_id:product.id, name, objective, audience, offer_text:offerText, platforms, brief, status:'concepting' }]).select().single()
   if (response.error) throw response.error
   await recordMemoryEvent({ userId, brandId:brand.id, productId:product.id, campaignId:response.data.id, eventType:'campaign_created', attributes:{ objective, platforms, offerText } })
   return response.data
@@ -75,6 +78,7 @@ export async function selectCampaignConcept(campaignId, conceptId) {
 }
 
 export async function createCampaignPosts({ userId, campaignId, concept, platforms }) {
+  const workspaceId = concept.workspace_id || await ensurePersonalWorkspace()
   const now = new Date()
   const rows = platforms.map((platform, index) => {
     const scheduled = new Date(now)
@@ -82,7 +86,7 @@ export async function createCampaignPosts({ userId, campaignId, concept, platfor
     const [hour, minute] = (platformTimes[platform] || '10:00').split(':').map(Number)
     scheduled.setHours(hour, minute, 0, 0)
     const content = `${concept.hook}\n\n${concept.proof}\n\n${concept.cta}`
-    return { user_id:userId, campaign_id:campaignId, platform, content, status:'pending', scheduled_at:scheduled.toISOString() }
+    return { user_id:userId, workspace_id:workspaceId, campaign_id:campaignId, platform, content, status:'pending', scheduled_at:scheduled.toISOString() }
   })
   const response = await supabase.from('campaign_posts').insert(rows).select()
   if (response.error) throw response.error
@@ -92,8 +96,10 @@ export async function createCampaignPosts({ userId, campaignId, concept, platfor
 }
 
 export async function generateCampaignVariant({ userId, campaign, concept, post, variation }) {
-  const prompt = `Create a premium conversion-focused ${post.platform} campaign creative. Campaign: ${campaign.name}. Concept: ${concept.title}. Angle: ${concept.angle}. Hook: ${concept.hook}. Proof: ${concept.proof}. CTA: ${concept.cta}. Visual direction: ${concept.visual_recipe?.direction || 'editorial commercial product story'}. Make the product benefit instantly clear; use sophisticated modern ad art direction, deliberate lighting, and a strong visual hierarchy. Do not use unreadable generated text, public figures, competitor marks, or copyrighted characters.`
-  const jobResult = await supabase.from('render_jobs').insert([{ user_id:userId, campaign_id:campaign.id, concept_id:concept.id, provider:'openai_gpt_image', job_kind:'image', status:'queued', request_spec:{ prompt, variation, platform:post.platform, ratio:'4:5' }, quote_tokens:10 }]).select().single()
+  const workspaceId = campaign.workspace_id || await ensurePersonalWorkspace()
+  const prompt =
+ `Create a premium conversion-focused ${post.platform} campaign creative. Campaign: ${campaign.name}. Concept: ${concept.title}. Angle: ${concept.angle}. Hook: ${concept.hook}. Proof: ${concept.proof}. CTA: ${concept.cta}. Visual direction: ${concept.visual_recipe?.direction || 'editorial commercial product story'}. Make the product benefit instantly clear; use sophisticated modern ad art direction, deliberate lighting, and a strong visual hierarchy. Do not use unreadable generated text, public figures, competitor marks, or copyrighted characters.`
+  const jobResult = await supabase.from('render_jobs').insert([{ user_id:userId, workspace_id:workspaceId, campaign_id:campaign.id, concept_id:concept.id, provider:'openai_gpt_image', job_kind:'image', status:'queued', request_spec:{ prompt, variation, platform:post.platform, ratio:'4:5' }, quote_tokens:10 }]).select().single()
   if (jobResult.error) throw jobResult.error
   const job = jobResult.data
   try {
@@ -109,8 +115,8 @@ export async function generateCampaignVariant({ userId, campaign, concept, post,
     const { error: uploadError } = await supabase.storage.from('marketing-assets').upload(storagePath, blob, { contentType:blob.type || 'image/png', upsert:true })
     if (uploadError) throw uploadError
     const { data: publicData } = supabase.storage.from('marketing-assets').getPublicUrl(storagePath)
-    const asset = await createMediaAsset({ user_id:userId, kind:'image', source:'ai_image', provider:'openai_gpt_image', render_status:'completed', prompt, asset_url:publicData.publicUrl, storage_path:storagePath, campaign_post_id:post.id, campaign_id:campaign.id, concept_id:concept.id, render_job_id:job.id, metadata:{ variation, platform:post.platform, origin:'campaign-engine', ratio:'4:5' }, completed_at:new Date().toISOString() })
-    await supabase.from('campaign_media').insert([{ user_id:userId, campaign_id:campaign.id, concept_id:concept.id, media_asset_id:asset.id, role:'variant' }])
+    const asset = await createMediaAsset({ user_id:userId, workspace_id:workspaceId, kind:'image', source:'ai_image', provider:'openai_gpt_image', render_status:'completed', prompt, asset_url:publicData.publicUrl, storage_path:storagePath, campaign_post_id:post.id, campaign_id:campaign.id, concept_id:concept.id, render_job_id:job.id, metadata:{ variation, platform:post.platform, origin:'campaign-engine', ratio:'4:5' }, completed_at:new Date().toISOString() })
+    await supabase.from('campaign_media').insert([{ user_id:userId, workspace_id:workspaceId, campaign_id:campaign.id, concept_id:concept.id, media_asset_id:asset.id, role:'variant' }])
     await supabase.from('render_jobs').update({ status:'completed', settled_tokens:10, media_asset_id:asset.id, completed_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', job.id)
     await recordMemoryEvent({ userId, campaignId:campaign.id, conceptId:concept.id, mediaAssetId:asset.id, eventType:'asset_rendered', attributes:{ provider:'openai_gpt_image', platform:post.platform, variation, visualDirection:concept.visual_recipe?.direction || '' } })
     return asset

@@ -5,11 +5,13 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { runFloAgent } from '../lib/floAgent'
 
 const navGroups = [
+  { label: 'PORTFOLIO', items: [['portfolio', 'My Portfolio', '00']] },
   { label: 'CREATE', items: [['agent', 'Campaign Engine', '01'], ['images', 'Creative Lab', '02'], ['ai-calendar', 'Campaign Map', '03']] },
   { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['dashboard', 'Performance', '05'], ['accounts', 'Channels', '06']] },
 ]
 
 const pageMeta = {
+  '/portfolio': ['My Portfolio', 'Manage your apps, brand intelligence, and monthly autopilot rules.'],
   '/agent': ['Campaign Engine', 'Turn one product into a connected creative campaign, then render, review, and schedule it.'],
   '/images': ['Creative Lab', 'Generate ad creative built to perform across every placement.'],
   '/ai-calendar': ['Campaign Map', 'Turn content strategy into a complete publishing cadence.'],
