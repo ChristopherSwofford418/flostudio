@@ -1,7 +1,7 @@
 import { supabase } from '../supabase'
 
 const labels = {
-  brand_dna_saved:'Brand DNA saved', product_ingested:'Product facts captured', campaign_created:'Campaign created', concept_generated:'Campaign angles created', concept_selected:'Creative thesis selected', post_created:'Platform post created', asset_rendered:'Creative variant rendered', asset_attached:'Creative attached', post_approved:'Human approval', post_rejected:'Human rejection', post_rewritten:'Copy revised', campaign_scheduled:'Campaign scheduled', outcome_recorded:'Outcome recorded',
+  brand_dna_saved:'Brand DNA saved', product_ingested:'Product facts captured', campaign_created:'Campaign created', concept_generated:'Campaign angles created', concept_selected:'Creative thesis selected', post_created:'Platform post created', asset_rendered:'Creative variant rendered', asset_attached:'Creative attached', post_approved:'Human approval', post_rejected:'Human rejection', post_rewritten:'Copy revised', campaign_scheduled:'Campaign scheduled', outcome_recorded:'Outcome recorded', experiment_created:'Experiment planned', variant_created:'Experiment variant created', experiment_outcome_recorded:'Verified experiment outcome recorded',
 }
 
 export async function recordMemoryEvent({ userId, brandId, productId, campaignId, conceptId, mediaAssetId, eventType, attributes = {}, note = '', source = 'flo_product' }) {
@@ -37,11 +37,13 @@ export async function buildNextBestCreative({ userId, brandId }) {
   const rejections = eventCount(events || [], 'post_rejected')
   const variants = eventCount(events || [], 'asset_rendered')
   const posts = eventCount(events || [], 'post_created')
+  const outcomes = eventCount(events || [], 'experiment_outcome_recorded') + eventCount(events || [], 'outcome_recorded')
   const latest = selected[0]
   const evidence = []
   if (selected.length) evidence.push(`${selected.length} creative thesis${selected.length === 1 ? '' : 'es'} selected by a human`)
   if (variants) evidence.push(`${variants} real creative variant${variants === 1 ? '' : 's'} rendered`)
   if (posts) evidence.push(`${posts} platform post${posts === 1 ? '' : 's'} created`)
+  if (outcomes) evidence.push(`${outcomes} verified outcome${outcomes === 1 ? '' : 's'} recorded`)
   if (approvals || rejections) evidence.push(`${approvals} approval${approvals === 1 ? '' : 's'} / ${rejections} rejection${rejections === 1 ? '' : 's'} recorded`)
   const state = evidence.length ? (approvals + rejections >= 3 ? 'Learning from decisions' : 'Early creative memory') : 'Memory begins with the first decision'
   let headline = 'Create a first campaign to give Flo something real to learn from.'
@@ -61,7 +63,7 @@ export async function buildNextBestCreative({ userId, brandId }) {
     rationale = 'Flo has a selected campaign direction but not enough approval or outcome evidence to rank it as a winner.'
   }
   const guidance = { state, headline, nextAction, rationale, evidence, brandName:brand?.name || 'This brand', updatedAt:new Date().toISOString() }
-  await supabase.from('brand_memory_snapshots').upsert({ user_id:userId, brand_id:brandId, learning_state:{ approvals, rejections, variants, posts, selectedConcepts:selected.length, campaigns:(campaigns || []).length }, guidance, evidence_count:evidence.length, updated_at:new Date().toISOString() }, { onConflict:'brand_id' })
+  await supabase.from('brand_memory_snapshots').upsert({ user_id:userId, brand_id:brandId, learning_state:{ approvals, rejections, variants, posts, outcomes, selectedConcepts:selected.length, campaigns:(campaigns || []).length }, guidance, evidence_count:evidence.length, updated_at:new Date().toISOString() }, { onConflict:'brand_id' })
   return guidance
 }
 

@@ -66,3 +66,7 @@
 
 - [ ] Add secure App Store Connect API credential configuration (Issuer ID, Key ID, Private Key / JWT) per portfolio app.
 - [ ] Implement App Store Connect metrics sync (downloads, proceeds, active subscriptions, and ratings) so FloStudio can display first-party performance stats on each product card.
+- [x] Produce a wide, source-verified product gap map spanning AI creative, UGC video, ASO, SEO, social publishing, analytics, and portfolio governance.
+- [x] Build a continuous experiment workspace that turns hypotheses into ad and store-listing variants, collects real outcomes, and promotes evidence into Creative Memory.
+- [ ] Add a per-app SEO intelligence workflow that uses Search Console data and people-first content safeguards rather than volume-only AI content generation.
+- [ ] Replace social-publishing placeholders with provider-approved OAuth, token storage, media-hosting validation, rate-limit awareness, and truthful status reporting.

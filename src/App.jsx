@@ -15,6 +15,7 @@ import Pipeline from './pages/Pipeline.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
 import Pricing from './pages/Pricing.jsx'
 import Portfolio from './pages/Portfolio.jsx'
+import Experiments from './pages/Experiments.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/pipeline" element={session ? <Pipeline /> : <Navigate to="/auth" />} />
         <Route path="/pricing" element={session ? <Pricing /> : <Navigate to="/auth" />} />
         <Route path="/portfolio" element={session ? <Portfolio /> : <Navigate to="/auth" />} />
+        <Route path="/experiments" element={session ? <Experiments /> : <Navigate to="/auth" />} />
         <Route path="/ai-calendar" element={session ? <AICalendar /> : <Navigate to="/auth" />} />
         {/* Legacy pages */}
         <Route path="/compose" element={session ? <Compose /> : <Navigate to="/auth" />} />

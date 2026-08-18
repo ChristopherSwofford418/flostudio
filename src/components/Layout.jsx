@@ -7,7 +7,7 @@ import { runFloAgent } from '../lib/floAgent'
 const navGroups = [
   { label: 'PORTFOLIO', items: [['portfolio', 'My Portfolio', '00']] },
   { label: 'CREATE', items: [['agent', 'Campaign Engine', '01'], ['images', 'Creative Lab', '02'], ['ai-calendar', 'Campaign Map', '03']] },
-  { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['dashboard', 'Performance', '05'], ['accounts', 'Channels', '06']] },
+  { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['experiments', 'Experiments', '05'], ['dashboard', 'Performance', '06'], ['accounts', 'Channels', '07']] },
 ]
 
 const pageMeta = {
@@ -16,6 +16,7 @@ const pageMeta = {
   '/images': ['Creative Lab', 'Generate ad creative built to perform across every placement.'],
   '/ai-calendar': ['Campaign Map', 'Turn content strategy into a complete publishing cadence.'],
   '/pipeline': ['Review Queue', 'Decide, refine, and ship your highest-potential ideas.'],
+  '/experiments': ['Experiments', 'Turn creative, listing, and content hypotheses into verified portfolio learning.'],
   '/dashboard': ['Performance', 'Your campaign command center.'],
   '/accounts': ['Channels', 'Connect the destinations that turn content into growth.'],
   '/pricing': ['Plans & Tokens', 'Scale your creative output with transparent usage.'],
