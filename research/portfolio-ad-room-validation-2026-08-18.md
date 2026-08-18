@@ -9,3 +9,7 @@ The Format Shelf was validated in the authenticated local build. Choosing **Crea
 ## Design rationale
 
 The result is informed by the concrete format, product, actor, script, and variation logic observed in Arcads, but it does not copy Arcads’ visual language, terminology, or layout. FloStudio retains its portfolio product context and Signal Ledger visual system while becoming substantially more media-first and ad-production-oriented.
+
+## Production validation
+
+The Portfolio Ad Room release was verified live at `https://www.flostudio.io/images` after the `main` branch deployment. Production renders the product-truth strip, real-output library, format shelf, image Ad Blueprint, creative-treatment controls, and the updated render call to action. The initial session-restoration state resolved to the fully rendered workspace without an empty page.
