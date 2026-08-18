@@ -58,3 +58,6 @@
 - [x] Add 'Learn App with AI' action that auto-populates product name, category, description, offer, audience, and Brand DNA.
 
 - [x] Confirm FloStudio repository (`ChristopherSwofford418/flostudio`) and Vercel project (`flostudio-web` targeting www.flostudio.io) without touching Syllabus Agent.
+
+- [ ] Add an Arcads-style multi-angle batch generator where 1 product link instantly yields 10+ varied creative variants (hooks, angles, visual styles).
+- [ ] Add a visual hook-and-script editor inside the Campaign Engine so users can customize avatar/video style, captions, and call-to-action overlays before rendering.
