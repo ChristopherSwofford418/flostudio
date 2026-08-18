@@ -63,3 +63,6 @@
 - [ ] Add a visual hook-and-script editor inside the Campaign Engine so users can customize avatar/video style, captions, and call-to-action overlays before rendering.
 
 - [x] Make portfolio tiles and campaign surfaces dynamically adopt each entered app's imported icon, artwork, and visual brand colors.
+
+- [ ] Add secure App Store Connect API credential configuration (Issuer ID, Key ID, Private Key / JWT) per portfolio app.
+- [ ] Implement App Store Connect metrics sync (downloads, proceeds, active subscriptions, and ratings) so FloStudio can display first-party performance stats on each product card.
