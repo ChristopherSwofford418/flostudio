@@ -61,3 +61,5 @@
 
 - [ ] Add an Arcads-style multi-angle batch generator where 1 product link instantly yields 10+ varied creative variants (hooks, angles, visual styles).
 - [ ] Add a visual hook-and-script editor inside the Campaign Engine so users can customize avatar/video style, captions, and call-to-action overlays before rendering.
+
+- [x] Make portfolio tiles and campaign surfaces dynamically adopt each entered app's imported icon, artwork, and visual brand colors.

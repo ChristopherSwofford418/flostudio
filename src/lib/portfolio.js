@@ -14,15 +14,21 @@ export async function listPortfolioApps(workspaceId) {
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return (data || []).map(product => ({
-    ...product,
-    brandName: product.brands?.name || product.name,
-    brandDna: product.brands?.brand_dna || {},
-    category: product.source_facts?.category || 'Product portfolio',
-    icon: (product.name || 'A').slice(0, 1).toUpperCase(),
-    url: product.product_url || '',
-    autopilot: product.source_facts?.autopilot || { enabled:false, cadence:20, platforms:['instagram'], creativeMix:{ image:70, video:30 }, approvalMode:'review' },
-  }))
+  return (data || []).map(product => {
+    const facts = product.source_facts || {}
+    const imageUrl = facts.image || facts.artworkUrl || ''
+    return {
+      ...product,
+      brandName: product.brands?.name || product.name,
+      brandDna: product.brands?.brand_dna || {},
+      category: facts.category || 'Product portfolio',
+      icon: (product.name || 'A').slice(0, 1).toUpperCase(),
+      imageUrl,
+      accentColor: facts.accentColor || (imageUrl ? '#ff8769' : '#7b61ff'),
+      url: product.product_url || '',
+      autopilot: facts.autopilot || { enabled:false, cadence:20, platforms:['instagram'], creativeMix:{ image:70, video:30 }, approvalMode:'review' },
+    }
+  })
 }
 
 export async function savePortfolioApp({ workspaceId, userId, productId, brandId, name, websiteUrl, description, offerText, audience, category, autopilot, brandDna, sourceFacts }) {
