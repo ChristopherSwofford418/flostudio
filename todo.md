@@ -87,3 +87,4 @@
 - [ ] Add product-aware AI image concepts, changing creative results, and image-result interactions to the Portfolio Ad Room.
 - [ ] Validate and deploy dynamic AI-image output for FloStudio production.
 - [ ] Remove the unsupported GPT Image request parameter and restore test tokens when an AI-image render is rejected before output creation.
+- [ ] Create and secure the missing `marketing-assets` storage bucket so successful generated images are delivered into the media library.

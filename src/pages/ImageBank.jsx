@@ -110,8 +110,10 @@ export default function ImageBank() {
   }, [])
 
   const uploadAsset = async (file, namePrefix = 'source', details = {}) => {
+    const { data:{ user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Sign in before uploading or saving media.')
     const extension = extensionFor(file.type || file.name || '')
-    const storagePath = `media/${namePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${extension}`
+    const storagePath = `${user.id}/${namePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${extension}`
     const { error: uploadError } = await supabase.storage.from('marketing-assets').upload(storagePath, file, { contentType:file.type || undefined, upsert:true })
     if (uploadError) throw uploadError
     const { data } = supabase.storage.from('marketing-assets').getPublicUrl(storagePath)
@@ -246,7 +248,7 @@ export default function ImageBank() {
 
   const deleteAsset = async asset => {
     if (!window.confirm(`Delete ${asset.name}?`)) return
-    await supabase.storage.from('marketing-assets').remove([asset.name]); await loadAssets()
+    await removeMediaAsset(asset); await loadAssets()
   }
 
   const tabs = [{ id:'generate', label:'Image ads', count:imageAssets.length }, { id:'video', label:'Video ads', count:videoAssets.length }, { id:'library', label:'Asset library', count:assets.length }]
