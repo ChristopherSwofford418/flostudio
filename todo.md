@@ -83,9 +83,10 @@
 - [x] Audit Arcads’ media-first creative-production workflow and identify transferable product patterns for FloStudio.
 - [x] Rebuild FloStudio’s primary creative workflow around real media, creator formats, ad scripts, and render-ready production controls.
 - [x] Validate and deploy the Arcads-informed, non-template FloStudio studio experience.
-- [ ] Audit FloStudio’s image-generation path and remove the empty/static production-desk experience.
-- [ ] Add product-aware AI image concepts, changing creative results, and image-result interactions to the Portfolio Ad Room.
-- [ ] Validate and deploy dynamic AI-image output for FloStudio production.
-- [ ] Remove the unsupported GPT Image request parameter and restore test tokens when an AI-image render is rejected before output creation.
-- [ ] Create and secure the missing `marketing-assets` storage bucket so successful generated images are delivered into the media library.
-- [ ] Replace the slow multi-image request with reliable one-at-a-time image delivery that visibly updates the Ad Room after each real output.
+- [x] Audit FloStudio’s image-generation path and remove the empty/static production-desk experience.
+- [x] Add product-aware AI image concepts, changing creative results, and image-result interactions to the Portfolio Ad Room.
+- [x] Validate and deploy dynamic AI-image output for FloStudio production.
+- [x] Remove the unsupported GPT Image request parameter and restore test tokens when an AI-image render is rejected before output creation.
+- [x] Create and secure the missing `marketing-assets` storage bucket so successful generated images are delivered into the media library.
+- [x] Replace the slow multi-image request with reliable one-at-a-time image delivery that visibly updates the Ad Room after each real output.
+- [x] Diagnose the completed-image RLS rejection and correct the storage-object policy; the `media_assets` policy was confirmed correct.
