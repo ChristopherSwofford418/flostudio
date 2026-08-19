@@ -94,6 +94,6 @@
 - [x] Add deeper product-aware creative concepts, visual iteration controls, and campaign-ready asset actions.
 - [x] Validate and deploy the expanded media-first FloStudio creative-production workflow.
 - [x] Add a server-side image-provider timeout so complex image requests return a recoverable error and restore user tokens instead of leaving the Ad Room pending.
-- [ ] Diagnose why the deployed Creative Lab expansion is not visible to the user and correct its production entry point or deployment state.
-- [ ] Verify the user-facing FloStudio Creative Lab visibly exposes real image outputs and the expanded production controls.
-- [ ] Surface the expanded Creative Lab production workflow directly from the Portfolio workspace so users do not have to discover it only through navigation.
+- [x] Diagnose why the deployed Creative Lab expansion is not visible to the user and correct its production entry point or deployment state.
+- [x] Verify the user-facing FloStudio Creative Lab visibly exposes real image outputs and the expanded production controls.
+- [x] Surface the expanded Creative Lab production workflow directly from the Portfolio workspace so users do not have to discover it only through navigation.
