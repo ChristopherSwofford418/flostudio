@@ -25,6 +25,13 @@ function toneFor(status) {
   return '#ffd480'
 }
 
+function userFacingStatus(status, platform) {
+  if (!status?.error) return status?.requirement || platform.requirement
+  if (status.error.includes('SUPABASE_SERVICE_ROLE_KEY') || status.error.includes('SOCIAL_CREDENTIALS_ENCRYPTION_KEY')) return 'FloStudio’s secure channel credential vault is not enabled in production yet. Provider authorization stays blocked until it is available.'
+  if (status.code === 'SOCIAL_PROVIDER_NOT_CONFIGURED') return 'FloStudio’s secure credential vault is ready, but this provider’s registered OAuth credentials are not configured yet.'
+  return status.error
+}
+
 export default function Accounts() {
   const { apps } = useWorkspace()
   const [statuses, setStatuses] = useState({})
@@ -100,7 +107,10 @@ export default function Accounts() {
       if (!data.authorizationUrl) throw new Error(`${platform.label} did not return an authorization URL.`)
       window.location.assign(data.authorizationUrl)
     } catch (error) {
-      setNotice(`${error.message}${error.requirement ? ` Requirement: ${error.requirement}` : ''}`)
+      const friendly = error.message?.includes('SUPABASE_SERVICE_ROLE_KEY') || error.message?.includes('SOCIAL_CREDENTIALS_ENCRYPTION_KEY')
+        ? 'FloStudio’s secure channel credential vault is not enabled in production yet. Provider authorization remains blocked until it is configured.'
+        : error.message
+      setNotice(`${friendly}${error.requirement ? ` Requirement: ${error.requirement}` : ''}`)
       setChecking('')
     }
   }
@@ -137,8 +147,8 @@ export default function Accounts() {
           const status = statuses[platform.id]
           const ready = status?.live === true && status?.status === 'connected'
           const color = toneFor(status)
-          const actionLabel = checking === platform.id ? 'Opening provider…' : ready ? 'Disconnect' : status?.configured ? `Connect with ${platform.id === 'facebook' || platform.id === 'instagram' ? 'Meta' : platform.label}` : 'View setup requirement'
-          return <article key={platform.id} className="studio-panel" style={{ padding:20, borderLeft:`4px solid ${platform.color}` }}><div style={{ display:'flex', alignItems:'center', gap:15, flexWrap:'wrap' }}><div style={{ width:44, height:44, borderRadius:13, color:platform.color, background:`${platform.color}1c`, border:`1px solid ${platform.color}48`, display:'grid', placeItems:'center', fontWeight:900, fontSize:platform.icon.length > 1 ? 12 : 14 }}>{platform.icon}</div><div style={{ flex:1, minWidth:240 }}><div style={{ display:'flex', alignItems:'center', gap:9, flexWrap:'wrap' }}><h3 style={{ color:'#fff', fontSize:16, fontWeight:850 }}>{platform.label}</h3><span className="studio-chip" style={{ color, borderColor:`${color}52`, background:`${color}12` }}>{loading ? 'CHECKING' : labelFor(status)}</span></div><p style={{ color:'rgba(244,240,255,.66)', fontSize:11.5, lineHeight:1.55, marginTop:5 }}>{ready ? <><b style={{ color:'#fff' }}>{status.connection?.accountName}</b>{status.connection?.accountHandle ? ` · ${status.connection.accountHandle}` : ''} is the verified FloStudio publishing destination.</> : platform.summary}</p><div style={{ color:'rgba(244,240,255,.45)', fontSize:10, marginTop:7 }}><b style={{ color:'rgba(244,240,255,.7)' }}>{status?.error ? 'Status:' : 'Requirement:'}</b> {status?.error || status?.requirement || platform.requirement}</div></div><button onClick={() => requestConnection(platform)} disabled={checking === platform.id || loading} className={ready ? 'studio-button studio-button--soft' : 'studio-button'} style={{ padding:'9px 12px', fontSize:10.5, whiteSpace:'nowrap', opacity:(checking === platform.id || loading) ? .65 : 1 }}>{actionLabel}</button></div></article>
+          const actionLabel = checking === platform.id ? 'Opening provider…' : ready ? 'Disconnect' : status?.configured ? `Connect with ${platform.id === 'facebook' || platform.id === 'instagram' ? 'Meta' : platform.label}` : 'Secure setup required'
+          return <article key={platform.id} className="studio-panel" style={{ padding:20, borderLeft:`4px solid ${platform.color}` }}><div style={{ display:'flex', alignItems:'center', gap:15, flexWrap:'wrap' }}><div style={{ width:44, height:44, borderRadius:13, color:platform.color, background:`${platform.color}1c`, border:`1px solid ${platform.color}48`, display:'grid', placeItems:'center', fontWeight:900, fontSize:platform.icon.length > 1 ? 12 : 14 }}>{platform.icon}</div><div style={{ flex:1, minWidth:240 }}><div style={{ display:'flex', alignItems:'center', gap:9, flexWrap:'wrap' }}><h3 style={{ color:'#fff', fontSize:16, fontWeight:850 }}>{platform.label}</h3><span className="studio-chip" style={{ color, borderColor:`${color}52`, background:`${color}12` }}>{loading ? 'CHECKING' : labelFor(status)}</span></div><p style={{ color:'rgba(244,240,255,.66)', fontSize:11.5, lineHeight:1.55, marginTop:5 }}>{ready ? <><b style={{ color:'#fff' }}>{status.connection?.accountName}</b>{status.connection?.accountHandle ? ` · ${status.connection.accountHandle}` : ''} is the verified FloStudio publishing destination.</> : platform.summary}</p><div style={{ color:'rgba(244,240,255,.45)', fontSize:10, marginTop:7 }}><b style={{ color:'rgba(244,240,255,.7)' }}>{status?.error ? 'Status:' : 'Requirement:'}</b> {userFacingStatus(status, platform)}</div></div><button onClick={() => requestConnection(platform)} disabled={checking === platform.id || loading} className={ready ? 'studio-button studio-button--soft' : 'studio-button'} style={{ padding:'9px 12px', fontSize:10.5, whiteSpace:'nowrap', opacity:(checking === platform.id || loading) ? .65 : 1 }}>{actionLabel}</button></div></article>
         })}</div>
       </section>
 
