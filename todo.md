@@ -90,7 +90,7 @@
 - [x] Create and secure the missing `marketing-assets` storage bucket so successful generated images are delivered into the media library.
 - [x] Replace the slow multi-image request with reliable one-at-a-time image delivery that visibly updates the Ad Room after each real output.
 - [x] Diagnose the completed-image RLS rejection and correct the storage-object policy; the `media_assets` policy was confirmed correct.
-- [ ] Audit current creative output, product context, asset library, and campaign handoff capabilities for the next FloStudio Ad Room expansion.
-- [ ] Add deeper product-aware creative concepts, visual iteration controls, and campaign-ready asset actions.
-- [ ] Validate and deploy the expanded media-first FloStudio creative-production workflow.
-- [ ] Add a server-side image-provider timeout so complex image requests return a recoverable error and restore user tokens instead of leaving the Ad Room pending.
+- [x] Audit current creative output, product context, asset library, and campaign handoff capabilities for the next FloStudio Ad Room expansion.
+- [x] Add deeper product-aware creative concepts, visual iteration controls, and campaign-ready asset actions.
+- [x] Validate and deploy the expanded media-first FloStudio creative-production workflow.
+- [x] Add a server-side image-provider timeout so complex image requests return a recoverable error and restore user tokens instead of leaving the Ad Room pending.
