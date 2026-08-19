@@ -88,3 +88,4 @@
 - [ ] Validate and deploy dynamic AI-image output for FloStudio production.
 - [ ] Remove the unsupported GPT Image request parameter and restore test tokens when an AI-image render is rejected before output creation.
 - [ ] Create and secure the missing `marketing-assets` storage bucket so successful generated images are delivered into the media library.
+- [ ] Replace the slow multi-image request with reliable one-at-a-time image delivery that visibly updates the Ad Room after each real output.

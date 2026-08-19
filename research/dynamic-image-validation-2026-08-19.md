@@ -19,3 +19,7 @@ After the authenticated `marketing-assets` bucket and user-folder upload policie
 ## Extended render observation
 
 The two-variation request still had not resolved after the extended observation window. The current endpoint generates each variation serially, which risks exceeding a serverless render window. The render path is being changed to return multiple GPT Image outputs from one provider request so the Ad Room does not leave a user in a prolonged pending state.
+
+## Bounded-set retry
+
+The current production validation uses the repaired single-request creative set, which asks GPT Image for the selected number of outputs together rather than serially. The Ad Room is visibly rendering the two-creative set; its result or bounded timeout will determine the final delivery validation.
