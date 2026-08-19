@@ -37,6 +37,8 @@ export default function Pipeline() {
   const [showAssetPicker, setShowAssetPicker] = useState(false)
   const [visualGenerating, setVisualGenerating] = useState({})
   const [batchVisualProgress, setBatchVisualProgress] = useState(null)
+  const [publishing, setPublishing] = useState({})
+  const [publishErrors, setPublishErrors] = useState({})
 
   useEffect(() => { loadPosts() }, [activeTab])
 
@@ -133,12 +135,31 @@ export default function Pipeline() {
   }
 
   const updateStatus = async (id, status) => {
+    if (status === 'published') return
     const post = allPosts.find(item => item.id === id)
     await supabase.from('campaign_posts').update({ status }).eq('id', id)
     const { data:{ user } } = await supabase.auth.getUser()
-    if (user && post?.campaign_id && (status === 'approved' || status === 'published')) await recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:status === 'approved' ? 'post_approved' : 'campaign_scheduled', attributes:{ platform:post.platform, postId:id, status } })
+    if (user && post?.campaign_id && status === 'approved') await recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:'post_approved', attributes:{ platform:post.platform, postId:id, status } })
     if (selectedPost?.id === id) setSelectedPost(null)
     await loadPosts()
+  }
+
+  const publishPost = async post => {
+    if (publishing[post.id]) return
+    setPublishing(previous => ({ ...previous, [post.id]:true }))
+    setPublishErrors(previous => ({ ...previous, [post.id]:null }))
+    try {
+      const { data:{ session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Your session expired. Sign in again before publishing.')
+      const response = await fetch('/api/social-connect', { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` }, body:JSON.stringify({ platform:post.platform, action:'publish', campaignPostId:post.id }) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'FloStudio could not publish this post.')
+      const { data:{ user } } = await supabase.auth.getUser()
+      if (user && post.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:'post_published', attributes:{ platform:post.platform, postId:post.id, providerPostId:data.providerPostId || null } })
+      await loadPosts()
+    } catch (error) {
+      setPublishErrors(previous => ({ ...previous, [post.id]:error.message || 'FloStudio could not publish this post.' }))
+    } finally { setPublishing(previous => ({ ...previous, [post.id]:false })) }
   }
 
   const deletePost = async (id) => {
@@ -253,6 +274,7 @@ export default function Pipeline() {
                       <span style={{ fontSize: 11.5, padding: '3px 10px', borderRadius: 20, background: post.status === 'approved' ? '#ecfdf5' : post.status === 'published' ? '#e0e7ff' : '#fef3c7', color: post.status === 'approved' ? '#059669' : post.status === 'published' ? '#4f46e5' : '#d97706', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{post.status}</span>
                       {score && score !== 'loading' && <span style={{ fontSize: 12, fontWeight: 700, color: score.score >= 8 ? '#059669' : score.score >= 6 ? '#d97706' : '#dc2626' }}>AI Score: {score.score}/10</span>}
                     </div>
+                    {publishErrors[post.id] && <div style={{ marginTop:9, color:'#ffb5cc', fontSize:11, lineHeight:1.5 }}>Publish stopped: {publishErrors[post.id]} <a href="/accounts" style={{ color:'#d9ff75', fontWeight:800 }}>Open Channels</a></div>}
                   </div>
 
                   {/* Actions */}
@@ -262,7 +284,7 @@ export default function Pipeline() {
                     </button>
                     <button onClick={() => openPost(post)} title="Attach or change campaign creative" style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{postAssets.length ? `Creative ${postAssets.length}` : 'Choose Creative'}</button>
                     {post.status === 'pending' && <button onClick={() => updateStatus(post.id, 'approved')} title="Approve" style={{ padding: '8px 16px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Approve</button>}
-                    {post.status === 'approved' && <button onClick={() => updateStatus(post.id, 'published')} title="Publish" style={{ padding: '8px 16px', borderRadius: 8, background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#4f46e5', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Publish</button>}
+                    {post.status === 'approved' && <button onClick={() => publishPost(post)} disabled={publishing[post.id]} title="Publish through connected channel" style={{ padding: '8px 16px', borderRadius: 8, background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#4f46e5', cursor: publishing[post.id] ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, opacity:publishing[post.id] ? .7 : 1 }}>{publishing[post.id] ? 'Sending…' : 'Publish to channel'}</button>}
                     <button onClick={() => deletePost(post.id)} title="Delete" style={{ padding: '8px 12px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Delete</button>
                   </div>
                 </div>

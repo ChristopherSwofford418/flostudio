@@ -97,3 +97,8 @@
 - [x] Diagnose why the deployed Creative Lab expansion is not visible to the user and correct its production entry point or deployment state.
 - [x] Verify the user-facing FloStudio Creative Lab visibly exposes real image outputs and the expanded production controls.
 - [x] Surface the expanded Creative Lab production workflow directly from the Portfolio workspace so users do not have to discover it only through navigation.
+- [ ] Audit the current Channels screen, OAuth callback code, token storage, and campaign publishing implementation.
+- [ ] Research official OAuth, publishing, review, and compliance requirements for Facebook Pages, Instagram Professional, LinkedIn, TikTok, and X.
+- [ ] Design a secure multi-tenant channel-connection and publishing architecture with explicit provider-console setup boundaries.
+- [ ] Implement the available production OAuth connection flow and replace setup-only channel cards with truthful connection states.
+- [ ] Validate the connection flow and document the remaining provider-side configuration required before public publishing is enabled.
