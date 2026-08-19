@@ -170,7 +170,9 @@ export default function ImageBank() {
       const productContext = activeApp ? `Product: ${activeApp.name}. Category: ${activeApp.category || 'not specified'}. Description: ${activeApp.description || 'not specified'}.` : ''
       const brief = `Ad format: ${selectedRunbook.label}. ${prompt || selectedRunbook.prompt} Hook: ${hook || 'derive an honest scroll-stopping hook from the supplied product truth.'} Proof: ${proof || 'use only credible product details and avoid unsupported claims.'} ${productContext} Style: ${selectedStyle?.label || 'Product hero'} — ${selectedStyle?.desc || ''}`
       const nextRound = creativeRound + 1
-      const response = await fetch('/api/generate-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations, referenceImage, creativeRound:nextRound }) })
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 70000)
+      const response = await fetch('/api/generate-image', { method:'POST', signal:controller.signal, headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations, referenceImage, creativeRound:nextRound }) }).finally(() => window.clearTimeout(timeout))
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
       const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${nextRound}-${index + 1}`, 'image', { source:'ai_image', provider:'openai', prompt:brief, metadata:{ aspectRatio, stylePreset, textOverlay, variation:index + 1, creativeRound:nextRound, concept:image.concept || null, runbook:runbookId, hook, proof } })))
@@ -179,7 +181,7 @@ export default function ImageBank() {
       await loadAssets()
     } catch (generationError) {
       if (chargedTokens) await refundTokens(chargedTokens, 'the AI image render').catch(() => {})
-      setError(generationError.message || 'The creative could not be generated.')
+      setError(generationError.name === 'AbortError' ? 'The render took too long to finish. Your tokens were restored—try one creative or a shorter brief.' : (generationError.message || 'The creative could not be generated.'))
     }
     setGenerating(false)
   }

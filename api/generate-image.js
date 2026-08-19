@@ -32,16 +32,14 @@ export default async function handler(req, res) {
     const provider = resolveImageProvider();
     const creativeAngles = ['direct product proof with a decisive focal point', 'creator-native social framing with candid commercial energy', 'cinematic benefit moment with visual narrative', 'performance-ready split-test concept with a distinct opening composition'];
     const creativeRound = Math.max(1, Number(body.creativeRound) || 1);
-    const images = [];
-
-    for (let index = 0; index < count; index += 1) {
-      const generated = await provider.create({
-        prompt: `Create a finished, high-conversion commercial advertising image for creative round ${creativeRound}. Core brief: ${prompt || 'Use the supplied product image as the hero.'}. Variation direction: ${creativeAngles[(index + creativeRound - 1) % creativeAngles.length]}. ${referenceImage ? 'Use the provided product or app reference as the visual source of truth. Preserve recognisable product details and integrate it naturally into the final scene; do not simply place it inside a generic phone mockup or an artificial frame.' : ''} The creative must have a strong focal point, professional lighting, a deliberate performance-ad composition, and a visually distinct idea from the other variations. Do not render text unless the brief specifically requests exact on-image copy.`,
-        size,
-        referenceImage,
-      });
-      images.push({ url: generated, kind: 'image', variation: index + 1, concept:creativeAngles[(index + creativeRound - 1) % creativeAngles.length] });
-    }
+    const concepts = Array.from({ length:count }, (_, index) => creativeAngles[(index + creativeRound - 1) % creativeAngles.length]);
+    const generated = await provider.create({
+      prompt: `Create a finished high-conversion commercial advertising creative set for round ${creativeRound}. Core brief: ${prompt || 'Use the supplied product image as the hero.'}. The set needs ${count} genuinely different visual executions selected from these campaign directions: ${concepts.join('; ')}. ${referenceImage ? 'Use the provided product or app reference as the visual source of truth. Preserve recognisable product details and integrate it naturally into the scene; never simply place it inside a generic phone mockup or artificial frame.' : ''} Each result needs a strong focal point, professional lighting, a deliberate performance-ad composition, and a different framing or story from the other results. Do not render text unless the brief specifically requests exact on-image copy.`,
+      size,
+      referenceImage,
+      count,
+    });
+    const images = generated.map((url, index) => ({ url, kind:'image', variation:index + 1, concept:concepts[index] || concepts[0] }));
 
     return res.status(200).json({ images, size, generatedAt: new Date().toISOString() });
   } catch (error) {

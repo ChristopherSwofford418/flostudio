@@ -11,3 +11,11 @@ FloStudio now records and restores the deducted creative tokens if image generat
 ## Production render observation
 
 The repaired production request accepted the creative job and moved the Ad Room into its visible **Rendering a new creative round** state. The live interface correctly shows the token debit, the in-progress render status, and the promise that the resulting outputs will be saved to the production library.
+
+## Storage repair retry
+
+After the authenticated `marketing-assets` bucket and user-folder upload policies were provisioned, the production retry again entered the visible rendering state. The request remained in progress beyond the initial 35-second observation window, so completion behavior is being verified before declaring the visual output flow complete.
+
+## Extended render observation
+
+The two-variation request still had not resolved after the extended observation window. The current endpoint generates each variation serially, which risks exceeding a serverless render window. The render path is being changed to return multiple GPT Image outputs from one provider request so the Ad Room does not leave a user in a prolonged pending state.

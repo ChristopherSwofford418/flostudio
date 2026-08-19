@@ -66,7 +66,8 @@ export function resolveImageProvider() {
 
   return {
     id:'openai_gpt_image',
-    async create({ prompt, size, referenceImage = null }) {
+    async create({ prompt, size, referenceImage = null, count = 1 }) {
+      const imageCount = Math.max(1, Math.min(Number(count) || 1, 4))
       const referenceBlob = dataUrlToBlob(referenceImage)
       const endpoint = referenceBlob ? 'https://api.openai.com/v1/images/edits' : 'https://api.openai.com/v1/images/generations'
       let response
@@ -77,19 +78,20 @@ export function resolveImageProvider() {
         form.append('image', referenceBlob, 'flostudio-product-reference.png')
         form.append('size', size)
         form.append('quality', 'low')
+        form.append('n', String(imageCount))
         response = await fetch(endpoint, { method:'POST', headers:authorizationHeader(apiKey), body:form })
       } else {
         response = await fetch(endpoint, {
           method:'POST',
           headers:{ ...authorizationHeader(apiKey), 'Content-Type':'application/json' },
-          body:JSON.stringify({ model:'gpt-image-2', prompt, n:1, size, quality:'low' }),
+          body:JSON.stringify({ model:'gpt-image-2', prompt, n:imageCount, size, quality:'low' }),
         })
       }
       const payload = await response.json()
       if (!response.ok) throw new Error(payload?.error?.message || 'Image creative could not be generated. Your product reference was not replaced with a template.')
-      const output = payload.data?.[0]?.b64_json ? `data:image/png;base64,${payload.data[0].b64_json}` : payload.data?.[0]?.url
-      if (!output) throw new Error('The image provider returned no creative output.')
-      return output
+      const outputs = (payload.data || []).map(item => item?.b64_json ? `data:image/png;base64,${item.b64_json}` : item?.url).filter(Boolean)
+      if (!outputs.length) throw new Error('The image provider returned no creative output.')
+      return outputs
     },
   }
 }
