@@ -30,6 +30,20 @@ const AD_RUNBOOKS = [
   { id:'contrast', label:'Before / after', type:'PROOF FORMAT', style:'product', description:'Turn a customer friction point into visible contrast.', prompt:'Use a clear before-and-after story. Make the starting friction and final change visually unmistakable, credible, and product-led.', video:'Before-and-after ad built around a fast visual contrast, product intervention, and calm outcome reveal.' },
 ]
 
+const CAMPAIGN_OBJECTIVES = [
+  { id:'acquire', label:'Acquire', detail:'Make the first promise and earn the click.', prompt:'Prioritize a fast, category-clear first impression that makes a new prospect want to learn more.' },
+  { id:'convert', label:'Convert', detail:'Make the value feel specific and ready now.', prompt:'Lead with a concrete product payoff, an objection-breaking proof point, and a decisive action moment.' },
+  { id:'activate', label:'Activate', detail:'Show how the product changes the next session.', prompt:'Make product use feel immediately achievable and rewarding for a customer who already knows the category.' },
+  { id:'announce', label:'Announce', detail:'Give a launch, update, or offer a reason to matter.', prompt:'Frame the product moment as timely, distinctive, and worth sharing without fabricated urgency.' },
+]
+
+const VISUAL_LENSES = [
+  { id:'product-in-use', label:'Product in use', detail:'Show the app or product inside a believable moment.', prompt:'Integrate the product naturally into a lived-in use moment; preserve clear visual evidence of the experience.' },
+  { id:'proof-led', label:'Transformation proof', detail:'Make the contrast and evidence unmistakable.', prompt:'Center credible before-and-after or problem-to-payoff contrast without relying on unsupported claims.' },
+  { id:'creator-native', label:'Creator-native', detail:'Make it feel platform fluent, not overproduced.', prompt:'Use an authentic creator-led framing, natural light, and a direct response visual language.' },
+  { id:'editorial', label:'Editorial aspiration', detail:'Build a premium, intentional desire state.', prompt:'Use art-directed composition, texture, light, and quiet confidence while retaining clear product truth.' },
+]
+
 function extensionFor(type) {
   if (type.includes('webp')) return 'webp'
   if (type.includes('jpeg')) return 'jpg'
@@ -71,11 +85,16 @@ export default function ImageBank() {
   const [runbookId, setRunbookId] = useState('showcase')
   const [hook, setHook] = useState('')
   const [proof, setProof] = useState('')
+  const [objectiveId, setObjectiveId] = useState('acquire')
+  const [lensId, setLensId] = useState('product-in-use')
+  const [handoffState, setHandoffState] = useState({ status:'idle', message:'' })
 
   const imageAssets = useMemo(() => assets.filter(asset => asset.kind === 'image'), [assets])
   const videoAssets = useMemo(() => assets.filter(asset => asset.kind === 'video'), [assets])
   const selectedStyle = STYLE_PRESETS.find(style => style.id === stylePreset)
   const selectedRunbook = AD_RUNBOOKS.find(runbook => runbook.id === runbookId) || AD_RUNBOOKS[0]
+  const selectedObjective = CAMPAIGN_OBJECTIVES.find(objective => objective.id === objectiveId) || CAMPAIGN_OBJECTIVES[0]
+  const selectedLens = VISUAL_LENSES.find(lens => lens.id === lensId) || VISUAL_LENSES[0]
 
   const selectRunbook = runbook => {
     setRunbookId(runbook.id)
@@ -160,22 +179,23 @@ export default function ImageBank() {
 
   const generateImages = async () => {
     if (!prompt.trim() && !referenceImage) { setError('Describe the creative or upload a product image first.'); return }
-    setGenerating(true); setError(''); setGeneratedResults([])
+    setGenerating(true); setError(''); setGeneratedResults([]); setHandoffState({ status:'idle', message:'' })
     let chargedTokens = 0
     try {
       const tokenCost = 10
       const authorized = await useTokens(tokenCost, 'AI image creative')
       if (!authorized) { setGenerating(false); return }
       chargedTokens = tokenCost
-      const productContext = activeApp ? `Product: ${activeApp.name}. Category: ${activeApp.category || 'not specified'}. Description: ${activeApp.description || 'not specified'}.` : ''
-      const brief = `Ad format: ${selectedRunbook.label}. ${prompt || selectedRunbook.prompt} Hook: ${hook || 'derive an honest scroll-stopping hook from the supplied product truth.'} Proof: ${proof || 'use only credible product details and avoid unsupported claims.'} ${productContext} Style: ${selectedStyle?.label || 'Product hero'} — ${selectedStyle?.desc || ''}`
+      const brandContext = activeApp?.brand_dna ? `Brand DNA: ${typeof activeApp.brand_dna === 'string' ? activeApp.brand_dna : JSON.stringify(activeApp.brand_dna).slice(0, 1200)}.` : ''
+      const productContext = activeApp ? `Product: ${activeApp.name}. Category: ${activeApp.category || 'not specified'}. Description: ${activeApp.description || 'not specified'}. Audience: ${activeApp.audience || 'not specified'}. ${brandContext}` : ''
+      const brief = `Ad format: ${selectedRunbook.label}. Campaign objective: ${selectedObjective.label}. ${selectedObjective.prompt} Visual lens: ${selectedLens.label}. ${selectedLens.prompt} ${prompt || selectedRunbook.prompt} Hook: ${hook || 'derive an honest scroll-stopping hook from the supplied product truth.'} Proof: ${proof || 'use only credible product details and avoid unsupported claims.'} ${productContext} Style: ${selectedStyle?.label || 'Product hero'} — ${selectedStyle?.desc || ''}`
       const nextRound = creativeRound + 1
       const controller = new AbortController()
       const timeout = window.setTimeout(() => controller.abort(), 70000)
       const response = await fetch('/api/generate-image', { method:'POST', signal:controller.signal, headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations:1, referenceImage, creativeRound:nextRound }) }).finally(() => window.clearTimeout(timeout))
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
-      const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${nextRound}-${index + 1}`, 'image', { source:'ai_image', provider:'openai', prompt:brief, metadata:{ aspectRatio, stylePreset, textOverlay, variation:index + 1, creativeRound:nextRound, concept:image.concept || null, runbook:runbookId, hook, proof } })))
+      const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${nextRound}-${index + 1}`, 'image', { source:'ai_image', provider:'openai', prompt:brief, metadata:{ aspectRatio, stylePreset, textOverlay, variation:index + 1, creativeRound:nextRound, concept:image.concept || null, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp?.id || null, hook, proof } })))
       setGeneratedResults(saved)
       setCreativeRound(nextRound)
       await loadAssets()
@@ -184,6 +204,32 @@ export default function ImageBank() {
       setError(generationError.name === 'AbortError' ? 'The render took too long to finish. Your tokens were restored—try one creative or a shorter brief.' : (generationError.message || 'The creative could not be generated.'))
     }
     setGenerating(false)
+  }
+
+  const sendLatestCreativeToReview = async () => {
+    const asset = generatedResults[0]
+    if (!asset || handoffState.status === 'working') return
+    setHandoffState({ status:'working', message:'Creating a review draft…' })
+    try {
+      const { data:{ user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Sign in before sending a creative to review.')
+      const fallbackCopy = `${selectedRunbook.label}: ${activeApp?.name || 'Your product'} — ${selectedObjective.detail}`
+      const content = [hook || fallbackCopy, proof || '', textOverlay ? textOverlay : ''].filter(Boolean).join('\n\n')
+      const { data: post, error: postError } = await supabase.from('campaign_posts').insert([{
+        user_id:user.id,
+        platform:'instagram',
+        content,
+        scheduled_at:new Date().toISOString(),
+        status:'pending',
+        created_at:new Date().toISOString(),
+      }]).select().single()
+      if (postError) throw postError
+      const attached = await updateMediaAsset(asset.id, { campaign_post_id:post.id })
+      if (!attached) throw new Error('The review draft was created but the creative could not be attached.')
+      setHandoffState({ status:'done', message:'Creative is now in the Review Queue as a pending Instagram draft.' })
+    } catch (handoffError) {
+      setHandoffState({ status:'error', message:handoffError.message || 'The creative could not be sent to review.' })
+    }
   }
 
   const startVideo = async () => {
@@ -272,10 +318,11 @@ export default function ImageBank() {
 
       {activeTab === 'generate' && <div className="creative-workspace" style={{ display:'grid', gridTemplateColumns:'minmax(0,1.12fr) minmax(360px,.88fr)', gap:20 }}>
         <section className="abundance-card" style={{ padding:25 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:20 }}><div><div className="abundance-mini-label">IMAGE AD / {selectedRunbook.type}</div><h2 style={{ fontSize:23, letterSpacing:'-.055em', marginTop:5 }}>{selectedRunbook.label}. Make it perform.</h2></div><span className="abundance-pill">{10 * variations} tokens</span></div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:20 }}><div><div className="abundance-mini-label">IMAGE AD / {selectedRunbook.type}</div><h2 style={{ fontSize:23, letterSpacing:'-.055em', marginTop:5 }}>{selectedRunbook.label}. Make it perform.</h2></div><span className="abundance-pill">10 tokens / take</span></div>
           <label style={{ display:'block', color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>CREATIVE DIRECTION</label>
           <textarea className="studio-input" value={prompt} onChange={event => setPrompt(event.target.value)} rows={4} placeholder={selectedRunbook.prompt} style={{ resize:'vertical', lineHeight:1.6 }} />
           <div className="ad-blueprint"><div className="ad-blueprint__label">AD BLUEPRINT</div><input value={hook} onChange={event => setHook(event.target.value)} placeholder="Opening hook / what stops the scroll?" /><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Proof / what makes the claim believable?" /></div>
+          <div style={{ marginTop:18 }}><div className="abundance-mini-label">CREATIVE RECIPE / THE BUSINESS JOB AND VISUAL EXECUTION</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginTop:10 }}><div><div style={{ color:'#fff', fontSize:11, fontWeight:800, marginBottom:7 }}>CAMPAIGN OBJECTIVE</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>{CAMPAIGN_OBJECTIVES.map(objective => <button key={objective.id} onClick={() => setObjectiveId(objective.id)} className={`format-card ${objectiveId === objective.id ? 'active':''}`} style={{ padding:10 }}><b style={{ display:'block', fontSize:11 }}>{objective.label}</b><small>{objective.detail}</small></button>)}</div></div><div><div style={{ color:'#fff', fontSize:11, fontWeight:800, marginBottom:7 }}>VISUAL LENS</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>{VISUAL_LENSES.map(lens => <button key={lens.id} onClick={() => setLensId(lens.id)} className={`format-card ${lensId === lens.id ? 'active':''}`} style={{ padding:10 }}><b style={{ display:'block', fontSize:11 }}>{lens.label}</b><small>{lens.detail}</small></button>)}</div></div></div></div>
           <div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:9 }}>CREATIVE TREATMENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:9 }}>{STYLE_PRESETS.map(style => <button key={style.id} onClick={() => setStylePreset(style.id)} className={`format-card ${stylePreset === style.id ? 'active':''}`}><b style={{ display:'block', fontSize:12 }}>{style.label}</b><small>{style.desc}</small></button>)}</div></div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>PLACEMENT</div><select className="studio-input" value={aspectRatio} onChange={event => setAspectRatio(event.target.value)}>{ASPECT_RATIOS.map(ratio => <option key={ratio.id} value={ratio.id}>{ratio.label} / {ratio.visual}</option>)}</select></div><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>CREATIVE DELIVERY</div><div className="studio-input" style={{ minHeight:39, display:'flex', alignItems:'center', color:'rgba(243,240,231,.76)', fontSize:11 }}>One original image per take. New take = new composition.</div></div></div>
           <div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>OPTIONAL ON-IMAGE MESSAGE</div><input className="studio-input" value={textOverlay} onChange={event => setTextOverlay(event.target.value)} placeholder="e.g. EARLY ACCESS IS OPEN" /></div>
@@ -285,6 +332,8 @@ export default function ImageBank() {
         </section>
         <section className="abundance-card" style={{ padding:22, minHeight:530, display:'flex', flexDirection:'column' }}><div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}><div><div className="abundance-mini-label">LIVE OUTPUT BOARD</div><h2 style={{ fontSize:20, letterSpacing:'-.05em', marginTop:4 }}>Generated creatives</h2></div><span className="abundance-pill">{creativeRound ? `round ${creativeRound}` : 'saved automatically'}</span></div>{generating ? <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center' }}><div><span className="spinner" style={{ width:34, height:34, borderWidth:3 }} /><div style={{ color:'#fff', fontWeight:800, marginTop:15 }}>Rendering a new creative round</div><div style={{ color:'rgba(234,229,255,.64)', fontSize:12, marginTop:6 }}>Each pass uses a different performance-ad concept and adds the real output to your library.</div></div></div> : generatedResults.length ? <><div style={{ display:'grid', gridTemplateColumns:generatedResults.length > 1 ? '1fr 1fr' : '1fr', gap:12 }}>{generatedResults.map((asset, index) => <div key={asset.name} style={{ minHeight:240, borderRadius:3, overflow:'hidden', position:'relative', background:'rgba(255,255,255,.06)' }}><AssetVisual asset={asset} /><div style={{ position:'absolute', left:0, right:0, bottom:0, padding:'28px 10px 10px', background:'linear-gradient(transparent,rgba(7,22,16,.9))', display:'flex', alignItems:'end', justifyContent:'space-between', gap:8 }}><span style={{ color:'var(--signal)', font:'500 8px DM Mono,monospace', letterSpacing:'.09em' }}>CONCEPT {String(index + 1).padStart(2,'0')}</span><a href={asset.url} target="_blank" rel="noreferrer" className="abundance-pill">Open</a></div></div>)}</div><button onClick={generateImages} disabled={generating} className="studio-chip" style={{ marginTop:13, alignSelf:'flex-start', background:'var(--signal)', borderColor:'var(--signal)', color:'var(--ink-deep)' }}>Create a different take →</button><p style={{ color:'rgba(234,229,255,.58)', fontSize:10.5, lineHeight:1.55, marginTop:8 }}>A new round changes the visual concept; it does not overwrite the outputs already saved in your production library.</p></> : <div className="abundance-glass" style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'flex-end', minHeight:390, padding:18, borderRadius:3, background:'linear-gradient(150deg,rgba(201,242,93,.13),rgba(231,108,72,.09))' }}><div className="abundance-mini-label">REAL OUTPUT, NOT A PLACEHOLDER</div><h3 style={{ fontSize:24, lineHeight:1.05, letterSpacing:'-.06em', maxWidth:300, marginTop:7 }}>Your first changing creative round starts here.</h3><p style={{ color:'rgba(234,229,255,.65)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:370 }}>Render a format to create real AI images. Create another take when you want a different visual idea, not the same placeholder rearranged.</p></div>}</section>
       </div>}
+
+      {activeTab === 'generate' && generatedResults.length > 0 && <section className="abundance-card" style={{ marginTop:20, padding:'18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap', borderColor:'rgba(201,242,93,.34)' }}><div><div className="abundance-mini-label">REVIEW HANDOFF / TURN A REAL OUTPUT INTO A DECISION</div><h3 style={{ fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>Send this creative straight to the review queue.</h3><p style={{ color:'rgba(243,240,231,.62)', fontSize:11.5, lineHeight:1.5, marginTop:5, maxWidth:590 }}>FloStudio creates a real pending Instagram draft using your hook and proof, then attaches this saved creative so it is ready for an approval decision.</p>{handoffState.message && <div style={{ marginTop:8, fontSize:11.5, color:handoffState.status === 'done' ? 'var(--signal)' : handoffState.status === 'error' ? '#ffb4a2' : 'rgba(243,240,231,.76)' }}>{handoffState.message}</div>}</div><button onClick={sendLatestCreativeToReview} disabled={handoffState.status === 'working' || handoffState.status === 'done'} className="studio-button" style={{ whiteSpace:'nowrap' }}>{handoffState.status === 'working' ? 'Creating review draft…' : handoffState.status === 'done' ? 'Sent to review' : 'Send to review queue →'}</button></section>}
 
       {activeTab === 'video' && <div className="creative-workspace" style={{ display:'grid', gridTemplateColumns:'minmax(0,1.05fr) minmax(360px,.95fr)', gap:20 }}>
         <section className="abundance-card" style={{ padding:25 }}><div className="abundance-mini-label">VIDEO AD / {selectedRunbook.type}</div><h2 style={{ fontSize:27, letterSpacing:'-.06em', marginTop:5 }}>{selectedRunbook.label} in motion.</h2><p style={{ color:'rgba(234,229,255,.64)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:560 }}>A real render job, built from the same format, product truth, hook, and proof as the image ad. Direct camera movement and production pacing; the Ad Room handles the render queue.</p><textarea className="studio-input" value={videoPrompt} onChange={event => setVideoPrompt(event.target.value)} rows={5} placeholder={selectedRunbook.video} style={{ resize:'vertical', lineHeight:1.6, marginTop:18 }} /><div className="ad-blueprint"><div className="ad-blueprint__label">AD BLUEPRINT</div><input value={hook} onChange={event => setHook(event.target.value)} placeholder="Opening hook / what stops the scroll?" /><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Proof / what makes the claim believable?" /></div><div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:9 }}>VIDEO PLACEMENT</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>{VIDEO_FORMATS.map(format => <button key={format.id} onClick={() => setVideoFormat(format.id)} className={`format-card ${videoFormat === format.id ? 'active':''}`}><b>{format.label}</b><small>{format.detail}</small></button>)}</div></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>DURATION</div><select className="studio-input" value={videoSeconds} onChange={event => setVideoSeconds(event.target.value)}>{['4','8','12','16','20'].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></div><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>RENDER INTENT</div><select className="studio-input" value={videoQuality} onChange={event => setVideoQuality(event.target.value)}><option value="draft">Fast test / 30 tokens</option><option value="production">Polished launch / 60 tokens</option></select></div></div>{videoError && <div style={{ marginTop:15, padding:'11px 13px', color:'#ffbdcf', fontSize:12, border:'1px solid rgba(255,100,143,.32)', background:'rgba(255,100,143,.1)', borderRadius:11 }}>{videoError}</div>}<div style={{ color:'rgba(234,229,255,.52)', fontSize:10.5, lineHeight:1.55, marginTop:14 }}>Providers can decline prompts involving real people, copyrighted characters, music, or reference images with human faces. Finished MP4s are saved to the production library.</div><button onClick={startVideo} disabled={['queued','in_progress'].includes(videoJob?.status)} className="studio-button" style={{ width:'100%', marginTop:18, padding:14 }}>{['queued','in_progress'].includes(videoJob?.status) ? 'Video render in progress...' : `Render ${selectedRunbook.label.toLowerCase()} video`}</button></section>
