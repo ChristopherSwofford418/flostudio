@@ -93,3 +93,4 @@
 - [ ] Audit current creative output, product context, asset library, and campaign handoff capabilities for the next FloStudio Ad Room expansion.
 - [ ] Add deeper product-aware creative concepts, visual iteration controls, and campaign-ready asset actions.
 - [ ] Validate and deploy the expanded media-first FloStudio creative-production workflow.
+- [ ] Add a server-side image-provider timeout so complex image requests return a recoverable error and restore user tokens instead of leaving the Ad Room pending.

@@ -16,6 +16,21 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([Buffer.from(match[2], 'base64')], { type:match[1] })
 }
 
+async function fetchWithRenderDeadline(url, options, timeoutMs = 52000) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...options, signal:controller.signal })
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('The image provider took too long to return this creative. No output was delivered; try a shorter direction or another visual lens.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export function resolveVideoProvider() {
   const configured = process.env.FLOSTUDIO_VIDEO_PROVIDER || 'openai_sora'
   const apiKey = process.env.OPENAI_API_KEY
@@ -79,9 +94,9 @@ export function resolveImageProvider() {
         form.append('size', size)
         form.append('quality', 'low')
         form.append('n', String(imageCount))
-        response = await fetch(endpoint, { method:'POST', headers:authorizationHeader(apiKey), body:form })
+        response = await fetchWithRenderDeadline(endpoint, { method:'POST', headers:authorizationHeader(apiKey), body:form })
       } else {
-        response = await fetch(endpoint, {
+        response = await fetchWithRenderDeadline(endpoint, {
           method:'POST',
           headers:{ ...authorizationHeader(apiKey), 'Content-Type':'application/json' },
           body:JSON.stringify({ model:'gpt-image-2', prompt, n:imageCount, size, quality:'low' }),
