@@ -42,7 +42,16 @@ export default async function handler(req, res) {
     const size = ALLOWED_SIZES.has(body.size) ? body.size : '720x1280'
     const seconds = ['4', '8', '12', '16', '20'].includes(String(body.seconds)) ? String(body.seconds) : '8'
     const model = body.quality === 'production' ? 'sora-2-pro' : 'sora-2'
-    const enhancedPrompt = `Create a finished social advertising video. ${prompt}. Use a clear shot sequence with deliberate camera motion, product focus, brand-safe lighting, and a strong final call-to-action composition. Do not depict real people, public figures, copyrighted characters, or copyrighted music.`
+    const storyboard = Array.isArray(body.storyboard) ? body.storyboard.slice(0, 6).map((beat, index) => ({
+      index:index + 1,
+      label:String(beat?.label || `SHOT ${index + 1}`).slice(0, 80),
+      purpose:String(beat?.purpose || '').slice(0, 240),
+      visual:String(beat?.visual || '').slice(0, 420),
+      caption:String(beat?.caption || '').slice(0, 140),
+      voiceover:String(beat?.voiceover || '').slice(0, 240),
+    })) : []
+    const storyboardPrompt = storyboard.length ? ` Follow this editable storyboard exactly as a visual plan: ${storyboard.map(beat => `Shot ${beat.index} ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover direction: ${beat.voiceover}.`).join(' ')}` : ''
+    const enhancedPrompt = `Create a finished social advertising video. ${prompt}.${storyboardPrompt} Use a clear shot sequence with deliberate camera motion, product focus, brand-safe lighting, and a strong final call-to-action composition. Do not depict real people, public figures, copyrighted characters, or copyrighted music.`
     const reference = await toReferenceBlob(body.referenceImage).catch(() => null)
     const job = await provider.create({ model, prompt:enhancedPrompt, size, seconds, reference })
     return res.status(200).json({ ...job, provider:provider.id })

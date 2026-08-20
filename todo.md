@@ -112,3 +112,7 @@
 - [ ] Fix Creative Lab image generation so prompts and uploaded product references correctly drive provider generation without silent fallbacks or missing error reporting.
 
 - [x] Fix Creative Lab image generation so prompts and uploaded product references correctly drive provider generation without silent fallbacks or missing error reporting.
+
+- [ ] Add a structured video storyboard editor with editable shot purpose, visual action, on-screen copy, and voiceover beats.
+- [ ] Pass the storyboard structure into the real video render request and persist it with the media asset metadata.
+- [ ] Validate storyboard persistence, render monitoring, review handoff, and production deployment.
