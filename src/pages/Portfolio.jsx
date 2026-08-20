@@ -12,6 +12,8 @@ const platformLabel = { instagram:'Instagram', facebook:'Facebook', linkedin:'Li
 
 function emptyForm() { return { productId:null, brandId:null, name:'', websiteUrl:'', category:'', description:'', offerText:'', audience:'', sourceFacts:{}, brandDna:{ voice:'', visualDirection:'', proofPoints:'', restrictedClaims:'' }, autopilot:{ ...defaultAutopilot, platforms:['instagram'], creativeMix:{ image:70, video:30 } } } }
 
+import { runPortfolioAutopilotAcrossAllApps } from '../lib/monthlyAutopilot'
+
 export default function Portfolio() {
   const navigate = useNavigate()
   const { apps, workspaceId, refreshApps, setActiveApp } = useWorkspace()
@@ -22,6 +24,8 @@ export default function Portfolio() {
   const [notice, setNotice] = useState('')
   const [learning, setLearning] = useState(false)
   const [learnError, setLearnError] = useState('')
+  const [runningAutopilot, setRunningAutopilot] = useState(false)
+  const [autopilotReport, setAutopilotReport] = useState(null)
 
   useEffect(() => { setLoading(false) }, [apps])
 
@@ -82,7 +86,19 @@ export default function Portfolio() {
   return <Layout title="Portfolio">
     <div className="portfolio-page" style={{ padding:'28px 30px 52px' }}>
       <section className="studio-dark abundance-hero" style={{ padding:'30px 32px', position:'relative', overflow:'hidden' }}>
-        <div style={{ position:'relative', zIndex:1, maxWidth:720 }}><div className="studio-kicker">PORTFOLIO CONTROL / YOUR WORKSPACE</div><h1 className="studio-display" style={{ color:'#fff', fontSize:'clamp(34px,4.2vw,62px)', marginTop:10 }}>Every app gets its own <span className="studio-serif" style={{ color:'var(--vermilion)' }}>growth system.</span></h1><p style={{ color:'rgba(243,240,231,.72)', maxWidth:610, fontSize:14, lineHeight:1.7, marginTop:13 }}>FloStudio never assumes which products, brands, or audiences belong here. Add your apps once, define the rules, and choose which ones should receive a monthly stream of image, video, and copy work.</p><div style={{ display:'flex', gap:10, flexWrap:'wrap', marginTop:20 }}><button onClick={openCreate} className="studio-button">Add an app to the portfolio →</button><button onClick={() => navigate('/images')} className="studio-button studio-button--soft" style={{ borderColor:'rgba(201,242,93,.48)', color:'var(--signal)' }}>Open new Creative Lab →</button><div className="studio-chip" style={{ color:'var(--signal)', borderColor:'rgba(201,242,93,.28)', background:'rgba(201,242,93,.08)' }}>{apps.length} app{apps.length === 1 ? '' : 's'} · {activeCount} autopilot</div></div></div><div className="abundance-orb abundance-orb--one"/><div className="abundance-orb abundance-orb--two"/></section>
+        <div style={{ position:'relative', zIndex:1, maxWidth:720 }}><div className="studio-kicker">PORTFOLIO CONTROL / YOUR WORKSPACE</div><h1 className="studio-display" style={{ color:'#fff', fontSize:'clamp(34px,4.2vw,62px)', marginTop:10 }}>Every app gets its own <span className="studio-serif" style={{ color:'var(--vermilion)' }}>growth system.</span></h1><p style={{ color:'rgba(243,240,231,.72)', maxWidth:610, fontSize:14, lineHeight:1.7, marginTop:13 }}>FloStudio never assumes which products, brands, or audiences belong here. Add your apps once, define the rules, and choose which ones should receive a monthly stream of image, video, and copy work.</p><div style={{ display:'flex', gap:10, flexWrap:'wrap', marginTop:20 }}><button onClick={openCreate} className="studio-button">Add an app to the portfolio →</button><button onClick={async () => {
+          if (!apps.length) { alert('Add at least one app to your portfolio first.'); return; }
+          setRunningAutopilot(true); setNotice(''); setAutopilotReport(null);
+          try {
+            const { data:{ user } } = await supabase.auth.getUser();
+            const report = await runPortfolioAutopilotAcrossAllApps({ userId: user.id, apps });
+            setAutopilotReport(report);
+            setNotice(`Portfolio Autopilot successfully scheduled ${report.totalPosts} total posts across ${report.totalApps} apps! Check Review Queue or Campaign Map.`);
+          } catch(err) { setNotice(err.message || 'Portfolio autopilot failed.'); }
+          finally { setRunningAutopilot(false); }
+        }} disabled={runningAutopilot} className="studio-button" style={{ background:'var(--vermilion)', borderColor:'var(--vermilion)', color:'#fff' }}>{runningAutopilot ? 'Running Portfolio Autopilot…' : '⚡ Run Portfolio Autopilot across all apps'}</button><button onClick={() => navigate('/images')} className="studio-button studio-button--soft" style={{ borderColor:'rgba(201,242,93,.48)', color:'var(--signal)' }}>Open new Creative Lab →</button><div className="studio-chip" style={{ color:'var(--signal)', borderColor:'rgba(201,242,93,.28)', background:'rgba(201,242,93,.08)' }}>{apps.length} app{apps.length === 1 ? '' : 's'} · {activeCount} autopilot</div></div></div><div className="abundance-orb abundance-orb--one"/><div className="abundance-orb abundance-orb--two"/></section>
+
+      {autopilotReport && <section className="studio-panel" style={{ marginTop:16, padding:20, borderColor:'var(--signal)', background:'rgba(201,242,93,.06)' }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}><div className="studio-kicker" style={{ color:'var(--signal)' }}>PORTFOLIO AUTOPILOT EXECUTION REPORT</div><button onClick={() => setAutopilotReport(null)} className="studio-chip">Dismiss</button></div><h3 style={{ color:'#fff', fontSize:18, marginTop:6 }}>Successfully synchronized {autopilotReport.totalPosts} posts across {autopilotReport.totalApps} portfolio products.</h3><div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:10, marginTop:12 }}>{autopilotReport.results.map(r => <div key={r.appId} style={{ padding:10, background:'rgba(5,20,15,.4)', border:'1px solid rgba(243,240,231,.12)', borderRadius:3, color:'#fff', fontSize:12 }}><b>{r.name}</b>: {r.success ? `${r.postsCount} posts queued for review` : `Error: ${r.error}`}</div>)}</div></section>}
 
       <section style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginTop:16 }}><div className="studio-panel" style={{ padding:18 }}><div className="studio-kicker">PORTFOLIO SIZE</div><div style={{ color:'#fff', fontSize:30, fontWeight:850, marginTop:7 }}>{apps.length}</div><div style={{ color:'rgba(243,240,231,.52)', fontSize:11, marginTop:4 }}>user-owned products</div></div><div className="studio-panel" style={{ padding:18 }}><div className="studio-kicker">MONTHLY AUTOPILOT</div><div style={{ color:'var(--signal)', fontSize:30, fontWeight:850, marginTop:7 }}>{activeCount}</div><div style={{ color:'rgba(243,240,231,.52)', fontSize:11, marginTop:4 }}>apps configured to generate</div></div><div className="studio-panel" style={{ padding:18 }}><div className="studio-kicker" style={{ color:'var(--vermilion)' }}>TENANT MODE</div><div style={{ color:'#fff', fontSize:18, fontWeight:850, marginTop:13 }}>Private workspace</div><div style={{ color:'rgba(243,240,231,.52)', fontSize:11, marginTop:4 }}>your data stays yours</div></div></section>
 

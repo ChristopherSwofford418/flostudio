@@ -121,4 +121,6 @@
 
 - [x] Enable robust Sora-compatible video rendering and cinematic MP4 video synthesis in Creative Lab and backend media providers.
 
-- [ ] Complete a video render immediately when the provider returns status=completed at creation time, then persist the MP4 and thumbnail instead of leaving the UI at 100% rendering.
+- [x] Complete a video render immediately when the provider returns status=completed at creation time, then persist the MP4 and thumbnail instead of leaving the UI at 100% rendering.
+
+- [ ] Build Portfolio Autopilot control plane to coordinate marketing, creative production, SEO, analytics, scheduling, review, and publishing across all tenant-owned apps with one click.

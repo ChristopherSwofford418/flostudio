@@ -41,3 +41,23 @@ export async function runMonthlyAutopilotForApp({ userId, app }) {
   await supabase.from('campaigns').update({ status: config.approvalMode === 'approved' ? 'published' : 'ready_for_review' }).eq('id', campaign.id)
   return { campaign, postsCount: allPosts.length }
 }
+
+
+export async function runPortfolioAutopilotAcrossAllApps({ userId, apps }) {
+  const activeApps = apps.filter(app => app.autopilot?.enabled || app.autopilot?.cadence)
+  const targets = activeApps.length ? activeApps : apps
+  if (!targets.length) throw new Error('No apps found in portfolio. Add at least one app before running autopilot.')
+  
+  let totalPosts = 0
+  const results = []
+  for (const app of targets) {
+    try {
+      const result = await runMonthlyAutopilotForApp({ userId, app })
+      totalPosts += result.postsCount || 0
+      results.push({ appId: app.id, name: app.name, success: true, postsCount: result.postsCount })
+    } catch (err) {
+      results.push({ appId: app.id, name: app.name, success: false, error: err.message })
+    }
+  }
+  return { totalApps: targets.length, totalPosts, results }
+}
