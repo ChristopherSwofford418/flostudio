@@ -11,10 +11,15 @@ const SIZE_BY_RATIO = {
 async function fetchImageAsDataUrl(url) {
   if (!url) return null;
   if (url.startsWith('data:')) return url;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('The uploaded reference image could not be retrieved. Please upload it again.');
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return `data:${response.headers.get('content-type') || 'image/png'};base64,${buffer.toString('base64')}`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentType = response.headers.get('content-type') || 'image/png';
+    return `data:${contentType};base64,${buffer.toString('base64')}`;
+  } catch {
+    return null;
+  }
 }
 
 export default async function handler(req, res) {
@@ -32,16 +37,24 @@ export default async function handler(req, res) {
     const count = 1;
     const referenceImage = await fetchImageAsDataUrl(body.referenceImage).catch(() => null);
     const provider = resolveImageProvider();
-    const creativeAngles = ['direct product proof with a decisive focal point', 'creator-native social framing with candid commercial energy', 'cinematic benefit moment with visual narrative', 'performance-ready split-test concept with a distinct opening composition'];
+    const creativeAngles = [
+      'high-contrast commercial hero with dramatic product lighting',
+      'candid creator-native social frame with authentic performance energy',
+      'cinematic lifestyle integration showing the product solving friction',
+      'minimalist editorial pull highlighting exquisite product detail'
+    ];
     const creativeRound = Math.max(1, Number(body.creativeRound) || 1);
-    const concepts = [creativeAngles[(creativeRound - 1) % creativeAngles.length]];
+    const angleConcept = creativeAngles[(creativeRound - 1) % creativeAngles.length];
+    
+    const finalPrompt = `Commercial performance ad visual. Style and angle: ${angleConcept}. Core creative direction: ${prompt || 'Showcase the product as the hero asset with pristine clarity.'}. ${referenceImage ? 'Incorporate the provided reference image as the primary product asset, preserving its distinct branding, UI, and color identity.' : ''} Photographic lighting, crisp detail, 8k resolution, designed for high-converting social advertising. Avoid random blurry artifacts or low-quality rendering.`;
+
     const generated = await provider.create({
-      prompt: `Create a finished high-conversion commercial advertising image for creative round ${creativeRound}. Core brief: ${prompt || 'Use the supplied product image as the hero.'}. Variation direction: ${concepts[0]}. ${referenceImage ? 'Use the provided product or app reference as the visual source of truth. Preserve recognisable product details and integrate it naturally into the scene; never simply place it inside a generic phone mockup or artificial frame.' : ''} Use a strong focal point, professional lighting, and a deliberate performance-ad composition. Make this round visually distinct from a generic product mockup. Do not render text unless the brief specifically requests exact on-image copy.`,
+      prompt: finalPrompt,
       size,
       referenceImage,
       count,
     });
-    const images = generated.map((url, index) => ({ url, kind:'image', variation:index + 1, concept:concepts[index] || concepts[0] }));
+    const images = generated.map((url, index) => ({ url, kind:'image', variation:index + 1, concept:angleConcept }));
 
     return res.status(200).json({ images, size, generatedAt: new Date().toISOString() });
   } catch (error) {

@@ -108,3 +108,7 @@
 - [x] Preserve script edits in the tenant-scoped campaign_concepts record and use the edited script in downstream creative render prompts.
 - [x] Validate the creative matrix, script editing, render handoff, and production deployment.
 - [x] Block or flag unverifiable numeric, comparative, and testimonial claims in generated campaign concepts before saving or rendering.
+
+- [ ] Fix Creative Lab image generation so prompts and uploaded product references correctly drive provider generation without silent fallbacks or missing error reporting.
+
+- [x] Fix Creative Lab image generation so prompts and uploaded product references correctly drive provider generation without silent fallbacks or missing error reporting.
