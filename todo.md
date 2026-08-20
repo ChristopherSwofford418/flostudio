@@ -59,8 +59,8 @@
 
 - [x] Confirm FloStudio repository (`ChristopherSwofford418/flostudio`) and Vercel project (`flostudio-web` targeting www.flostudio.io) without touching Syllabus Agent.
 
-- [ ] Add an Arcads-style multi-angle batch generator where 1 product link instantly yields 10+ varied creative variants (hooks, angles, visual styles).
-- [ ] Add a visual hook-and-script editor inside the Campaign Engine so users can customize avatar/video style, captions, and call-to-action overlays before rendering.
+- [x] Add an Arcads-style multi-angle batch generator where 1 product link instantly yields 10+ varied creative variants (hooks, angles, visual styles).
+- [x] Add a visual hook-and-script editor inside the Campaign Engine so users can customize avatar/video style, captions, and call-to-action overlays before rendering.
 
 - [x] Make portfolio tiles and campaign surfaces dynamically adopt each entered app's imported icon, artwork, and visual brand colors.
 
@@ -103,8 +103,8 @@
 - [ ] Implement the available production OAuth connection flow and replace setup-only channel cards with truthful connection states.
 - [ ] Validate the connection flow and document the remaining provider-side configuration required before public publishing is enabled.
 
-- [ ] Expand Campaign Engine from three concepts to a ten-angle creative matrix with distinct hooks, proof angles, visual directions, and platform intent.
-- [ ] Expose an editable structured script editor for each campaign concept before visual or video rendering.
-- [ ] Preserve script edits in the tenant-scoped campaign_concepts record and use the edited script in downstream creative render prompts.
-- [ ] Validate the creative matrix, script editing, render handoff, and production deployment.
-- [ ] Block or flag unverifiable numeric, comparative, and testimonial claims in generated campaign concepts before saving or rendering.
+- [x] Expand Campaign Engine from three concepts to a ten-angle creative matrix with distinct hooks, proof angles, visual directions, and platform intent.
+- [x] Expose an editable structured script editor for each campaign concept before visual or video rendering.
+- [x] Preserve script edits in the tenant-scoped campaign_concepts record and use the edited script in downstream creative render prompts.
+- [x] Validate the creative matrix, script editing, render handoff, and production deployment.
+- [x] Block or flag unverifiable numeric, comparative, and testimonial claims in generated campaign concepts before saving or rendering.
