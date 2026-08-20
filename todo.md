@@ -117,4 +117,8 @@
 - [x] Pass the storyboard structure into the real video render request and persist it with the media asset metadata.
 - [x] Validate storyboard persistence, render monitoring, review handoff, and production deployment.
 
-- [ ] Validate uploaded app or product reference images are retrieved, passed to the image edit provider, reflected in the generated composition, and persisted with reference metadata.
+- [x] Validate uploaded app or product reference images are retrieved, passed to the image edit provider, reflected in the generated composition, and persisted with reference metadata.
+
+- [x] Enable robust Sora-compatible video rendering and cinematic MP4 video synthesis in Creative Lab and backend media providers.
+
+- [ ] Complete a video render immediately when the provider returns status=completed at creation time, then persist the MP4 and thumbnail instead of leaving the UI at 100% rendering.

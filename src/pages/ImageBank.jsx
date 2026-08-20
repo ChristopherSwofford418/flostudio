@@ -269,9 +269,13 @@ export default function ImageBank() {
       if (!response.ok || job.error) throw new Error(job.error || 'Video render could not be started.')
       const persisted = await updateMediaAsset(renderAsset.id, { provider_job_id:job.id, render_status:job.status || 'queued', metadata:{ ...renderAsset.metadata, providerModel:job.model || null, size:videoFormat, seconds:videoSeconds, quality:videoQuality } })
       const normalized = { ...job, mediaAssetId:persisted.id, prompt:runbookPrompt, storyboard, size:videoFormat, seconds:videoSeconds, status:job.status || 'queued', createdAt:Date.now() }
-      setVideoJob(normalized)
-      localStorage.setItem('flostudio_active_video_render', JSON.stringify(normalized))
-      await loadAssets()
+      if (normalized.status === 'completed') {
+        await completeVideo(normalized)
+      } else {
+        setVideoJob(normalized)
+        localStorage.setItem('flostudio_active_video_render', JSON.stringify(normalized))
+        await loadAssets()
+      }
     } catch (startError) {
       if (renderAsset?.id) await updateMediaAsset(renderAsset.id, { render_status:'failed', error_message:startError.message || 'Video render could not be started.' }).catch(() => {})
       setVideoError(startError.message || 'Video render could not be started.')
