@@ -109,10 +109,12 @@
 - [x] Validate the creative matrix, script editing, render handoff, and production deployment.
 - [x] Block or flag unverifiable numeric, comparative, and testimonial claims in generated campaign concepts before saving or rendering.
 
-- [ ] Fix Creative Lab image generation so prompts and uploaded product references correctly drive provider generation without silent fallbacks or missing error reporting.
+- [x] Fix Creative Lab image generation so prompts and uploaded product references correctly drive provider generation without silent fallbacks or missing error reporting.
 
 - [x] Fix Creative Lab image generation so prompts and uploaded product references correctly drive provider generation without silent fallbacks or missing error reporting.
 
-- [ ] Add a structured video storyboard editor with editable shot purpose, visual action, on-screen copy, and voiceover beats.
-- [ ] Pass the storyboard structure into the real video render request and persist it with the media asset metadata.
-- [ ] Validate storyboard persistence, render monitoring, review handoff, and production deployment.
+- [x] Add a structured video storyboard editor with editable shot purpose, visual action, on-screen copy, and voiceover beats.
+- [x] Pass the storyboard structure into the real video render request and persist it with the media asset metadata.
+- [x] Validate storyboard persistence, render monitoring, review handoff, and production deployment.
+
+- [ ] Validate uploaded app or product reference images are retrieved, passed to the image edit provider, reflected in the generated composition, and persisted with reference metadata.
