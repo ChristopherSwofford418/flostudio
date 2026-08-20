@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
-import { createCampaign, createCampaignPosts, generateCampaignVariant, listCampaignMedia, loadCampaignWorkspace, saveBrandAndProduct, saveCampaignConcepts, selectCampaignConcept } from '../lib/campaignEngine'
+import { createCampaign, createCampaignPosts, generateCampaignVariant, listCampaignMedia, loadCampaignWorkspace, saveBrandAndProduct, saveCampaignConcepts, selectCampaignConcept, updateCampaignConcept } from '../lib/campaignEngine'
 import { buildNextBestCreative, recordMemoryEvent } from '../lib/creativeMemory'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWYiOiJ4eGtwdm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5Nzc3MDI1NDh9.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
@@ -20,11 +20,19 @@ async function callAI(messages, maxTokens = 1600) {
 }
 
 function fallbackConcepts({ brand, product, offer }) {
-  return [
-    { title:'The problem becomes simple', angle:'Pain-to-clarity', hook:`Still losing time to ${product || 'the old way'}?`, proof:`${brand} makes the hard part feel clear, focused, and easy to act on.`, cta:offer || 'See the smarter way forward.', visual_recipe:{ direction:'Editorial before-and-after story with bold product focus' } },
-    { title:'Proof over promises', angle:'Outcome-led proof', hook:`What changes when ${product || brand} is working for you?`, proof:`A tangible, believable outcome that makes the next step feel worth taking.`, cta:offer || 'Make your move today.', visual_recipe:{ direction:'Confident product demonstration with high-trust visual proof' } },
-    { title:'A better daily ritual', angle:'Lifestyle transformation', hook:`Your next favorite routine starts here.`, proof:`${brand} turns a recurring friction point into a more rewarding everyday experience.`, cta:offer || 'Start with the first step.', visual_recipe:{ direction:'Cinematic lifestyle moment with warm human momentum' } },
+  const briefs = [
+    ['The problem becomes simple','Pain-to-clarity',`Still losing time to ${product || 'the old way'}?`,'Editorial before-and-after story with bold product focus.'],
+    ['Proof over promises','Outcome-led proof',`What changes when ${product || brand} is working for you?`,'Confident product demonstration with high-trust visual proof.'],
+    ['A better daily ritual','Lifestyle transformation','Your next favorite routine starts here.','Cinematic lifestyle moment with warm human momentum.'],
+    ['The switch worth making','Alternative comparison',`There is a simpler way to handle ${product || 'this'}.`,'Clean side-by-side contrast between friction and the better path.'],
+    ['One feature, fully felt','Feature spotlight',`The ${product || 'feature'} detail you notice every day.`,'Macro product detail with a deliberate, tactile editorial frame.'],
+    ['The skeptical first look','Objection reversal',`I did not expect ${product || brand} to make this much difference.`,'Creator-native first-impression scene with honest visual restraint.'],
+    ['The fast-start moment','Speed and ease',`From blank page to useful outcome in minutes.`,'Energetic screen-led walkthrough with clear sequential proof.'],
+    ['Built for the busy day','Audience identity',`For people who need the useful part without the ceremony.`,'Human-in-context product use inside a focused everyday routine.'],
+    ['The future state','Aspirational identity',`This is what a more confident ${product || 'workflow'} feels like.`,'Premium lifestyle aspiration grounded by visible product evidence.'],
+    ['The reason to act now','Activation and CTA',`Your next step is smaller than you think.`,'High-contrast announcement composition with one decisive action.'],
   ]
+  return briefs.map(([title, angle, hook, direction]) => ({ title, angle, hook, proof:`${brand || 'This product'} turns a real moment of friction into a clearer, more useful next step without unsupported promises.`, cta:offer || 'See the next step.', visual_recipe:{ direction }, script:{ fifteen_second:`Hook: ${hook}\nProof: Show the product making the outcome concrete.\nCTA: ${offer || 'See the next step.'}` } }))
 }
 
 export default function AgentHQ() {
@@ -54,6 +62,9 @@ export default function AgentHQ() {
   const [busy, setBusy] = useState('')
   const [renderProgress, setRenderProgress] = useState(null)
   const [error, setError] = useState('')
+  const [editingConcept, setEditingConcept] = useState(null)
+  const [scriptDraft, setScriptDraft] = useState('')
+  const [savingConcept, setSavingConcept] = useState(false)
 
   const stageIndex = stageOrder.indexOf(stage)
   const campaignName = useMemo(() => `${brandName || 'New brand'} — ${offerText || objective || 'Campaign'}`, [brandName, offerText, objective])
@@ -79,6 +90,20 @@ export default function AgentHQ() {
     try { setMemoryBrief(await buildNextBestCreative({ userId, brandId })) } catch {}
   }
   const togglePlatform = platform => setSelectedPlatforms(previous => previous.includes(platform) ? previous.filter(item => item !== platform) : [...previous, platform])
+  const beginEditConcept = concept => { setEditingConcept({ ...concept, visual_recipe:{ ...(concept.visual_recipe || {}) }, script:{ ...(concept.script || {}) } }); setScriptDraft(concept.script?.fifteen_second || concept.script?.['15_second'] || '') }
+  const cancelEditConcept = () => { setEditingConcept(null); setScriptDraft('') }
+  const saveConceptEdit = async () => {
+    if (!editingConcept || !userId) return
+    setSavingConcept(true); setError('')
+    try {
+      const updates = { hook:editingConcept.hook, proof:editingConcept.proof, cta:editingConcept.cta, visual_recipe:{ ...(editingConcept.visual_recipe || {}) }, script:{ ...(editingConcept.script || {}), fifteen_second:scriptDraft } }
+      const saved = await updateCampaignConcept({ userId, conceptId:editingConcept.id, updates })
+      setConcepts(previous => previous.map(concept => concept.id === saved.id ? saved : concept))
+      setSelectedConcept(previous => previous?.id === saved.id ? saved : previous)
+      cancelEditConcept()
+    } catch (editError) { setError(editError.message || 'Flo could not save this creative edit.') }
+    finally { setSavingConcept(false) }
+  }
 
   const analyzeUrl = async () => {
     if (!websiteUrl.trim()) { setStage('dna'); return }
@@ -105,13 +130,13 @@ export default function AgentHQ() {
       const { brand, product } = await saveBrandAndProduct({ userId, brandName:brandName.trim(), websiteUrl:websiteUrl.trim(), productName:productName.trim(), description:description.trim(), offerText:offerText.trim(), audience:audience.trim(), brandDna, sourceFacts })
       const newCampaign = await createCampaign({ userId, brand, product, name:campaignName, objective, audience, offerText, platforms:selectedPlatforms, brief:{ description, sourceFacts, brandDna } })
       const generated = await callAI([
-        { role:'system', content:'You are FloStudio’s creative strategy director. Return valid JSON only: an array of exactly 3 campaign concepts. Each object must have title, angle, hook, proof, cta, visual_recipe with a direction field, and script with a 15_second field. Be specific and do not make unsupported claims.' },
-        { role:'user', content:`Brand: ${brandName}\nProduct: ${productName}\nDescription: ${description || 'Not provided'}\nOffer: ${offerText || 'Not provided'}\nAudience: ${audience || 'Not provided'}\nObjective: ${objective}\nBrand voice: ${brandDna.voice}\nVisual direction: ${brandDna.visualDirection}\nProof points: ${brandDna.proofPoints || 'Use only prudent generic proof'}\nRestrictions: ${brandDna.restrictedClaims || 'No unsupported claims'}\nCreate three materially different campaign angles.` }
+        { role:'system', content:'You are FloStudio’s creative strategy director. Return valid JSON only: an array of exactly 10 materially different campaign concepts. Each object must have title, angle, hook, proof, cta, visual_recipe with a direction field, and script with a fifteen_second field containing a concise 15-second spoken script with Hook, Proof, and CTA beats. Vary the angles across pain-to-clarity, outcome proof, lifestyle transformation, comparison, feature spotlight, objection reversal, speed, audience identity, aspiration, and activation. Be specific and do not make unsupported claims.' },
+        { role:'user', content:`Brand: ${brandName}\nProduct: ${productName}\nDescription: ${description || 'Not provided'}\nOffer: ${offerText || 'Not provided'}\nAudience: ${audience || 'Not provided'}\nObjective: ${objective}\nBrand voice: ${brandDna.voice}\nVisual direction: ${brandDna.visualDirection}\nProof points: ${brandDna.proofPoints || 'Use only prudent generic proof'}\nRestrictions: ${brandDna.restrictedClaims || 'No unsupported claims'}\nCreate ten materially different campaign angles.` }
       ], 1800)
       let parsed = []
       try { const match = generated.replace(/```json|```/g, '').match(/\[[\s\S]*\]/); parsed = match ? JSON.parse(match[0]) : [] } catch {}
-      if (!Array.isArray(parsed) || parsed.length < 3) parsed = fallbackConcepts({ brand:brandName, product:productName, offer:offerText })
-      const stored = await saveCampaignConcepts({ userId, campaignId:newCampaign.id, concepts:parsed.slice(0,3) })
+      if (!Array.isArray(parsed) || parsed.length < 10) parsed = fallbackConcepts({ brand:brandName, product:productName, offer:offerText })
+      const stored = await saveCampaignConcepts({ userId, campaignId:newCampaign.id, concepts:parsed.slice(0,10) })
       setActiveBrandId(brand.id); setCampaign(newCampaign); setConcepts(stored); setStage('angles'); await refreshWorkspace(); await refreshMemory(brand.id)
     } catch (campaignError) { setError(campaignError.message || 'Flo could not create campaign angles. Please try again.') }
     finally { setBusy('') }
@@ -212,7 +237,7 @@ export default function AgentHQ() {
           </section>}
 
                         {stage === 'angles' && <section style={{ padding:'26px 28px' }}>
-            <div className="studio-kicker" style={{ color:'#d9ff75' }}>03 / Campaign angles & Batch Creator</div><h2 style={{ color:'#fff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>Pick your hooks or generate the whole batch.</h2><p style={{ color:'rgba(234,229,255,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>Like Arch Ads, FloStudio creates multiple distinct angles from your product URL so you can test hooks, visuals, and messaging in parallel.</p>            <div style={{ display:'grid', gap:11, marginTop:22 }}>{concepts.map((concept, index) => <article key={concept.id} style={{ padding:'17px 18px', borderRadius:14, border:'1px solid rgba(255,255,255,.13)', background:index === 0 ? 'linear-gradient(120deg,rgba(123,97,255,.22),rgba(255,91,53,.1))' : 'rgba(255,255,255,.035)' }}><div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:15 }}><div><div style={{ color:'#d9ff75', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>ANGLE 0{index + 1} / {concept.angle}</div><h3 style={{ color:'#fff', fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>{concept.title}</h3><div style={{ color:'#ffd3c7', fontFamily:'Playfair Display,serif', fontSize:17, marginTop:10 }}>“{concept.hook}”</div><p style={{ color:'rgba(234,229,255,.7)', fontSize:11.5, lineHeight:1.6, marginTop:8, maxWidth:610 }}>{concept.proof}</p><div style={{ color:'#bff5e8', fontSize:11, fontWeight:750, marginTop:9 }}>CTA: {concept.cta}</div></div><button onClick={() => chooseConcept(concept)} disabled={busy === `choose-${concept.id}`} className="studio-button" style={{ flexShrink:0 }}>{busy === `choose-${concept.id}` ? 'Building…' : 'Choose angle'}</button></div></article>)}</div>
+            <div className="studio-kicker" style={{ color:'#d9ff75' }}>03 / Campaign angles & batch creator</div><h2 style={{ color:'#fff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>Build a creative matrix before you spend on renders.</h2><p style={{ color:'rgba(234,229,255,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>Flo now produces ten distinct campaign theses from one product intake. Edit the hook, proof, CTA, visual direction, and 15-second script before selecting the angle that should become your production board.</p><div style={{ display:'grid', gap:11, marginTop:22 }}>{concepts.map((concept, index) => <article key={concept.id} style={{ padding:'17px 18px', borderRadius:14, border:'1px solid rgba(255,255,255,.13)', background:index === 0 ? 'linear-gradient(120deg,rgba(123,97,255,.22),rgba(255,91,53,.1))' : 'rgba(255,255,255,.035)' }}><div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:15 }}><div style={{ flex:1, minWidth:0 }}><div style={{ color:'#d9ff75', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>ANGLE {String(index + 1).padStart(2,'0')} / {concept.angle}</div><h3 style={{ color:'#fff', fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>{concept.title}</h3><div style={{ color:'#ffd3c7', fontFamily:'Playfair Display,serif', fontSize:17, marginTop:10 }}>“{concept.hook}”</div><p style={{ color:'rgba(234,229,255,.7)', fontSize:11.5, lineHeight:1.6, marginTop:8, maxWidth:610 }}>{concept.proof}</p><div style={{ color:'#bff5e8', fontSize:11, fontWeight:750, marginTop:9 }}>CTA: {concept.cta}</div><div style={{ color:'rgba(234,229,255,.5)', fontSize:10.5, marginTop:8 }}>Visual lens: {concept.visual_recipe?.direction || 'Editorial product story'}</div></div><div style={{ display:'grid', gap:7, flexShrink:0 }}><button onClick={() => beginEditConcept(concept)} className="studio-button studio-button--soft" style={{ fontSize:10 }}>{editingConcept?.id === concept.id ? 'Editing' : 'Edit script & hook'}</button><button onClick={() => chooseConcept(concept)} disabled={busy === `choose-${concept.id}`} className="studio-button" style={{ fontSize:10 }}>{busy === `choose-${concept.id}` ? 'Building…' : 'Choose angle'}</button></div></div>{editingConcept?.id === concept.id && <div style={{ display:'grid', gap:10, marginTop:16, paddingTop:15, borderTop:'1px solid rgba(255,255,255,.12)' }}><div style={{ color:'#d9ff75', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>EDITABLE CREATIVE DIRECTION</div><input value={editingConcept.hook || ''} onChange={event => setEditingConcept(previous => ({ ...previous, hook:event.target.value }))} placeholder="Opening hook" style={fieldStyle} /><textarea value={editingConcept.proof || ''} onChange={event => setEditingConcept(previous => ({ ...previous, proof:event.target.value }))} rows={2} placeholder="Proof beat" style={{ ...fieldStyle, resize:'vertical' }} /><input value={editingConcept.cta || ''} onChange={event => setEditingConcept(previous => ({ ...previous, cta:event.target.value }))} placeholder="Call to action" style={fieldStyle} /><input value={editingConcept.visual_recipe?.direction || ''} onChange={event => setEditingConcept(previous => ({ ...previous, visual_recipe:{ ...(previous.visual_recipe || {}), direction:event.target.value } }))} placeholder="Visual direction" style={fieldStyle} /><textarea value={scriptDraft} onChange={event => setScriptDraft(event.target.value)} rows={5} placeholder="Hook: ...\nProof: ...\nCTA: ..." style={{ ...fieldStyle, resize:'vertical' }} /><div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}><button onClick={cancelEditConcept} className="studio-button studio-button--soft" style={{ fontSize:10 }}>Cancel</button><button onClick={saveConceptEdit} disabled={savingConcept} className="studio-button" style={{ fontSize:10 }}>{savingConcept ? 'Saving…' : 'Save creative direction'}</button></div></div>}</article>)}</div>
           </section>}
 
           {stage === 'board' && <section style={{ padding:'26px 28px' }}>

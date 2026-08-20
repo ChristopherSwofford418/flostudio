@@ -67,6 +67,23 @@ export async function saveCampaignConcepts({ userId, campaignId, concepts }) {
   return stored
 }
 
+export async function updateCampaignConcept({ userId, conceptId, updates }) {
+  const safeUpdates = {
+    ...(updates.title !== undefined ? { title:updates.title } : {}),
+    ...(updates.angle !== undefined ? { angle:updates.angle } : {}),
+    ...(updates.hook !== undefined ? { hook:updates.hook } : {}),
+    ...(updates.proof !== undefined ? { proof:updates.proof } : {}),
+    ...(updates.cta !== undefined ? { cta:updates.cta } : {}),
+    ...(updates.visual_recipe !== undefined ? { visual_recipe:updates.visual_recipe } : {}),
+    ...(updates.script !== undefined ? { script:updates.script } : {}),
+    updated_at:new Date().toISOString(),
+  }
+  const response = await supabase.from('campaign_concepts').update(safeUpdates).eq('id', conceptId).eq('user_id', userId).select().single()
+  if (response.error) throw response.error
+  await recordMemoryEvent({ userId, campaignId:response.data.campaign_id, conceptId, eventType:'concept_edited', attributes:{ fields:Object.keys(safeUpdates).filter(field => field !== 'updated_at') } })
+  return response.data
+}
+
 export async function selectCampaignConcept(campaignId, conceptId) {
   const [campaignUpdate, conceptUpdate] = await Promise.all([
     supabase.from('campaigns').update({ selected_concept_id:conceptId, status:'ready_for_review', updated_at:new Date().toISOString() }).eq('id', campaignId).select().single(),
@@ -98,7 +115,7 @@ export async function createCampaignPosts({ userId, campaignId, concept, platfor
 export async function generateCampaignVariant({ userId, campaign, concept, post, variation }) {
   const workspaceId = campaign.workspace_id || await ensurePersonalWorkspace()
   const prompt =
- `Create a premium conversion-focused ${post.platform} campaign creative. Campaign: ${campaign.name}. Concept: ${concept.title}. Angle: ${concept.angle}. Hook: ${concept.hook}. Proof: ${concept.proof}. CTA: ${concept.cta}. Visual direction: ${concept.visual_recipe?.direction || 'editorial commercial product story'}. Make the product benefit instantly clear; use sophisticated modern ad art direction, deliberate lighting, and a strong visual hierarchy. Do not use unreadable generated text, public figures, competitor marks, or copyrighted characters.`
+ `Create a premium conversion-focused ${post.platform} campaign creative. Campaign: ${campaign.name}. Concept: ${concept.title}. Angle: ${concept.angle}. Hook: ${concept.hook}. Proof: ${concept.proof}. CTA: ${concept.cta}. Visual direction: ${concept.visual_recipe?.direction || 'editorial commercial product story'}. Edited script direction: ${JSON.stringify(concept.script || {})}. Make the product benefit instantly clear; use sophisticated modern ad art direction, deliberate lighting, and a strong visual hierarchy. Do not use unreadable generated text, public figures, competitor marks, or copyrighted characters.`
   const jobResult = await supabase.from('render_jobs').insert([{ user_id:userId, workspace_id:workspaceId, campaign_id:campaign.id, concept_id:concept.id, provider:'openai_gpt_image', job_kind:'image', status:'queued', request_spec:{ prompt, variation, platform:post.platform, ratio:'4:5' }, quote_tokens:10 }]).select().single()
   if (jobResult.error) throw jobResult.error
   const job = jobResult.data
