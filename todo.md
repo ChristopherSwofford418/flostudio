@@ -107,3 +107,4 @@
 - [ ] Expose an editable structured script editor for each campaign concept before visual or video rendering.
 - [ ] Preserve script edits in the tenant-scoped campaign_concepts record and use the edited script in downstream creative render prompts.
 - [ ] Validate the creative matrix, script editing, render handoff, and production deployment.
+- [ ] Block or flag unverifiable numeric, comparative, and testimonial claims in generated campaign concepts before saving or rendering.

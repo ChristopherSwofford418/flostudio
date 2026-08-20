@@ -10,6 +10,24 @@ const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWYiOiJ4eGtwdm9raHFicGJxZ
 const platforms = ['instagram', 'facebook', 'linkedin', 'tiktok']
 const platformLabel = { instagram:'Instagram', facebook:'Facebook', linkedin:'LinkedIn', tiktok:'TikTok' }
 const stageOrder = ['intake','dna','angles','board']
+const riskyClaimPattern = /(?:\b(?:guaranteed|proven|superior|best|#1|number one|more features|customers report|increased|boosted|saved)\b|\b\d+(?:\.\d+)?\s*%|\b\d+(?:\.\d+)?x\b|\b(?:better|more|faster)\b[\w\s]{0,35}\bthan\b)/i
+const safeProof = 'Show the product making a specific, observable step easier for the intended audience.'
+const safeCta = 'Explore the next step.'
+
+function normalizeConceptClaims(concept, trustedText) {
+  const trusted = String(trustedText || '').toLowerCase()
+  const safe = value => {
+    const text = String(value || '').trim()
+    return text && (!riskyClaimPattern.test(text) || (trusted && text.toLowerCase().includes(trusted))) ? text : ''
+  }
+  const hook = safe(concept.hook) || 'What would a clearer next step feel like?'
+  const proof = safe(concept.proof) || safeProof
+  const cta = safe(concept.cta) || safeCta
+  const script = { ...(concept.script || {}) }
+  const scriptKey = script.fifteen_second !== undefined ? 'fifteen_second' : script['15_second'] !== undefined ? '15_second' : 'fifteen_second'
+  script[scriptKey] = safe(script[scriptKey]) || `Hook: ${hook}\nProof: ${safeProof}\nCTA: ${cta}`
+  return { ...concept, hook, proof, cta, script }
+}
 
 const fieldStyle = { width:'100%', boxSizing:'border-box', background:'rgba(5,20,15,.38)', border:'1px solid rgba(243,240,231,.18)', borderRadius:3, color:'#fff', padding:'12px 13px', outline:'none', font:'inherit', fontSize:12.5, lineHeight:1.55 }
 
@@ -131,12 +149,14 @@ export default function AgentHQ() {
       const newCampaign = await createCampaign({ userId, brand, product, name:campaignName, objective, audience, offerText, platforms:selectedPlatforms, brief:{ description, sourceFacts, brandDna } })
       const generated = await callAI([
         { role:'system', content:'You are FloStudio’s creative strategy director. Return valid JSON only: an array of exactly 10 materially different campaign concepts. Each object must have title, angle, hook, proof, cta, visual_recipe with a direction field, and script with a fifteen_second field containing a concise 15-second spoken script with Hook, Proof, and CTA beats. Vary the angles across pain-to-clarity, outcome proof, lifestyle transformation, comparison, feature spotlight, objection reversal, speed, audience identity, aspiration, and activation. Be specific and do not make unsupported claims.' },
-        { role:'user', content:`Brand: ${brandName}\nProduct: ${productName}\nDescription: ${description || 'Not provided'}\nOffer: ${offerText || 'Not provided'}\nAudience: ${audience || 'Not provided'}\nObjective: ${objective}\nBrand voice: ${brandDna.voice}\nVisual direction: ${brandDna.visualDirection}\nProof points: ${brandDna.proofPoints || 'Use only prudent generic proof'}\nRestrictions: ${brandDna.restrictedClaims || 'No unsupported claims'}\nCreate ten materially different campaign angles.` }
+        { role:'user', content:`Brand: ${brandName}\nProduct: ${productName}\nDescription: ${description || 'Not provided'}\nOffer: ${offerText || 'Not provided'}\nAudience: ${audience || 'Not provided'}\nObjective: ${objective}\nBrand voice: ${brandDna.voice}\nVisual direction: ${brandDna.visualDirection}\nProof points: ${brandDna.proofPoints || 'Use only prudent generic proof'}\nRestrictions: ${brandDna.restrictedClaims || 'No unsupported claims'}\nCreate ten materially different campaign angles. Use only the supplied description, audience, offer, source facts, and approved proof points. If no verified numeric or comparative proof is supplied, do not invent it.` }
       ], 1800)
       let parsed = []
       try { const match = generated.replace(/```json|```/g, '').match(/\[[\s\S]*\]/); parsed = match ? JSON.parse(match[0]) : [] } catch {}
       if (!Array.isArray(parsed) || parsed.length < 10) parsed = fallbackConcepts({ brand:brandName, product:productName, offer:offerText })
-      const stored = await saveCampaignConcepts({ userId, campaignId:newCampaign.id, concepts:parsed.slice(0,10) })
+      const trustedText = `${description}\n${sourceFacts}\n${brandDna.proofPoints || ''}`
+      const normalized = parsed.slice(0,10).map(concept => normalizeConceptClaims(concept, trustedText))
+      const stored = await saveCampaignConcepts({ userId, campaignId:newCampaign.id, concepts:normalized })
       setActiveBrandId(brand.id); setCampaign(newCampaign); setConcepts(stored); setStage('angles'); await refreshWorkspace(); await refreshMemory(brand.id)
     } catch (campaignError) { setError(campaignError.message || 'Flo could not create campaign angles. Please try again.') }
     finally { setBusy('') }
