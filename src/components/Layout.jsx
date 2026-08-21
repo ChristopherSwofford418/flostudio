@@ -22,8 +22,8 @@ const pageMeta = {
   '/pricing': ['Plans & Tokens', 'Scale your creative output with transparent usage.'],
 }
 
-function AgentDrawer({ onClose }) {
-  const [messages, setMessages] = useState([{ role: 'assistant', content: 'I am Flo, your marketing copilot. I can build campaigns, create posts, analyze your pipeline, and answer any growth question.' }])
+function AgentDrawer({ onClose, activeApp, apps }) {
+  const [messages, setMessages] = useState([{ role: 'assistant', content: activeApp ? `I am Flo, your marketing copilot. I see your active portfolio app is **${activeApp.name}**. I can build campaigns, create exact post quantities, schedule content, and analyze your pipeline.` : 'I am Flo, your marketing copilot. I can build campaigns, create posts, analyze your pipeline, and answer any growth question.' }])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [steps, setSteps] = useState([])
@@ -37,9 +37,9 @@ function AgentDrawer({ onClose }) {
     setMessages(prev => [...prev, { role: 'user', content: text }])
     setInput('')
     setLoading(true)
-    setSteps(['Reading your workspace signal…'])
+    setSteps([activeApp ? `Targeting ${activeApp.name}...` : 'Reading your portfolio workspace...'])
     try {
-      const result = await runFloAgent(historyRef.current, text, (step) => setSteps(prev => [...prev, typeof step === 'string' ? step : 'Processing...']), (action) => setSteps(prev => [...prev, `Completed ${String(action?.tool || 'action').replaceAll('_', ' ')}`]))
+      const result = await runFloAgent(historyRef.current, text, (step) => setSteps(prev => [...prev, typeof step === 'string' ? step : 'Processing...']), (action) => setSteps(prev => [...prev, `Completed ${String(action?.tool || 'action').replaceAll('_', ' ')}`]), activeApp, apps)
       const reply = result?.reply || 'I completed that request.'
       historyRef.current = [...historyRef.current, { role: 'user', content: text }, { role: 'assistant', content: reply }]
       setMessages(prev => [...prev, { role: 'assistant', content: reply, actions: Array.isArray(result?.actions) ? result.actions : [] }])
@@ -89,6 +89,6 @@ export default function Layout({ children, title }) {
       <header className="flo-topbar"><div><div className="flo-topbar-crumb">FLOSTUDIO / {meta[0]}</div><div className="flo-topbar-meta">{meta[1]}</div></div><div className="flo-topbar-actions"><span className="signal-stamp">LIVE SYSTEM</span><button onClick={() => setCopilotOpen(true)} className="flo-topbar-copilot">Flo Operator</button><button onClick={() => navigate('/pricing')} className="flo-topbar-tokens">{tokens} tokens</button></div></header>
       <div style={{ maxWidth:1360, margin:'0 auto' }}>{children}</div>
     </main>
-    {copilotOpen && <AgentDrawer onClose={() => setCopilotOpen(false)} />}
+    {copilotOpen && <AgentDrawer onClose={() => setCopilotOpen(false)} activeApp={activeApp} apps={apps} />}
   </div>
 }

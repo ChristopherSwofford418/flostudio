@@ -154,27 +154,56 @@ async function executeTool(toolName, args, onProgress) {
   }
 }
 
-export async function runFloAgent(conversationHistory, userMessage, onProgress, onAction) {
+export async function runFloAgent(conversationHistory, userMessage, onProgress, onAction, activeApp, allApps) {
   const isCommand = /create|fill|schedule|write|generate|posts|calendar|approve|stats/i.test(userMessage)
 
-  onProgress?.('Flo is analyzing your request...')
+  onProgress?.('Flo is analyzing your request against your portfolio...')
 
-  // If it's a direct command, we can execute the corresponding tool right away for 100% reliability
+  let matchedApp = activeApp
+  const lowerMsg = userMessage.toLowerCase()
+  if (!matchedApp && Array.isArray(allApps) && allApps.length > 0) {
+    matchedApp = allApps.find(app => app.name && lowerMsg.includes(app.name.toLowerCase())) || allApps[0]
+  }
+
+  const appName = matchedApp?.name || 'Your Portfolio Product'
+  const appDesc = matchedApp?.description || matchedApp?.category || 'High-performance digital offering'
+
   let actions = []
   let toolResultSummary = ''
 
   if (/fill|calendar|schedule/i.test(userMessage)) {
-    onProgress?.('Planning content calendar...')
-    const res = await executeTool('fill_calendar', { brand_description: userMessage, platforms: ['instagram', 'linkedin', 'twitter'], days: 7 }, onProgress)
+    const daysMatch = userMessage.match(/(\d+)\s*(?:days|posts)/i)
+    const days = daysMatch ? parseInt(daysMatch[1], 10) : 7
+    onProgress?.(`Planning ${days}-day calendar for ${appName}...`)
+    const res = await executeTool('fill_calendar', { brand_description: `${appName}: ${appDesc}`, platforms: ['instagram', 'linkedin', 'twitter'], days }, onProgress)
     actions.push({ tool: 'fill_calendar', result: res })
     onAction?.({ tool: 'fill_calendar', result: res })
-    toolResultSummary = res.summary || `Created and scheduled ${res.created} posts successfully!`
+    toolResultSummary = res.summary || `Successfully created and scheduled ${res.created} posts for ${appName}!`
   } else if (/create|write|generate|posts/i.test(userMessage)) {
-    onProgress?.('Generating campaign posts...')
-    const res = await executeTool('create_posts', { posts: [{ platform: 'instagram', content: userMessage }, { platform: 'linkedin', content: userMessage }] }, onProgress)
+    const countMatch = userMessage.match(/(\d+)\s*posts/i)
+    const count = countMatch ? parseInt(countMatch[1], 10) : 5
+    onProgress?.(`Generating ${count} custom posts for ${appName}...`)
+
+    const platforms = ['instagram', 'linkedin', 'twitter', 'facebook']
+    const postAngles = [
+      `Transform your workflow with ${appName}. Here is why leading professionals rely on it every day. #Growth #${appName.replace(/\s+/g,'')}`,
+      `Behind the scenes of ${appName}: built to eliminate friction and deliver clear outcomes. Check it out! #Productivity #${appName.replace(/\s+/g,'')}`,
+      `Stop guessing how to solve your workflow bottleneck. ${appName} makes it instant and reliable. #Workflow #${appName.replace(/\s+/g,'')}`,
+      `Customer spotlight: how teams are scaling their results using ${appName}. Ready to try it? #SuccessStory #${appName.replace(/\s+/g,'')}`,
+      `Quick tip of the week brought to you by ${appName}: consistency beats complexity every time. #Tips #${appName.replace(/\s+/g,'')}`
+    ]
+
+    const requestedPosts = Array.from({ length: count }, (_, i) => ({
+      platform: platforms[i % platforms.length],
+      content: `${i + 1}. ${postAngles[i % postAngles.length]}`,
+      scheduled_at: new Date(Date.now() + i * 86400000).toISOString(),
+      status: 'pending'
+    }))
+
+    const res = await executeTool('create_posts', { posts: requestedPosts, brand_description: appName }, onProgress)
     actions.push({ tool: 'create_posts', result: res })
     onAction?.({ tool: 'create_posts', result: res })
-    toolResultSummary = `Successfully created and saved ${res.created} posts to your pipeline and calendar!`
+    toolResultSummary = `Successfully created and saved ${res.created} posts for **${appName}** to your pipeline and calendar!`
   } else if (/approve/i.test(userMessage)) {
     onProgress?.('Approving pending content...')
     const res = await executeTool('approve_posts', { post_ids: ['all'] }, onProgress)
