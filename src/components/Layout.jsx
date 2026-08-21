@@ -65,7 +65,7 @@ function AgentDrawer({ onClose, activeApp, apps }) {
 export default function Layout({ children, title }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { tokens, tier } = useWorkspace()
+  const { tokens, tier, activeApp, apps } = useWorkspace()
   const [user, setUser] = useState(null)
   const [copilotOpen, setCopilotOpen] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)

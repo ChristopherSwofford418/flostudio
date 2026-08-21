@@ -125,4 +125,6 @@
 
 - [x] Build Portfolio Autopilot control plane to coordinate marketing, creative production, SEO, analytics, scheduling, review, and publishing across all tenant-owned apps with one click.
 
-- [ ] Make Flo a grounded portfolio-aware marketing copilot that understands each uploaded app, performs requested actions for the selected app, persists the exact requested quantity, and reports truthful results.
+- [x] Make Flo a grounded portfolio-aware marketing copilot that understands each uploaded app, performs requested actions for the selected app, persists the exact requested quantity, and reports truthful results.
+
+- [ ] Fix activeApp undefined runtime error in Layout.jsx that caused the Portfolio page error boundary.
