@@ -151,4 +151,4 @@
 
 - [ ] Complete a global no-green visual sweep, including Creative Lab hero and media-rail surfaces, while retaining restrained blue system highlights.
 
-- [ ] Grant the FloStudio owner account test@flostudio.io unlimited server-side tokens without affecting normal tenant billing.
+- [x] Grant the FloStudio owner account test@flostudio.io unlimited server-side tokens without affecting normal tenant billing.
