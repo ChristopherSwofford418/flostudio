@@ -199,6 +199,6 @@
 
 - [x] Redesign Creative Lab with a premium black-and-white Arcads-inspired production UI while preserving all app-scoped image-to-video controls.
 
-- [ ] Apply the premium black-and-white Arcads-inspired UI system across every FloStudio page, including navigation and authentication, while retaining all existing workflows.
+- [x] Apply the premium black-and-white Arcads-inspired UI system across every FloStudio page, including navigation and authentication, while retaining all existing workflows.
 
-- [ ] Eliminate every old red, orange, yellow, green, teal, and colored-gradient UI surface from FloStudio; retain only black, charcoal, off-white, white, and gray states.
+- [x] Eliminate every old red, orange, yellow, green, teal, and colored-gradient UI surface from FloStudio; retain only black, charcoal, off-white, white, and gray states.
