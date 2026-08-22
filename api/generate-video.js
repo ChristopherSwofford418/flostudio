@@ -1,8 +1,10 @@
 import { resolveVideoProvider } from './media-provider.js'
+import { resolveVideoProvider } from './media-provider.js'
 
 export const maxDuration = 60
 
-const ALLOWED_SIZES = new Set(['1280x720', '720x1280', '1920x1080', '1080x1920'])
+const ALLOWED_SIZES = new Set(['1280x720', '720x1280', '1792x1024', '1024x1792'])
+const ALLOWED_SECONDS = new Set(['4', '8', '12'])
 
 async function parseBody(req) {
   return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
@@ -27,8 +29,12 @@ export default async function handler(req, res) {
     const action = req.method === 'GET' ? req.query?.action : body.action
     const id = req.method === 'GET' ? req.query?.id : null
 
-    if (req.method === 'GET' && action === 'status') return res.status(200).json(await provider.retrieve(id))
+    if (req.method === 'GET' && action === 'status') {
+      if (!id) return res.status(400).json({ error:'A video render ID is required to check status.' })
+      return res.status(200).json(await provider.retrieve(id))
+    }
     if (req.method === 'GET' && action === 'content') {
+      if (!id) return res.status(400).json({ error:'A video render ID is required to download content.' })
       const variant = ['video', 'thumbnail', 'spritesheet'].includes(req.query?.variant) ? req.query.variant : 'video'
       const content = await provider.download(id, variant)
       res.setHeader('Content-Type', content.headers.get('content-type') || (variant === 'video' ? 'video/mp4' : 'image/webp'))
@@ -40,7 +46,7 @@ export default async function handler(req, res) {
     const prompt = String(body.prompt || '').trim()
     if (!prompt) return res.status(400).json({ error:'Describe the video ad before starting a render.' })
     const size = ALLOWED_SIZES.has(body.size) ? body.size : '720x1280'
-    const seconds = ['4', '8', '12', '16', '20'].includes(String(body.seconds)) ? String(body.seconds) : '8'
+    const seconds = ALLOWED_SECONDS.has(String(body.seconds)) ? String(body.seconds) : '8'
     const model = body.quality === 'production' ? 'sora-2-pro' : 'sora-2'
     const storyboard = Array.isArray(body.storyboard) ? body.storyboard.slice(0, 6).map((beat, index) => ({
       index:index + 1,

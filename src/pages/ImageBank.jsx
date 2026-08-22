@@ -3,6 +3,7 @@ import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { belongsToProduct, createMediaAsset, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
+import { buildVideoSourceOptions, resolvedVideoReference } from '../lib/videoReferences'
 
 const STYLE_PRESETS = [
   { id: 'product', label: 'Product hero', desc: 'Sculptural product focus with commercial light' },
@@ -76,6 +77,7 @@ export default function ImageBank() {
   const [loadingAssets, setLoadingAssets] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [referenceImage, setReferenceImage] = useState(null)
+  const [videoSource, setVideoSource] = useState(null)
   const [prompt, setPrompt] = useState('')
   const [textOverlay, setTextOverlay] = useState('')
   const [stylePreset, setStylePreset] = useState('product')
@@ -112,6 +114,7 @@ export default function ImageBank() {
     if (icon && !list.includes(icon)) list.unshift(icon)
     return list
   }, [activeApp])
+  const videoSourceOptions = useMemo(() => buildVideoSourceOptions({ appStoreScreenshots, imageAssets }), [appStoreScreenshots, imageAssets])
   const selectedStyle = STYLE_PRESETS.find(style => style.id === stylePreset)
   const selectedRunbook = AD_RUNBOOKS.find(runbook => runbook.id === runbookId) || AD_RUNBOOKS[0]
   const selectedObjective = CAMPAIGN_OBJECTIVES.find(objective => objective.id === objectiveId) || CAMPAIGN_OBJECTIVES[0]
@@ -123,6 +126,18 @@ export default function ImageBank() {
     if (!prompt.trim()) setPrompt(runbook.prompt)
     if (!videoPrompt.trim()) setVideoPrompt(runbook.video)
     setStoryboard(createStoryboard(runbook, activeApp?.name || 'the product'))
+  }
+
+  const chooseVideoSource = source => {
+    if (!source?.url) return
+    setVideoSource(source)
+    setReferenceImage(source.url)
+    setVideoError('')
+  }
+
+  const clearVideoSource = () => {
+    setVideoSource(null)
+    setVideoError('')
   }
 
   const updateStoryboardBeat = (index, field, value) => {
@@ -155,6 +170,7 @@ export default function ImageBank() {
 
   useEffect(() => {
     setReferenceImage(null)
+    setVideoSource(null)
     setGeneratedResults([])
     setHandoffState({ status:'idle', message:'' })
     loadAssets(activeApp?.id)
@@ -283,16 +299,20 @@ export default function ImageBank() {
     const productContext = activeApp ? ` Product: ${activeApp.name}. ${activeApp.description || ''}` : ''
     const storyboardPrompt = storyboard.map((beat, index) => `Shot ${index + 1} — ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover: ${beat.voiceover}.`).join(' ')
     const runbookPrompt = `${selectedRunbook.label} format. ${videoPrompt || selectedRunbook.video} Hook: ${hook || 'derive a clear, credible hook.'} Proof: ${proof || 'show only supportable product truth.'}${productContext} Structured storyboard: ${storyboardPrompt}`
-    const request = { prompt:runbookPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage, storyboard }
+    const sourceReference = resolvedVideoReference(videoSource, referenceImage)
+    const request = { prompt:runbookPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage:sourceReference, storyboard }
     let renderAsset = null
+    let chargedTokens = 0
     try {
       const tokenCost = videoQuality === 'production' ? 60 : 30
       const authorized = await useTokens(tokenCost, 'AI video render')
       if (!authorized) return
+      chargedTokens = tokenCost
       renderAsset = await createMediaAsset({
         kind:'video', source:'ai_video', provider:'openai', render_status:'queued', prompt:runbookPrompt,
         product_id:activeApp.id, workspace_id:workspaceId || null,
-        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, referenceIncluded:Boolean(referenceImage), storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
+        reference_asset_id:videoSource?.id || null,
+        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, referenceIncluded:Boolean(sourceReference), referenceSource:videoSource?.source || (sourceReference ? 'pinned_reference' : null), referenceName:videoSource?.name || null, storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
       })
       const response = await fetch('/api/generate-video', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(request) })
       const job = await response.json()
@@ -308,6 +328,7 @@ export default function ImageBank() {
       }
     } catch (startError) {
       if (renderAsset?.id) await updateMediaAsset(renderAsset.id, { render_status:'failed', error_message:startError.message || 'Video render could not be started.' }).catch(() => {})
+      if (chargedTokens) await refundTokens(chargedTokens, 'the AI video render that did not start').catch(() => {})
       setVideoError(startError.message || 'Video render could not be started.')
     }
   }
@@ -386,6 +407,27 @@ export default function ImageBank() {
       </section>
 
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', margin:'0 0 4px' }}>{tabs.map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`creative-tab ${activeTab === tab.id ? 'active':''}`}>{tab.label} <span style={{ opacity:.72 }}>({tab.count})</span></button>)}</div>
+      {activeTab === 'video' && <section className="abundance-card" style={{ marginTop:18, padding:'16px 18px', borderColor:'rgba(255,193,59,.42)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', gap:14, flexWrap:'wrap' }}>
+          <div>
+            <div className="abundance-mini-label">SOURCE IMAGE / FIRST FRAME</div>
+            <h2 style={{ fontSize:18, letterSpacing:'-.05em', marginTop:4 }}>Choose the image that should become this video ad.</h2>
+            <p style={{ color:'rgba(243,240,231,.62)', fontSize:11.5, lineHeight:1.5, marginTop:5, maxWidth:650 }}>Choose any saved image for {activeApp?.name || 'the active app'} or its imported App Store artwork. FloStudio sends it as the video’s first-frame reference and records the relationship on the finished video.</p>
+          </div>
+          {videoSource && <button onClick={clearVideoSource} className="studio-chip">Use text only</button>}
+        </div>
+        {videoSource ? <div style={{ marginTop:12, display:'flex', gap:10, alignItems:'center', padding:9, border:'1px solid rgba(255,193,59,.32)', background:'rgba(255,193,59,.08)' }}>
+          <img src={videoSource.url} alt="Selected video source" style={{ width:56, height:56, objectFit:'cover' }} />
+          <div><b style={{ color:'#fff', fontSize:12 }}>Selected: {videoSource.name}</b><div style={{ color:'rgba(243,240,231,.6)', fontSize:10.5, marginTop:4 }}>This image is locked as the video’s starting frame.</div></div>
+        </div> : <div style={{ marginTop:12, color:'rgba(243,240,231,.58)', fontSize:11.5 }}>No source image selected. The video will be generated from the written direction only.</div>}
+        <div style={{ display:'flex', gap:8, overflowX:'auto', paddingTop:13, paddingBottom:2 }}>
+          {videoSourceOptions.map(source => <button key={`${source.source}-${source.id || source.url}`} onClick={() => chooseVideoSource(source)} aria-pressed={videoSource?.url === source.url} title={`Use ${source.name} as the source image`} style={{ width:82, minWidth:82, height:104, padding:0, overflow:'hidden', position:'relative', border:videoSource?.url === source.url ? '2px solid var(--signal)' : '1px solid rgba(243,240,231,.24)', background:'rgba(45,8,3,.54)', cursor:'pointer' }}>
+            <img src={source.url} alt={source.name} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+            <span style={{ position:'absolute', inset:'auto 0 0', padding:'6px 5px', background:'rgba(43,7,3,.88)', color:'#fff', fontSize:8, lineHeight:1.2, textAlign:'left' }}>{source.source === 'saved_image' ? 'SAVED AD' : 'STORE IMAGE'}</span>
+          </button>)}
+        </div>
+        {!videoSourceOptions.length && <div style={{ marginTop:12, padding:11, border:'1px dashed rgba(243,240,231,.22)', color:'rgba(243,240,231,.62)', fontSize:11.5 }}>Create an image ad or add an App Store link in Portfolio to choose a real source frame here.</div>}
+      </section>}
       {activeTab !== 'library' && <section><div className="abundance-mini-label" style={{ marginTop:18 }}>FORMAT SHELF / START FROM THE AD YOU WANT TO MAKE</div><div className="runbook-shelf">{AD_RUNBOOKS.map(runbook => <button key={runbook.id} onClick={() => selectRunbook(runbook)} className={`runbook-card ${runbookId === runbook.id ? 'active':''}`}><span className="runbook-card__type">{runbook.type}</span><b>{runbook.label}</b><small>{runbook.description}</small></button>)}</div></section>}
 
       {activeTab === 'generate' && <div className="creative-workspace" style={{ display:'grid', gridTemplateColumns:'minmax(0,1.12fr) minmax(360px,.88fr)', gap:20 }}>
@@ -436,7 +478,7 @@ export default function ImageBank() {
       {activeTab === 'generate' && generatedResults.length > 0 && <section className="abundance-card" style={{ marginTop:20, padding:'18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap', borderColor:'rgba(201,242,93,.34)' }}><div><div className="abundance-mini-label">REVIEW HANDOFF / TURN A REAL OUTPUT INTO A DECISION</div><h3 style={{ fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>Send this creative straight to the review queue.</h3><p style={{ color:'rgba(243,240,231,.62)', fontSize:11.5, lineHeight:1.5, marginTop:5, maxWidth:590 }}>FloStudio creates a real pending Instagram draft using your hook and proof, then attaches this saved creative so it is ready for an approval decision.</p>{handoffState.message && <div style={{ marginTop:8, fontSize:11.5, color:handoffState.status === 'done' ? 'var(--signal)' : handoffState.status === 'error' ? '#ffb4a2' : 'rgba(243,240,231,.76)' }}>{handoffState.message}</div>}</div><button onClick={() => sendCreativeToReview(generatedResults[0])} disabled={handoffState.status === 'working' || handoffState.status === 'done'} className="studio-button" style={{ whiteSpace:'nowrap' }}>{handoffState.status === 'working' ? 'Creating review draft…' : handoffState.status === 'done' ? 'Sent to review' : 'Send to review queue →'}</button></section>}
 
       {activeTab === 'video' && <div className="creative-workspace" style={{ display:'grid', gridTemplateColumns:'minmax(0,1.05fr) minmax(360px,.95fr)', gap:20 }}>
-        <section className="abundance-card" style={{ padding:25 }}><div className="abundance-mini-label">VIDEO AD / {selectedRunbook.type}</div><h2 style={{ fontSize:27, letterSpacing:'-.06em', marginTop:5 }}>{selectedRunbook.label} in motion.</h2><p style={{ color:'rgba(234,229,255,.64)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:560 }}>A real render job, built from the same format, product truth, hook, and proof as the image ad. Direct camera movement and production pacing; the Ad Room handles the render queue.</p><textarea className="studio-input" value={videoPrompt} onChange={event => setVideoPrompt(event.target.value)} rows={5} placeholder={selectedRunbook.video} style={{ resize:'vertical', lineHeight:1.6, marginTop:18 }} /><div className="ad-blueprint"><div className="ad-blueprint__label">AD BLUEPRINT</div><input value={hook} onChange={event => setHook(event.target.value)} placeholder="Opening hook / what stops the scroll?" /><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Proof / what makes the claim believable?" /></div><div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid rgba(243,240,231,.14)' }}><div className="abundance-mini-label">STORYBOARD / EDIT THE BEATS BEFORE RENDER</div><p style={{ color:'rgba(234,229,255,.58)', fontSize:11, lineHeight:1.5, margin:'7px 0 11px' }}>FloStudio sends these four editable beats to the real video provider. Keep every shot specific, product-led, and supportable.</p><div style={{ display:'grid', gap:9 }}>{storyboard.map((beat, index) => <div key={beat.id} style={{ padding:11, border:'1px solid rgba(243,240,231,.14)', background:'rgba(243,240,231,.035)', borderRadius:3 }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', marginBottom:8 }}><span style={{ color:'var(--signal)', font:'500 9px DM Mono,monospace', letterSpacing:'.1em' }}>{String(index + 1).padStart(2,'0')} / {beat.label}</span><span style={{ color:'rgba(243,240,231,.45)', fontSize:10 }}>editable beat</span></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}><textarea className="studio-input" value={beat.visual} onChange={event => updateStoryboardBeat(index, 'visual', event.target.value)} rows={2} placeholder="What should the viewer see?" style={{ resize:'vertical', fontSize:11 }} /><textarea className="studio-input" value={beat.voiceover} onChange={event => updateStoryboardBeat(index, 'voiceover', event.target.value)} rows={2} placeholder="What should the voiceover say?" style={{ resize:'vertical', fontSize:11 }} /></div><input className="studio-input" value={beat.caption} onChange={event => updateStoryboardBeat(index, 'caption', event.target.value)} placeholder="On-screen copy / caption" style={{ marginTop:8, fontSize:11 }} /></div>)}</div></div><div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:9 }}>VIDEO PLACEMENT</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>{VIDEO_FORMATS.map(format => <button key={format.id} onClick={() => setVideoFormat(format.id)} className={`format-card ${videoFormat === format.id ? 'active':''}`}><b>{format.label}</b><small>{format.detail}</small></button>)}</div></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>DURATION</div><select className="studio-input" value={videoSeconds} onChange={event => setVideoSeconds(event.target.value)}>{['4','8','12','16','20'].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></div><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>RENDER INTENT</div><select className="studio-input" value={videoQuality} onChange={event => setVideoQuality(event.target.value)}><option value="draft">Fast test / 30 tokens</option><option value="production">Polished launch / 60 tokens</option></select></div></div>{videoError && <div style={{ marginTop:15, padding:'11px 13px', color:'#ffbdcf', fontSize:12, border:'1px solid rgba(255,100,143,.32)', background:'rgba(255,100,143,.1)', borderRadius:11 }}>{videoError}</div>}<div style={{ color:'rgba(234,229,255,.52)', fontSize:10.5, lineHeight:1.55, marginTop:14 }}>Providers can decline prompts involving real people, copyrighted characters, music, or reference images with human faces. Finished MP4s are saved to the production library.</div><button onClick={startVideo} disabled={['queued','in_progress'].includes(videoJob?.status)} className="studio-button" style={{ width:'100%', marginTop:18, padding:14 }}>{['queued','in_progress'].includes(videoJob?.status) ? 'Video render in progress...' : `Render ${selectedRunbook.label.toLowerCase()} video`}</button></section>
+        <section className="abundance-card" style={{ padding:25 }}><div className="abundance-mini-label">VIDEO AD / {selectedRunbook.type}</div><h2 style={{ fontSize:27, letterSpacing:'-.06em', marginTop:5 }}>{selectedRunbook.label} in motion.</h2><p style={{ color:'rgba(234,229,255,.64)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:560 }}>A real render job, built from the same format, product truth, hook, and proof as the image ad. Direct camera movement and production pacing; the Ad Room handles the render queue.</p><textarea className="studio-input" value={videoPrompt} onChange={event => setVideoPrompt(event.target.value)} rows={5} placeholder={selectedRunbook.video} style={{ resize:'vertical', lineHeight:1.6, marginTop:18 }} /><div className="ad-blueprint"><div className="ad-blueprint__label">AD BLUEPRINT</div><input value={hook} onChange={event => setHook(event.target.value)} placeholder="Opening hook / what stops the scroll?" /><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Proof / what makes the claim believable?" /></div><div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid rgba(243,240,231,.14)' }}><div className="abundance-mini-label">STORYBOARD / EDIT THE BEATS BEFORE RENDER</div><p style={{ color:'rgba(234,229,255,.58)', fontSize:11, lineHeight:1.5, margin:'7px 0 11px' }}>FloStudio sends these four editable beats to the real video provider. Keep every shot specific, product-led, and supportable.</p><div style={{ display:'grid', gap:9 }}>{storyboard.map((beat, index) => <div key={beat.id} style={{ padding:11, border:'1px solid rgba(243,240,231,.14)', background:'rgba(243,240,231,.035)', borderRadius:3 }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', marginBottom:8 }}><span style={{ color:'var(--signal)', font:'500 9px DM Mono,monospace', letterSpacing:'.1em' }}>{String(index + 1).padStart(2,'0')} / {beat.label}</span><span style={{ color:'rgba(243,240,231,.45)', fontSize:10 }}>editable beat</span></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}><textarea className="studio-input" value={beat.visual} onChange={event => updateStoryboardBeat(index, 'visual', event.target.value)} rows={2} placeholder="What should the viewer see?" style={{ resize:'vertical', fontSize:11 }} /><textarea className="studio-input" value={beat.voiceover} onChange={event => updateStoryboardBeat(index, 'voiceover', event.target.value)} rows={2} placeholder="What should the voiceover say?" style={{ resize:'vertical', fontSize:11 }} /></div><input className="studio-input" value={beat.caption} onChange={event => updateStoryboardBeat(index, 'caption', event.target.value)} placeholder="On-screen copy / caption" style={{ marginTop:8, fontSize:11 }} /></div>)}</div></div><div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:9 }}>VIDEO PLACEMENT</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>{VIDEO_FORMATS.map(format => <button key={format.id} onClick={() => setVideoFormat(format.id)} className={`format-card ${videoFormat === format.id ? 'active':''}`}><b>{format.label}</b><small>{format.detail}</small></button>)}</div></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>DURATION</div><select className="studio-input" value={videoSeconds} onChange={event => setVideoSeconds(event.target.value)}>{['4','8','12'].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></div><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>RENDER INTENT</div><select className="studio-input" value={videoQuality} onChange={event => setVideoQuality(event.target.value)}><option value="draft">Fast test / 30 tokens</option><option value="production">Polished launch / 60 tokens</option></select></div></div>{videoError && <div style={{ marginTop:15, padding:'11px 13px', color:'#ffbdcf', fontSize:12, border:'1px solid rgba(255,100,143,.32)', background:'rgba(255,100,143,.1)', borderRadius:11 }}>{videoError}</div>}<div style={{ color:'rgba(234,229,255,.52)', fontSize:10.5, lineHeight:1.55, marginTop:14 }}>Providers can decline prompts involving real people, copyrighted characters, music, or reference images with human faces. Failed starts return the charged tokens automatically. Finished MP4s are saved to the production library.</div><button onClick={startVideo} disabled={['queued','in_progress'].includes(videoJob?.status)} className="studio-button" style={{ width:'100%', marginTop:18, padding:14 }}>{['queued','in_progress'].includes(videoJob?.status) ? 'Video render in progress...' : `Render ${selectedRunbook.label.toLowerCase()} video`}</button></section>
         <section className="abundance-card" style={{ padding:22, minHeight:530, display:'flex', flexDirection:'column' }}><div className="abundance-mini-label">RENDER MONITOR</div>{videoJob?.status === 'completed' && videoJob.videoUrl ? <div style={{ marginTop:15 }}><div style={{ borderRadius:15, overflow:'hidden', background:'#090619', aspectRatio:videoJob.size === '720x1280' ? '9 / 16':'16 / 9' }}><video src={videoJob.videoUrl} poster={videoJob.thumbnailUrl} controls playsInline style={{ width:'100%', height:'100%', objectFit:'cover' }} /></div><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12 }}><div><b style={{ display:'block', fontSize:14 }}>Video render complete</b><span style={{ color:'rgba(234,229,255,.6)', fontSize:11 }}>{videoJob.seconds || videoSeconds}s / saved to Asset Library</span></div><a href={videoJob.videoUrl} target="_blank" rel="noreferrer" className="abundance-pill">Open MP4</a></div></div> : videoJob ? <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center' }}><div><div style={{ fontSize:42, fontWeight:800, letterSpacing:'-.08em', color:'#d9ff75' }}>{Math.max(0, Number(videoJob.progress || 0))}%</div><div style={{ color:'#fff', fontWeight:800, marginTop:6 }}>{videoJob.status === 'queued' ? 'Render queued' : 'Rendering your ad'}</div><div style={{ color:'rgba(234,229,255,.62)', fontSize:12, lineHeight:1.6, maxWidth:310, margin:'8px auto 0' }}>FloStudio is checking this real video job every ten seconds. You can leave the page; the job ID is retained locally for monitoring when you return.</div><div style={{ height:7, background:'rgba(255,255,255,.1)', borderRadius:999, overflow:'hidden', marginTop:18 }}><div style={{ height:'100%', width:`${Math.max(4, Number(videoJob.progress || 4))}%`, background:'linear-gradient(90deg,#ff6198,#7b61ff,#d9ff75)', borderRadius:999 }} /></div></div></div> : <div className="abundance-glass" style={{ flex:1, marginTop:15, borderRadius:16, padding:20, display:'flex', flexDirection:'column', justifyContent:'flex-end', background:'linear-gradient(160deg,rgba(255,100,143,.13),rgba(123,97,255,.21))' }}><div className="abundance-mini-label">NO FAKE VIDEO PREVIEWS</div><h3 style={{ fontSize:26, letterSpacing:'-.065em', lineHeight:1.05, marginTop:8 }}>Your real campaign film will appear here.</h3><p style={{ color:'rgba(234,229,255,.65)', fontSize:12, lineHeight:1.6, marginTop:10 }}>The preview board stays honest: it only becomes a playable video when a render job actually completes.</p></div>}</section>
       </div>}
 

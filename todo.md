@@ -184,3 +184,7 @@
 - [x] Pull and show a selected-app App Store Connect configuration snapshot, including live paywall products, subscription prices, offers, availability, release state, and store metadata.
 
 - [x] Route App Insights “Connect this app” to the selected portfolio app’s App Store Connect form so every app can be connected independently.
+
+- [ ] Repair Creative Lab image-to-video ads: expose app-scoped source-image selection, pass it to the video renderer, persist the resulting video, and surface actionable failures.
+
+- [ ] Evolve Creative Lab into a CapCut-style AI ad editor with scene sequencing, timeline-level edits, captions, voice and sound controls, video variations, and export-ready app-marketing cuts.
