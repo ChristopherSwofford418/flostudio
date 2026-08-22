@@ -120,6 +120,10 @@ export default function ImageBank() {
   const selectedObjective = CAMPAIGN_OBJECTIVES.find(objective => objective.id === objectiveId) || CAMPAIGN_OBJECTIVES[0]
   const selectedLens = VISUAL_LENSES.find(lens => lens.id === lensId) || VISUAL_LENSES[0]
 
+  useEffect(() => {
+    setVideoPrompt(current => current || selectedRunbook.video)
+  }, [selectedRunbook.id])
+
   const selectRunbook = runbook => {
     setRunbookId(runbook.id)
     setStylePreset(runbook.style)
@@ -407,7 +411,7 @@ export default function ImageBank() {
       </section>
 
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', margin:'0 0 4px' }}>{tabs.map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`creative-tab ${activeTab === tab.id ? 'active':''}`}>{tab.label} <span style={{ opacity:.72 }}>({tab.count})</span></button>)}</div>
-      {activeTab === 'video' && <section className="abundance-card" style={{ marginTop:18, padding:'16px 18px', borderColor:'rgba(255,193,59,.42)' }}>
+      {activeTab === 'video' && <section className="abundance-card" style={{ marginTop:18, padding:'16px 18px', borderColor:'rgba(255,193,59,.42)', position:'sticky', top:12, zIndex:5 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', gap:14, flexWrap:'wrap' }}>
           <div>
             <div className="abundance-mini-label">SOURCE IMAGE / FIRST FRAME</div>
