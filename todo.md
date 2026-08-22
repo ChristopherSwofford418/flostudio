@@ -180,3 +180,5 @@
 - [x] Pull and display selected-app Apple subscription state, subscription events, and monthly subscription proceeds when reports become available.
 
 - [ ] Expand App Insights into a comprehensive selected-app Apple intelligence view with all authorized acquisition, monetization, subscription, engagement, metadata, and reporting-health details.
+
+- [x] Pull and show a selected-app App Store Connect configuration snapshot, including live paywall products, subscription prices, offers, availability, release state, and store metadata.

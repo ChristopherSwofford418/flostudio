@@ -377,6 +377,111 @@ async function monthlySalesMetrics({ connection, token, app }) {
   return { status:'no_sales_in_recent_periods', message:'Apple returned no Sales and Trends rows for this app across the six most recent monthly report periods.', checkedPeriods, providerMessage:lastNoSalesMessage }
 }
 
+function includedByType(payload, type) {
+  return (payload?.included || []).filter(resource => resource.type === type)
+}
+
+function priceFromPayload(payload, priceType) {
+  const points = new Map(includedByType(payload, priceType).map(point => [point.id, point]))
+  const prices = (payload?.data || []).map(price => {
+    const pointId = price.relationships?.[priceType === 'subscriptionPricePoints' ? 'subscriptionPricePoint' : 'inAppPurchasePricePoint']?.data?.id
+    const point = points.get(pointId)
+    return {
+      startDate:price.attributes?.startDate || null,
+      preserved:Boolean(price.attributes?.preserved),
+      planType:price.attributes?.planType || null,
+      customerPrice:point?.attributes?.customerPrice || null,
+      proceeds:point?.attributes?.proceeds || null,
+    }
+  })
+  return prices.find(price => !price.startDate) || prices[0] || null
+}
+
+async function subscriptionConfiguration(subscription, token) {
+  const [pricesResult, offersResult] = await Promise.allSettled([
+    appleRequest(`/v1/subscriptions/${encodeURIComponent(subscription.id)}/prices?filter[territory]=USA&include=subscriptionPricePoint,territory&fields[subscriptionPrices]=startDate,preserved,planType&fields[subscriptionPricePoints]=customerPrice,proceeds&fields[territories]=currency`, token),
+    appleRequest(`/v1/subscriptions/${encodeURIComponent(subscription.id)}/introductoryOffers?filter[territory]=USA&include=subscriptionPricePoint,territory&limit=50`, token),
+  ])
+  const price = pricesResult.status === 'fulfilled' ? priceFromPayload(pricesResult.value, 'subscriptionPricePoints') : null
+  const offers = offersResult.status === 'fulfilled' ? (offersResult.value.data || []).map(offer => ({
+    id:offer.id,
+    offerMode:offer.attributes?.offerMode || null,
+    numberOfPeriods:offer.attributes?.numberOfPeriods || null,
+    duration:offer.attributes?.duration || null,
+    startDate:offer.attributes?.startDate || null,
+    endDate:offer.attributes?.endDate || null,
+  })) : []
+  return {
+    id:subscription.id,
+    name:subscription.attributes?.name || 'Unnamed subscription',
+    productId:subscription.attributes?.productId || null,
+    period:subscription.attributes?.subscriptionPeriod || null,
+    state:subscription.attributes?.state || null,
+    familySharable:Boolean(subscription.attributes?.familySharable),
+    price,
+    introductoryOffers:offers,
+    priceAccess:pricesResult.status === 'fulfilled' ? 'available' : 'unavailable',
+  }
+}
+
+async function inAppPurchaseConfiguration(purchase, token) {
+  try {
+    const schedule = await appleRequest(`/v2/inAppPurchases/${encodeURIComponent(purchase.id)}/priceSchedule`, token)
+    const scheduleId = schedule.data?.id
+    const prices = scheduleId
+      ? await appleRequest(`/v1/inAppPurchasePriceSchedules/${encodeURIComponent(scheduleId)}/manualPrices?filter[territory]=USA&include=inAppPurchasePricePoint,territory&fields[inAppPurchasePrices]=startDate&fields[inAppPurchasePricePoints]=customerPrice,proceeds&fields[territories]=currency`, token)
+      : null
+    return {
+      id:purchase.id,
+      name:purchase.attributes?.name || 'Unnamed in-app purchase',
+      productId:purchase.attributes?.productId || null,
+      type:purchase.attributes?.inAppPurchaseType || null,
+      state:purchase.attributes?.state || null,
+      familySharable:Boolean(purchase.attributes?.familySharable),
+      price:prices ? priceFromPayload(prices, 'inAppPurchasePricePoints') : null,
+      priceAccess:prices ? 'available' : 'unavailable',
+    }
+  } catch {
+    return {
+      id:purchase.id,
+      name:purchase.attributes?.name || 'Unnamed in-app purchase',
+      productId:purchase.attributes?.productId || null,
+      type:purchase.attributes?.inAppPurchaseType || null,
+      state:purchase.attributes?.state || null,
+      familySharable:Boolean(purchase.attributes?.familySharable),
+      price:null,
+      priceAccess:'unavailable',
+    }
+  }
+}
+
+async function storeConfiguration({ connection, token, app }) {
+  try {
+    const [groupsResult, purchasesResult, availabilityResult] = await Promise.allSettled([
+      appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/subscriptionGroups?limit=200&fields[subscriptionGroups]=referenceName`, token),
+      appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/inAppPurchasesV2?limit=200&fields[inAppPurchases]=name,productId,inAppPurchaseType,state,familySharable`, token),
+      appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appAvailability?include=availableTerritories&fields[appAvailabilities]=availableInNewTerritories,availableInNewTerritories&fields[territories]=currency`, token),
+    ])
+    const groups = groupsResult.status === 'fulfilled' ? groupsResult.value.data || [] : []
+    const subscriptionLists = await Promise.all(groups.map(async group => {
+      const response = await appleRequest(`/v1/subscriptionGroups/${encodeURIComponent(group.id)}/subscriptions?limit=200&fields[subscriptions]=name,productId,subscriptionPeriod,state,familySharable`, token)
+      return { id:group.id, name:group.attributes?.referenceName || 'Subscription group', subscriptions:await Promise.all((response.data || []).map(subscription => subscriptionConfiguration(subscription, token))) }
+    }))
+    const purchases = purchasesResult.status === 'fulfilled' ? await Promise.all((purchasesResult.value.data || []).map(purchase => inAppPurchaseConfiguration(purchase, token))) : []
+    const availability = availabilityResult.status === 'fulfilled' ? availabilityResult.value.data?.attributes || null : null
+    return {
+      status:'available',
+      app:{ appleId:app?.id || connection.app_store_app_id, name:app?.attributes?.name || null, bundleId:app?.attributes?.bundleId || null, sku:app?.attributes?.sku || null, primaryLocale:app?.attributes?.primaryLocale || null },
+      availability,
+      subscriptionGroups:subscriptionLists,
+      inAppPurchases:purchases,
+      message:'Current products and USD price points returned by App Store Connect for this selected app.',
+    }
+  } catch (error) {
+    return { status:'unavailable', message:error.message || 'The current App Store key cannot load this app’s configuration and paywall catalog.' }
+  }
+}
+
 export function buildAppMetrics({ app, versions = [], reviews = [], sales = null }) {
   const ratings = reviews.map(review => Number(review?.attributes?.rating)).filter(Number.isFinite)
   const latestVersion = versions[0]?.attributes || null
@@ -420,6 +525,11 @@ async function syncMetrics({ connection, privateKey }) {
   metrics.availability.proceeds = sales.status === 'available'
     ? { status:'available', message:'Estimated developer proceeds are broken out by Apple reporting currency.' }
     : { status:sales.status, message:sales.message }
+  const configuration = await storeConfiguration({ connection, token, app:app.data })
+  metrics.configuration = configuration
+  metrics.availability.configuration = configuration.status === 'available'
+    ? { status:'available', message:'App Store Connect returned this selected app’s product, pricing, and configuration snapshot.' }
+    : { status:configuration.status, message:configuration.message }
   return metrics
 }
 
