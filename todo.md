@@ -202,3 +202,7 @@
 - [x] Apply the premium black-and-white Arcads-inspired UI system across every FloStudio page, including navigation and authentication, while retaining all existing workflows.
 
 - [x] Eliminate every old red, orange, yellow, green, teal, and colored-gradient UI surface from FloStudio; retain only black, charcoal, off-white, white, and gray states.
+
+- [ ] Add restrained electric-blue highlights to FloStudio’s monochrome UI for active navigation, selection, metrics, focus, and system status without restoring the old warm palette.
+
+- [ ] Replace FloStudio’s global dark canvas with a premium white workspace, light-gray surfaces, charcoal text, and restrained blue highlights while preserving every working flow.
