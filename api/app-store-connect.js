@@ -106,8 +106,12 @@ async function rpc(name, args, accessToken) {
   return payload
 }
 
-async function appleRequest(path, token) {
-  const response = await fetch(`${APPLE_API}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } })
+async function appleRequest(path, token, { method = 'GET', body } = {}) {
+  const response = await fetch(`${APPLE_API}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(body ? { 'Content-Type':'application/json' } : {}) },
+    ...(body ? { body:JSON.stringify(body) } : {}),
+  })
   const text = await response.text()
   const payload = text ? (() => { try { return JSON.parse(text) } catch { return text } })() : null
   if (!response.ok) {
@@ -130,8 +134,32 @@ async function appleBinaryRequest(path, token) {
   return Buffer.from(await response.arrayBuffer())
 }
 
+async function analyticsSegmentRequest(url) {
+  const response = await fetch(url, { headers: { Accept:'application/a-gzip, application/gzip, application/octet-stream' } })
+  if (!response.ok) throw apiError('ASC_ANALYTICS_SEGMENT_FAILED', 'Apple could not download the generated App Analytics report segment.', response.status, { providerStatus:response.status })
+  return Buffer.from(await response.arrayBuffer())
+}
+
 export function salesReportPeriod(now = new Date()) {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+export function recentSalesReportPeriods(now = new Date(), count = 6) {
+  const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  return Array.from({ length:count }, () => {
+    const period = salesReportPeriod(cursor)
+    cursor.setUTCMonth(cursor.getUTCMonth() - 1)
+    return period
+  })
+}
+
+function reportInstanceDate(instance) {
+  const timestamp = Date.parse(instance?.attributes?.processingDate || '')
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+export function latestAnalyticsInstance(instances = []) {
+  return [...instances].sort((left, right) => reportInstanceDate(right) - reportInstanceDate(left))[0] || null
 }
 
 function parseTabDelimitedReport(buffer) {
@@ -148,6 +176,83 @@ function parseTabDelimitedReport(buffer) {
 function numberOrZero(value) {
   const number = Number.parseFloat(String(value || '').replace(/,/g, ''))
   return Number.isFinite(number) ? number : 0
+}
+
+function analyticsNumber(row) {
+  for (const key of ['Counts', 'Count', 'Value', 'Unique Devices', 'Unique Device Count']) {
+    const value = numberOrZero(row[key])
+    if (value) return value
+  }
+  return 0
+}
+
+function normalizedAnalyticsLabel(row) {
+  return String(row['Download Type'] || row['Event Type'] || row.Metric || row['Metric Name'] || row.Name || '').trim().toLowerCase()
+}
+
+export function summarizeAnalyticsRows({ downloadRows = [], engagementRows = [], now = new Date() }) {
+  const cutoff = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 89)
+  const isInWindow = row => {
+    const date = Date.parse(row.Date || row['Event Date'] || '')
+    return !Number.isFinite(date) || date >= cutoff
+  }
+  const sum = (rows, matcher) => rows.filter(isInWindow).reduce((total, row) => matcher(normalizedAnalyticsLabel(row)) ? total + analyticsNumber(row) : total, 0)
+  const firstTimeDownloads = sum(downloadRows, label => /first.?time/.test(label))
+  const redownloads = sum(downloadRows, label => /redownload/.test(label))
+  const manualUpdates = sum(downloadRows, label => /manual.?update/.test(label))
+  const autoUpdates = sum(downloadRows, label => /auto.?update/.test(label))
+  const impressions = sum(engagementRows, label => /impression/.test(label))
+  const productPageViews = sum(engagementRows, label => /product page view/.test(label))
+  const totalDownloads = firstTimeDownloads + redownloads
+  return {
+    status:'available', periodDays:90,
+    firstTimeDownloads, redownloads, totalDownloads,
+    updates:manualUpdates + autoUpdates,
+    impressions, productPageViews,
+    conversionRate: impressions > 0 ? Number(((totalDownloads / impressions) * 100).toFixed(2)) : null,
+    source:'Apple App Analytics Reports API',
+  }
+}
+
+async function analyticsReportsForApp({ appId, token }) {
+  const requestResponse = await appleRequest(`/v1/apps/${encodeURIComponent(appId)}/analyticsReportRequests?filter[accessType]=ONGOING&include=reports&fields[analyticsReportRequests]=accessType,stoppedDueToInactivity,reports&fields[analyticsReports]=name,category`, token)
+  const request = (requestResponse.data || []).find(item => !item.attributes?.stoppedDueToInactivity)
+  if (!request) {
+    try {
+      const created = await appleRequest('/v1/analyticsReportRequests', token, { method:'POST', body:{ data:{ type:'analyticsReportRequests', attributes:{ accessType:'ONGOING' }, relationships:{ app:{ data:{ type:'apps', id:String(appId) } } } } } })
+      return { status:'requested', requestId:created.data?.id || null, message:'FloStudio requested ongoing Apple App Analytics reports for this app. Apple says the first report typically arrives in 24–48 hours.' }
+    } catch (error) {
+      if (error.details?.providerStatus === 403) return { status:'requires_admin_analytics_request', message:'Apple requires an Admin Team API key to request App Analytics reports for the first time. Replace this app’s key with an Admin Team key once, then sync again.' }
+      throw error
+    }
+  }
+  const reportsResponse = await appleRequest(`/v1/analyticsReportRequests/${encodeURIComponent(request.id)}/reports?limit=200`, token)
+  return { status:'ready', requestId:request.id, reports:reportsResponse.data || [] }
+}
+
+async function analyticsRowsForReport(report, token) {
+  const instancesResponse = await appleRequest(`/v1/analyticsReports/${encodeURIComponent(report.id)}/instances?limit=200&filter[granularity]=DAILY`, token)
+  const instance = latestAnalyticsInstance(instancesResponse.data || [])
+  if (!instance) return { rows:[], processingDate:null }
+  const segmentsResponse = await appleRequest(`/v1/analyticsReportInstances/${encodeURIComponent(instance.id)}/segments?limit=200&fields[analyticsReportSegments]=url`, token)
+  const buffers = await Promise.all((segmentsResponse.data || []).map(segment => segment.attributes?.url ? analyticsSegmentRequest(segment.attributes.url) : Promise.resolve(null)))
+  return { rows:buffers.filter(Boolean).flatMap(parseTabDelimitedReport), processingDate:instance.attributes?.processingDate || null }
+}
+
+async function analyticsMetrics({ connection, token }) {
+  try {
+    const reportState = await analyticsReportsForApp({ appId:connection.app_store_app_id, token })
+    if (reportState.status !== 'ready') return reportState
+    const downloadReport = reportState.reports.find(report => /download/i.test(report.attributes?.name || '') || /commerce/i.test(report.attributes?.category || ''))
+    const engagementReport = reportState.reports.find(report => /discovery.*engagement/i.test(report.attributes?.name || '') || /engagement/i.test(report.attributes?.category || ''))
+    if (!downloadReport || !engagementReport) return { status:'pending', requestId:reportState.requestId, message:'Apple has accepted the App Analytics request but has not generated both Downloads and Discovery & Engagement reports yet. Apple typically delivers the first ongoing reports within 24–48 hours.' }
+    const [downloads, engagement] = await Promise.all([analyticsRowsForReport(downloadReport, token), analyticsRowsForReport(engagementReport, token)])
+    if (!downloads.rows.length && !engagement.rows.length) return { status:'pending', requestId:reportState.requestId, message:'Apple has not published a downloadable App Analytics instance for this app yet.' }
+    return { ...summarizeAnalyticsRows({ downloadRows:downloads.rows, engagementRows:engagement.rows }), processingDates:{ downloads:downloads.processingDate, engagement:engagement.processingDate }, requestId:reportState.requestId }
+  } catch (error) {
+    if (error.details?.providerStatus === 403) return { status:'not_authorized', message:'The current Apple key cannot read App Analytics reports. Use a Team key with the Sales and Reports, Finance, or Admin role.' }
+    return { status:'unavailable', message:error.message || 'Apple could not provide App Analytics data.', providerStatus:error.details?.providerStatus || null }
+  }
 }
 
 export function summarizeSalesReport(rows, { appStoreAppId, sku }) {
@@ -181,20 +286,31 @@ export function summarizeSalesReport(rows, { appStoreAppId, sku }) {
 
 async function monthlySalesMetrics({ connection, token, app }) {
   if (!connection.vendor_number) return { status:'requires_vendor_number', message:'Add the Apple Vendor Number shown in App Store Connect → Reports to pull Sales and Trends numbers.' }
-  const params = new URLSearchParams({
-    'filter[frequency]':'MONTHLY',
-    'filter[reportDate]':salesReportPeriod(),
-    'filter[reportSubType]':'SUMMARY',
-    'filter[reportType]':'SALES',
-    'filter[vendorNumber]':connection.vendor_number,
-    'filter[version]':'1_0',
-  })
-  try {
-    const rows = parseTabDelimitedReport(await appleBinaryRequest(`/v1/salesReports?${params}`, token))
-    return { ...summarizeSalesReport(rows, { appStoreAppId:connection.app_store_app_id, sku:app?.attributes?.sku }), frequency:'MONTHLY', reportDate:salesReportPeriod() }
-  } catch (error) {
-    return { status:'unavailable', message:error.message || 'Apple could not provide the monthly Sales and Trends report.', providerStatus:error.providerStatus || error.details?.providerStatus || null }
+  const checkedPeriods = recentSalesReportPeriods()
+  let lastNoSalesMessage = ''
+  for (const reportDate of checkedPeriods) {
+    const params = new URLSearchParams({
+      'filter[frequency]':'MONTHLY',
+      'filter[reportDate]':reportDate,
+      'filter[reportSubType]':'SUMMARY',
+      'filter[reportType]':'SALES',
+      'filter[vendorNumber]':connection.vendor_number,
+      'filter[version]':'1_0',
+    })
+    try {
+      const rows = parseTabDelimitedReport(await appleBinaryRequest(`/v1/salesReports?${params}`, token))
+      const sales = summarizeSalesReport(rows, { appStoreAppId:connection.app_store_app_id, sku:app?.attributes?.sku })
+      if (sales.matchedRows) return { ...sales, frequency:'MONTHLY', reportDate, checkedPeriods }
+      lastNoSalesMessage = `Apple returned a report for ${reportDate}, but it contained no rows for this app.`
+    } catch (error) {
+      if (/no sales for the date specified/i.test(error.message || '')) {
+        lastNoSalesMessage = error.message
+        continue
+      }
+      return { status:'unavailable', message:error.message || 'Apple could not provide the monthly Sales and Trends report.', providerStatus:error.providerStatus || error.details?.providerStatus || null }
+    }
   }
+  return { status:'no_sales_in_recent_periods', message:'Apple returned no Sales and Trends rows for this app across the six most recent monthly report periods.', checkedPeriods, providerMessage:lastNoSalesMessage }
 }
 
 export function buildAppMetrics({ app, versions = [], reviews = [], sales = null }) {
@@ -223,11 +339,16 @@ async function syncMetrics({ connection, privateKey }) {
   const metrics = buildAppMetrics({ app: app.data, versions: versionsResult.status === 'fulfilled' ? versionsResult.value.data || [] : [], reviews: reviewsResult.status === 'fulfilled' ? reviewsResult.value.data || [] : [] })
   metrics.availability.versions = versionsResult.status === 'fulfilled' ? { status: 'available' } : { status: 'not_authorized_or_unavailable', message: 'This key could not load App Store versions.' }
   metrics.availability.reviews = reviewsResult.status === 'fulfilled' ? { status: 'available' } : { status: 'not_authorized_or_unavailable', message: 'This key could not load customer reviews.' }
+  const analytics = await analyticsMetrics({ connection, token })
+  metrics.analytics = analytics
+  metrics.availability.analytics = analytics.status === 'available'
+    ? { status:'available', message:`Apple App Analytics returned a ${analytics.periodDays}-day acquisition window.` }
+    : { status:analytics.status, message:analytics.message }
+  metrics.availability.downloads = analytics.status === 'available'
+    ? { status:'available', message:`${analytics.firstTimeDownloads} first-time downloads and ${analytics.redownloads} redownloads in the Apple App Analytics window.` }
+    : { status:analytics.status, message:analytics.message }
   const sales = await monthlySalesMetrics({ connection, token, app:app.data })
   metrics.sales = sales
-  metrics.availability.downloads = sales.status === 'available'
-    ? { status:'available', message:`${sales.appUnits} app units in the report period.` }
-    : { status:sales.status, message:sales.message }
   metrics.availability.proceeds = sales.status === 'available'
     ? { status:'available', message:'Estimated developer proceeds are broken out by Apple reporting currency.' }
     : { status:sales.status, message:sales.message }

@@ -170,3 +170,7 @@
 - [ ] Resolve App Store Connect API-key authorization for Sales and Trends reports, then verify real ResumeFix metrics load.
 
 - [x] Add secure per-app editing and replacement of App Store Connect App ID, Issuer ID, Key ID, key type, and `.p8` file without exposing the current key.
+
+- [ ] Check recent completed Apple Sales and Trends months per app and show the latest report period with real available data.
+
+- [ ] Pull selected-app Apple App Analytics acquisition metrics, including first-time downloads, redownloads, conversion rate, impressions, product page views, and updates.

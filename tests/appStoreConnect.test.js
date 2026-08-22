@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { buildAppMetrics, createAppleToken, salesReportPeriod, summarizeSalesReport } from '../api/app-store-connect.js'
+import { buildAppMetrics, createAppleToken, latestAnalyticsInstance, recentSalesReportPeriods, salesReportPeriod, summarizeAnalyticsRows, summarizeSalesReport } from '../api/app-store-connect.js'
 
 describe('App Store Connect secure sync primitives', () => {
   it('creates a short-lived ES256 team JWT using the supplied key ID and issuer ID', () => {
@@ -40,5 +40,30 @@ describe('App Store Connect secure sync primitives', () => {
 
   it('uses Apple’s year-month report-date format for monthly Sales and Trends reports', () => {
     expect(salesReportPeriod(new Date('2026-08-22T12:00:00Z'))).toBe('2026-08')
+  })
+
+  it('checks the current and five prior monthly report periods when looking for the latest available sales data', () => {
+    expect(recentSalesReportPeriods(new Date('2026-08-22T12:00:00Z'))).toEqual(['2026-08', '2026-07', '2026-06', '2026-05', '2026-04', '2026-03'])
+  })
+
+  it('aggregates only Apple App Analytics acquisition rows into the selected app’s 90-day funnel', () => {
+    const analytics = summarizeAnalyticsRows({
+      now:new Date('2026-08-22T12:00:00Z'),
+      downloadRows:[
+        { Date:'2026-08-20', 'Download Type':'First-time Download', Counts:'40' },
+        { Date:'2026-08-20', 'Download Type':'Redownload', Counts:'10' },
+        { Date:'2026-08-20', 'Download Type':'Manual update', Counts:'6' },
+        { Date:'2026-04-01', 'Download Type':'First-time Download', Counts:'1000' },
+      ],
+      engagementRows:[
+        { Date:'2026-08-20', 'Event Type':'Impression', Counts:'1190' },
+        { Date:'2026-08-20', 'Event Type':'Product Page View', Counts:'73' },
+      ],
+    })
+    expect(analytics).toMatchObject({ status:'available', firstTimeDownloads:40, redownloads:10, totalDownloads:50, updates:6, impressions:1190, productPageViews:73, conversionRate:4.2 })
+  })
+
+  it('uses the newest Apple report instance when several processing dates are available', () => {
+    expect(latestAnalyticsInstance([{ id:'old', attributes:{ processingDate:'2026-08-18' } }, { id:'latest', attributes:{ processingDate:'2026-08-20' } }])?.id).toBe('latest')
   })
 })

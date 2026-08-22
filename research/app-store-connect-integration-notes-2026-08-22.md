@@ -23,3 +23,17 @@ Apple’s reporting UI documents that the vendor number appears in the Reports a
 [4]: https://developer.apple.com/documentation/appstoreconnectapi/get-v1-salesreports "Download sales and trends reports"
 [5]: https://developer.apple.com/help/app-store-connect/reference/reporting/summary-sales-report/ "Summary Sales Report"
 [6]: https://developer.apple.com/help/app-store-connect/getting-paid/view-payments-and-proceeds/ "View payments and proceeds"
+
+## App Analytics Reports Notes
+
+The App Analytics screen and the Sales and Trends API are distinct Apple reporting sources. The acquisition funnel shown in App Store Connect—first-time downloads, redownloads, conversion rate, impressions, product page views, and updates—belongs to App Analytics. Apple defines Total Downloads as first-time downloads plus redownloads, and defines Conversion Rate as the relationship between unique impressions and total downloads.[7]
+
+Apple’s Analytics Reports API exports compressed, tab-delimited data. An Admin key must request a report type for the first time; after that, Sales and Reports or Finance keys may download generated reports. An `ONGOING` request produces daily, weekly, and monthly reports, but Apple states that the first report arrives approximately 24–48 hours after setup. `ONE_TIME_SNAPSHOT` is the historical alternative.[8]
+
+The secure per-app workflow is: read `GET /v1/apps/{id}/analyticsReportRequests`; create `POST /v1/analyticsReportRequests` with `accessType: ONGOING` when no request exists; read reports for the request; read daily report instances; read/download segments; parse the tab-delimited analytics content; aggregate only the selected product’s reports. The API returns opaque app and report resource identifiers, and report instance processing dates use ISO `YYYY-MM-DD`.[9] [10] [11]
+
+[7]: https://developer.apple.com/help/app-store-connect-analytics/acquisition/acquisition/ "Acquisition"
+[8]: https://developer.apple.com/help/app-store-connect-analytics/overview/analytics-reports-api/ "Analytics reports API"
+[9]: https://developer.apple.com/documentation/appstoreconnectapi/post-v1-analyticsreportrequests "Request Reports"
+[10]: https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps-_id_-analyticsreportrequests "Read Report Requests"
+[11]: https://developer.apple.com/documentation/appstoreconnectapi/get-v1-analyticsreports-_id_-instances "Read a List of Instances of a Report"
