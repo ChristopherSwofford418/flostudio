@@ -158,3 +158,5 @@
 - [x] Build secure per-app App Store Connect setup with App ID, Issuer ID, Key ID, `.p8` upload, JWT validation, and authorized data sync.
 
 - [x] Add an App Insights tab under Manage that displays only the selected app’s authorized App Store Connect performance data and sync health.
+
+- [ ] Fix App Store Connect secure connection persistence so the selected portfolio app UUID is saved correctly after `.p8` validation.
