@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
-import { createMediaAsset, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
+import { belongsToProduct, createMediaAsset, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
 
 const STYLE_PRESETS = [
   { id: 'product', label: 'Product hero', desc: 'Sculptural product focus with commercial light' },
@@ -70,7 +70,7 @@ function AssetVisual({ asset, compact = false }) {
 }
 
 export default function ImageBank() {
-  const { useTokens, refundTokens, activeApp, apps, setActiveApp } = useWorkspace()
+  const { useTokens, refundTokens, activeApp, apps, setActiveApp, workspaceId } = useWorkspace()
   const [activeTab, setActiveTab] = useState('generate')
   const [assets, setAssets] = useState([])
   const [loadingAssets, setLoadingAssets] = useState(true)
@@ -98,6 +98,7 @@ export default function ImageBank() {
   const [objectiveId, setObjectiveId] = useState('acquire')
   const [lensId, setLensId] = useState('product-in-use')
   const [handoffState, setHandoffState] = useState({ status:'idle', message:'' })
+  const assetLoadVersion = useRef(0)
 
   const imageAssets = useMemo(() => assets.filter(asset => asset.kind === 'image'), [assets])
   const videoAssets = useMemo(() => assets.filter(asset => asset.kind === 'video'), [assets])
@@ -128,11 +129,18 @@ export default function ImageBank() {
     setStoryboard(current => current.map((beat, beatIndex) => beatIndex === index ? { ...beat, [field]:value } : beat))
   }
 
-  const loadAssets = async () => {
+  const loadAssets = async (productId = activeApp?.id) => {
+    const requestVersion = ++assetLoadVersion.current
     setLoadingAssets(true)
+    if (!productId) {
+      setAssets([])
+      setLoadingAssets(false)
+      return
+    }
     try {
-      const records = await listMediaAssets()
-      setAssets(records.map(record => ({
+      const records = await listMediaAssets(productId)
+      if (requestVersion !== assetLoadVersion.current) return
+      setAssets(records.filter(record => belongsToProduct(record, productId)).map(record => ({
         ...record,
         name: record.storage_path?.split('/').pop() || `${record.kind}-asset`,
         url: record.asset_url,
@@ -140,22 +148,30 @@ export default function ImageBank() {
         createdAt: record.created_at,
       })).filter(asset => asset.url))
     } catch (loadError) {
-      setError(loadError.message || 'Your media library could not be loaded.')
+      if (requestVersion === assetLoadVersion.current) setError(loadError.message || 'Your media library could not be loaded.')
     }
-    setLoadingAssets(false)
+    if (requestVersion === assetLoadVersion.current) setLoadingAssets(false)
   }
 
-  useEffect(() => { loadAssets() }, [])
+  useEffect(() => {
+    setReferenceImage(null)
+    setGeneratedResults([])
+    setHandoffState({ status:'idle', message:'' })
+    loadAssets(activeApp?.id)
+  }, [activeApp?.id])
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('flostudio_active_video_render') || 'null')
-      if (stored?.id && ['queued', 'in_progress'].includes(stored.status)) setVideoJob(stored)
+      const storedProductId = stored?.productAppId || stored?.metadata?.productAppId
+      if (stored?.id && storedProductId === activeApp?.id && ['queued', 'in_progress'].includes(stored.status)) setVideoJob(stored)
+      else setVideoJob(null)
     } catch {}
-  }, [])
+  }, [activeApp?.id])
 
   const uploadAsset = async (file, namePrefix = 'source', details = {}) => {
     const { data:{ user } } = await supabase.auth.getUser()
     if (!user) throw new Error('Sign in before uploading or saving media.')
+    if (!activeApp?.id) throw new Error('Select a portfolio app before saving media.')
     const extension = extensionFor(file.type || file.name || '')
     const storagePath = `${user.id}/${namePrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${extension}`
     const { error: uploadError } = await supabase.storage.from('marketing-assets').upload(storagePath, file, { contentType:file.type || undefined, upsert:true })
@@ -165,6 +181,8 @@ export default function ImageBank() {
     if (details.persistRecord === false) return { name:storagePath.split('/').pop(), url:data.publicUrl, kind, storage_path:storagePath }
     const record = await createMediaAsset({
       kind,
+      product_id: activeApp.id,
+      workspace_id: workspaceId || null,
       source: details.source || 'upload',
       provider: details.provider || null,
       render_status: details.renderStatus || 'ready',
@@ -172,7 +190,7 @@ export default function ImageBank() {
       asset_url: data.publicUrl,
       storage_path: storagePath,
       reference_asset_id: details.referenceAssetId || null,
-      metadata: { ...details.metadata, fileName:file.name, contentType:file.type || null, sizeBytes:file.size || null },
+      metadata: { ...details.metadata, productAppId:activeApp.id, fileName:file.name, contentType:file.type || null, sizeBytes:file.size || null },
       completed_at: details.renderStatus === 'ready' ? new Date().toISOString() : null,
     })
     return { ...record, name:storagePath.split('/').pop(), url:data.publicUrl, kind, createdAt:record.created_at }
@@ -260,6 +278,7 @@ export default function ImageBank() {
 
   const startVideo = async () => {
     if (!videoPrompt.trim()) { setVideoError('Describe the motion, product, setting, and camera direction first.'); return }
+    if (!activeApp?.id) { setVideoError('Select a portfolio app before rendering a video.'); return }
     setVideoError('')
     const productContext = activeApp ? ` Product: ${activeApp.name}. ${activeApp.description || ''}` : ''
     const storyboardPrompt = storyboard.map((beat, index) => `Shot ${index + 1} — ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover: ${beat.voiceover}.`).join(' ')
@@ -272,13 +291,14 @@ export default function ImageBank() {
       if (!authorized) return
       renderAsset = await createMediaAsset({
         kind:'video', source:'ai_video', provider:'openai', render_status:'queued', prompt:runbookPrompt,
-        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, referenceIncluded:Boolean(referenceImage), storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp?.id || null },
+        product_id:activeApp.id, workspace_id:workspaceId || null,
+        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, referenceIncluded:Boolean(referenceImage), storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
       })
       const response = await fetch('/api/generate-video', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(request) })
       const job = await response.json()
       if (!response.ok || job.error) throw new Error(job.error || 'Video render could not be started.')
       const persisted = await updateMediaAsset(renderAsset.id, { provider_job_id:job.id, render_status:job.status || 'queued', metadata:{ ...renderAsset.metadata, providerModel:job.model || null, size:videoFormat, seconds:videoSeconds, quality:videoQuality } })
-      const normalized = { ...job, mediaAssetId:persisted.id, prompt:runbookPrompt, storyboard, size:videoFormat, seconds:videoSeconds, status:job.status || 'queued', createdAt:Date.now() }
+      const normalized = { ...job, mediaAssetId:persisted.id, productAppId:activeApp.id, prompt:runbookPrompt, storyboard, size:videoFormat, seconds:videoSeconds, status:job.status || 'queued', createdAt:Date.now() }
       if (normalized.status === 'completed') {
         await completeVideo(normalized)
       } else {

@@ -6,12 +6,18 @@ export async function getCurrentMediaUser() {
   return user
 }
 
-export async function listMediaAssets() {
+export function belongsToProduct(asset, productId) {
+  return Boolean(productId) && asset?.product_id === productId
+}
+
+export async function listMediaAssets(productId) {
+  if (!productId) return []
   const user = await getCurrentMediaUser()
   const { data, error } = await supabase
     .from('media_assets')
     .select('*')
     .eq('user_id', user.id)
+    .eq('product_id', productId)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data || []
