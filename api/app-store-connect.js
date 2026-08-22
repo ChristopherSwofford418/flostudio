@@ -214,6 +214,45 @@ export function summarizeAnalyticsRows({ downloadRows = [], engagementRows = [],
   }
 }
 
+function rowsInRecentDays(rows, now, days) {
+  const cutoff = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (days - 1))
+  return rows.filter(row => {
+    const date = Date.parse(row.Date || row['Event Date'] || '')
+    return !Number.isFinite(date) || date >= cutoff
+  })
+}
+
+function sumSubscriptionMetric(rows, matcher) {
+  return rows.reduce((total, row) => matcher(String(row['State Metric'] || row['Event Grouping'] || row['Event Sub Type'] || '').trim().toLowerCase()) ? total + analyticsNumber(row) : total, 0)
+}
+
+export function summarizeSubscriptionRows({ stateRows = [], eventRows = [], purchaseRows = [], now = new Date() }) {
+  const state = rowsInRecentDays(stateRows, now, 3)
+  const events = rowsInRecentDays(eventRows, now, 30)
+  const purchases = rowsInRecentDays(purchaseRows, now, 30)
+  const inAppPurchaseRows = purchases.filter(row => /in.?app purchase/i.test(String(row['Purchase Type'] || '')))
+  const inAppProceedsUsd = Number(inAppPurchaseRows.reduce((total, row) => total + numberOrZero(row['Proceeds in USD']), 0).toFixed(2))
+  const inAppSalesUsd = Number(inAppPurchaseRows.reduce((total, row) => total + numberOrZero(row['Sales in USD']), 0).toFixed(2))
+  return {
+    status:'available',
+    activePaidPlans:sumSubscriptionMetric(state, label => /full price|preserved price|contingent price/.test(label)),
+    freeTrials:sumSubscriptionMetric(state, label => /free trial/.test(label)),
+    paidOffers:sumSubscriptionMetric(state, label => /paid offer/.test(label)),
+    billingIssues:sumSubscriptionMetric(state, label => /grace period|billing retry|suspended/.test(label)),
+    voluntaryChurn:sumSubscriptionMetric(events, label => /voluntary churn/.test(label)),
+    involuntaryChurn:sumSubscriptionMetric(events, label => /involuntary churn/.test(label)),
+    trialToPaid:sumSubscriptionMetric(events, label => /paid subscriptions from offers|full price from free trial|contingent price from free trial/.test(label)),
+    paidStarts:sumSubscriptionMetric(events, label => /paid subscription starts|full price subscription starts|contingent price subscription starts/.test(label)),
+    renewals:sumSubscriptionMetric(events, label => /renewal/.test(label)),
+    inAppPurchaseProceedsUsd:inAppProceedsUsd,
+    inAppPurchaseSalesUsd:inAppSalesUsd,
+    stateWindowDays:3,
+    eventWindowDays:30,
+    purchaseWindowDays:30,
+    note:'Apple Purchase report proceeds include in-app purchases and may include subscription transactions; Apple does not expose a separate subscription-only proceeds field in this standard report.',
+  }
+}
+
 async function analyticsReportsForApp({ appId, token }) {
   const requestResponse = await appleRequest(`/v1/apps/${encodeURIComponent(appId)}/analyticsReportRequests?filter[accessType]=ONGOING&include=reports&fields[analyticsReportRequests]=accessType,stoppedDueToInactivity,reports&fields[analyticsReports]=name,category`, token)
   const request = (requestResponse.data || []).find(item => !item.attributes?.stoppedDueToInactivity)
@@ -246,9 +285,26 @@ async function analyticsMetrics({ connection, token }) {
     const downloadReport = reportState.reports.find(report => /download/i.test(report.attributes?.name || '') || /commerce/i.test(report.attributes?.category || ''))
     const engagementReport = reportState.reports.find(report => /discovery.*engagement/i.test(report.attributes?.name || '') || /engagement/i.test(report.attributes?.category || ''))
     if (!downloadReport || !engagementReport) return { status:'pending', requestId:reportState.requestId, message:'Apple has accepted the App Analytics request but has not generated both Downloads and Discovery & Engagement reports yet. Apple typically delivers the first ongoing reports within 24–48 hours.' }
-    const [downloads, engagement] = await Promise.all([analyticsRowsForReport(downloadReport, token), analyticsRowsForReport(engagementReport, token)])
+    const subscriptionStateReport = reportState.reports.find(report => /subscription state/i.test(report.attributes?.name || ''))
+    const subscriptionEventReport = reportState.reports.find(report => /subscription event/i.test(report.attributes?.name || ''))
+    const purchaseReport = reportState.reports.find(report => /purchase/i.test(report.attributes?.name || ''))
+    const [downloads, engagement, subscriptionState, subscriptionEvents, purchases] = await Promise.all([
+      analyticsRowsForReport(downloadReport, token),
+      analyticsRowsForReport(engagementReport, token),
+      subscriptionStateReport ? analyticsRowsForReport(subscriptionStateReport, token) : Promise.resolve({ rows:[], processingDate:null }),
+      subscriptionEventReport ? analyticsRowsForReport(subscriptionEventReport, token) : Promise.resolve({ rows:[], processingDate:null }),
+      purchaseReport ? analyticsRowsForReport(purchaseReport, token) : Promise.resolve({ rows:[], processingDate:null }),
+    ])
     if (!downloads.rows.length && !engagement.rows.length) return { status:'pending', requestId:reportState.requestId, message:'Apple has not published a downloadable App Analytics instance for this app yet.' }
-    return { ...summarizeAnalyticsRows({ downloadRows:downloads.rows, engagementRows:engagement.rows }), processingDates:{ downloads:downloads.processingDate, engagement:engagement.processingDate }, requestId:reportState.requestId }
+    const subscriptions = subscriptionState.rows.length || subscriptionEvents.rows.length || purchases.rows.length
+      ? summarizeSubscriptionRows({ stateRows:subscriptionState.rows, eventRows:subscriptionEvents.rows, purchaseRows:purchases.rows })
+      : { status:'pending', message:'Apple has not generated the subscription state, subscription event, or purchase reports for this app yet.' }
+    return {
+      ...summarizeAnalyticsRows({ downloadRows:downloads.rows, engagementRows:engagement.rows }),
+      subscriptions,
+      processingDates:{ downloads:downloads.processingDate, engagement:engagement.processingDate, subscriptionState:subscriptionState.processingDate, subscriptionEvents:subscriptionEvents.processingDate, purchases:purchases.processingDate },
+      requestId:reportState.requestId,
+    }
   } catch (error) {
     if (error.details?.providerStatus === 403) return { status:'not_authorized', message:'The current Apple key cannot read App Analytics reports. Use a Team key with the Sales and Reports, Finance, or Admin role.' }
     return { status:'unavailable', message:error.message || 'Apple could not provide App Analytics data.', providerStatus:error.details?.providerStatus || null }
@@ -284,6 +340,12 @@ export function summarizeSalesReport(rows, { appStoreAppId, sku }) {
   }
 }
 
+export function salesHasValue(sales) {
+  if (!sales?.matchedRows) return false
+  if (Math.abs(Number(sales.appUnits || 0)) > 0 || Math.abs(Number(sales.totalUnits || 0)) > 0) return true
+  return Object.values(sales.proceedsByCurrency || {}).some(value => Math.abs(Number(value || 0)) > 0)
+}
+
 async function monthlySalesMetrics({ connection, token, app }) {
   if (!connection.vendor_number) return { status:'requires_vendor_number', message:'Add the Apple Vendor Number shown in App Store Connect → Reports to pull Sales and Trends numbers.' }
   const checkedPeriods = recentSalesReportPeriods()
@@ -300,8 +362,10 @@ async function monthlySalesMetrics({ connection, token, app }) {
     try {
       const rows = parseTabDelimitedReport(await appleBinaryRequest(`/v1/salesReports?${params}`, token))
       const sales = summarizeSalesReport(rows, { appStoreAppId:connection.app_store_app_id, sku:app?.attributes?.sku })
-      if (sales.matchedRows) return { ...sales, frequency:'MONTHLY', reportDate, checkedPeriods }
-      lastNoSalesMessage = `Apple returned a report for ${reportDate}, but it contained no rows for this app.`
+      if (salesHasValue(sales)) return { ...sales, frequency:'MONTHLY', reportDate, checkedPeriods }
+      lastNoSalesMessage = sales.matchedRows
+        ? `Apple returned only zero-value rows for this app in ${reportDate}; FloStudio continued to earlier completed months.`
+        : `Apple returned a report for ${reportDate}, but it contained no rows for this app.`
     } catch (error) {
       if (/no sales for the date specified/i.test(error.message || '')) {
         lastNoSalesMessage = error.message
@@ -347,6 +411,10 @@ async function syncMetrics({ connection, privateKey }) {
   metrics.availability.downloads = analytics.status === 'available'
     ? { status:'available', message:`${analytics.firstTimeDownloads} first-time downloads and ${analytics.redownloads} redownloads in the Apple App Analytics window.` }
     : { status:analytics.status, message:analytics.message }
+  metrics.subscriptions = analytics.subscriptions || null
+  metrics.availability.subscriptions = analytics.subscriptions?.status === 'available'
+    ? { status:'available', message:`Apple subscription state, lifecycle, and purchase reports are available for the selected app.` }
+    : { status:analytics.subscriptions?.status || analytics.status, message:analytics.subscriptions?.message || analytics.message }
   const sales = await monthlySalesMetrics({ connection, token, app:app.data })
   metrics.sales = sales
   metrics.availability.proceeds = sales.status === 'available'

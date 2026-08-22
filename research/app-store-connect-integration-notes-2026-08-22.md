@@ -37,3 +37,15 @@ The secure per-app workflow is: read `GET /v1/apps/{id}/analyticsReportRequests`
 [9]: https://developer.apple.com/documentation/appstoreconnectapi/post-v1-analyticsreportrequests "Request Reports"
 [10]: https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps-_id_-analyticsreportrequests "Read Report Requests"
 [11]: https://developer.apple.com/documentation/appstoreconnectapi/get-v1-analyticsreports-_id_-instances "Read a List of Instances of a Report"
+
+## Subscription and Purchase Report Notes
+
+Apple’s App Store Subscription State report is a daily snapshot, normally complete within three days. It supplies counts for active paid plans, free trials, paid offers, billing issues, voluntary churn, involuntary churn, subscription name, duration, billing frequency, territory, and Apple download source. Its historical data is available from January 1, 2025 when requested.[12]
+
+Apple’s Subscription Event report provides daily lifecycle activity, including trials and paid-offer starts, trial-to-paid conversions, paid subscription starts, renewals, billing issue recovery, voluntary churn, and involuntary churn. Monthly report instances are available on the fifth day of the following month and reflect complete data.[13]
+
+Apple’s App Store Purchases report provides estimated USD proceeds, sales, purchase count, and paying users for paid apps and in-app purchases. It is appropriate for selected-app monetization totals, but Apple warns that Paying Users isn’t summable across report rows; FloStudio must show it as a provider value rather than aggregate it blindly.[14]
+
+[12]: https://developer.apple.com/documentation/analytics-reports/subscription-state "App Store Subscription State"
+[13]: https://developer.apple.com/documentation/analytics-reports/subscription-event "App Store Subscription Event"
+[14]: https://developer.apple.com/documentation/analytics-reports/app-store-purchase "App Store Purchases"

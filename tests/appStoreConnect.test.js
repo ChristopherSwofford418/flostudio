@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { buildAppMetrics, createAppleToken, latestAnalyticsInstance, recentSalesReportPeriods, salesReportPeriod, summarizeAnalyticsRows, summarizeSalesReport } from '../api/app-store-connect.js'
+import { buildAppMetrics, createAppleToken, latestAnalyticsInstance, recentSalesReportPeriods, salesHasValue, salesReportPeriod, summarizeAnalyticsRows, summarizeSalesReport, summarizeSubscriptionRows } from '../api/app-store-connect.js'
 
 describe('App Store Connect secure sync primitives', () => {
   it('creates a short-lived ES256 team JWT using the supplied key ID and issuer ID', () => {
@@ -36,6 +36,8 @@ describe('App Store Connect secure sync primitives', () => {
       { 'Apple Identifier':'1234567890', 'Parent Identifier':'other-app', Units:'99', 'Developer Proceeds':'10.00', 'Currency of Proceeds':'USD' },
     ], { appStoreAppId:'6776187110', sku:'resumefix-001' })
     expect(sales).toMatchObject({ status:'available', matchedRows:2, appUnits:5, totalUnits:7, proceedsByCurrency:{ USD:3.5, GBP:8.4 }, period:{ startDate:'08/01/2026', endDate:'08/31/2026' } })
+    expect(salesHasValue(sales)).toBe(true)
+    expect(salesHasValue({ matchedRows:1, appUnits:0, totalUnits:0, proceedsByCurrency:{ AED:0 } })).toBe(false)
   })
 
   it('uses Apple’s year-month report-date format for monthly Sales and Trends reports', () => {
@@ -65,5 +67,27 @@ describe('App Store Connect secure sync primitives', () => {
 
   it('uses the newest Apple report instance when several processing dates are available', () => {
     expect(latestAnalyticsInstance([{ id:'old', attributes:{ processingDate:'2026-08-18' } }, { id:'latest', attributes:{ processingDate:'2026-08-20' } }])?.id).toBe('latest')
+  })
+
+  it('aggregates selected-app subscription state, lifecycle, and in-app proceeds without claiming a separate subscription-only revenue value', () => {
+    const subscriptions = summarizeSubscriptionRows({
+      now:new Date('2026-08-22T12:00:00Z'),
+      stateRows:[
+        { Date:'2026-08-21', 'State Metric':'Full price', Counts:'12' },
+        { Date:'2026-08-21', 'State Metric':'Free trials', Counts:'4' },
+        { Date:'2026-08-21', 'State Metric':'Billing retry', Counts:'2' },
+      ],
+      eventRows:[
+        { 'Event Date':'2026-08-21', 'Event Grouping':'Renewals', Counts:'7' },
+        { 'Event Date':'2026-08-21', 'Event Sub Type':'Full Price from Free Trial', Counts:'3' },
+        { 'Event Date':'2026-08-21', 'Event Grouping':'Voluntary Churn', Counts:'1' },
+      ],
+      purchaseRows:[
+        { Date:'2026-08-21', 'Purchase Type':'In-app purchases', 'Proceeds in USD':'24.50', 'Sales in USD':'35.00' },
+        { Date:'2026-08-21', 'Purchase Type':'App purchase', 'Proceeds in USD':'5.00', 'Sales in USD':'7.00' },
+      ],
+    })
+    expect(subscriptions).toMatchObject({ status:'available', activePaidPlans:12, freeTrials:4, billingIssues:2, renewals:7, trialToPaid:3, voluntaryChurn:1, inAppPurchaseProceedsUsd:24.5, inAppPurchaseSalesUsd:35 })
+    expect(subscriptions.note).toContain('may include subscription transactions')
   })
 })

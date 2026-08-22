@@ -174,3 +174,9 @@
 - [ ] Check recent completed Apple Sales and Trends months per app and show the latest report period with real available data.
 
 - [ ] Pull selected-app Apple App Analytics acquisition metrics, including first-time downloads, redownloads, conversion rate, impressions, product page views, and updates.
+
+- [x] Skip zero-value current-month Sales and Trends rows and show the latest prior month with selected-app proceeds.
+
+- [x] Pull and display selected-app Apple subscription state, subscription events, and monthly subscription proceeds when reports become available.
+
+- [ ] Expand App Insights into a comprehensive selected-app Apple intelligence view with all authorized acquisition, monetization, subscription, engagement, metadata, and reporting-health details.
