@@ -101,6 +101,16 @@ export default function ImageBank() {
 
   const imageAssets = useMemo(() => assets.filter(asset => asset.kind === 'image'), [assets])
   const videoAssets = useMemo(() => assets.filter(asset => asset.kind === 'video'), [assets])
+
+  const appStoreScreenshots = useMemo(() => {
+    if (!activeApp) return []
+    const facts = activeApp.source_facts || activeApp.sourceFacts || {}
+    const rawScreens = facts.screenshots || facts.screenshotUrls || activeApp.screenshots || []
+    const icon = facts.image || facts.artworkUrl || activeApp.image_url || null
+    const list = [...rawScreens]
+    if (icon && !list.includes(icon)) list.unshift(icon)
+    return list
+  }, [activeApp])
   const selectedStyle = STYLE_PRESETS.find(style => style.id === stylePreset)
   const selectedRunbook = AD_RUNBOOKS.find(runbook => runbook.id === runbookId) || AD_RUNBOOKS[0]
   const selectedObjective = CAMPAIGN_OBJECTIVES.find(objective => objective.id === objectiveId) || CAMPAIGN_OBJECTIVES[0]
@@ -327,11 +337,32 @@ export default function ImageBank() {
       .creative-tab{border:0;border-bottom:2px solid transparent;background:transparent;color:rgba(243,240,231,.56);padding:9px 3px;margin-right:16px;font:500 10px 'DM Mono',monospace;letter-spacing:.09em;text-transform:uppercase}.creative-tab.active{border-color:var(--signal);color:var(--signal)}
       .ad-room-hero{padding:28px 30px 0;position:relative;overflow:hidden;border:1px solid rgba(243,240,231,.18);background:linear-gradient(120deg,#173a2f 0%,#1c4738 62%,#143127 100%)}.ad-room-hero::after{content:'';position:absolute;width:330px;height:330px;right:-150px;top:-155px;background:radial-gradient(circle,rgba(201,242,93,.38),transparent 67%);border-radius:50%}.ad-room-hero__top{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:22px;align-items:end}.ad-room-hero__title{max-width:700px;font-size:clamp(38px,4.7vw,66px);font-weight:750;line-height:.9;letter-spacing:-.08em}.ad-room-hero__title em{font-family:'Instrument Serif',Georgia,serif;color:var(--vermilion);font-weight:400}.product-truth{position:relative;z-index:1;display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid rgba(243,240,231,.17);margin-top:23px}.product-truth__label{font:500 9px 'DM Mono',monospace;letter-spacing:.13em;color:var(--signal);text-transform:uppercase;white-space:nowrap}.product-truth select{flex:1;max-width:360px;background:transparent;border:0;color:var(--mineral);font:600 12px 'Bricolage Grotesque',sans-serif;outline:0}.product-truth option{background:#17362c;color:var(--mineral)}.product-truth__status{margin-left:auto;color:rgba(243,240,231,.62);font:500 9px 'DM Mono',monospace;letter-spacing:.06em}.media-rail{display:grid;grid-template-columns:repeat(8,minmax(112px,1fr));gap:7px;overflow-x:auto;padding:16px 0 20px;position:relative;z-index:1}.media-rail-item{height:142px;position:relative;overflow:hidden;border-radius:2px;border:1px solid rgba(243,240,231,.18);background:rgba(5,20,15,.35)}.media-rail-item::after{content:'OUTPUT';position:absolute;left:6px;top:6px;padding:3px 5px;border-radius:0;background:rgba(8,25,19,.78);color:rgba(243,240,231,.86);font:500 8px 'DM Mono',monospace;letter-spacing:.08em}.media-rail-item.video::after{content:'VIDEO';color:var(--signal)}.asset-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.asset-card{min-height:240px;overflow:hidden;position:relative;background:rgba(5,20,15,.35);border:1px solid rgba(243,240,231,.14);border-radius:3px}.asset-card .asset-footer{position:absolute;inset:auto 0 0 0;padding:10px;background:linear-gradient(transparent,rgba(7,22,16,.95) 48%);padding-top:35px;display:flex;align-items:flex-end;justify-content:space-between;gap:8px;color:#fff}.asset-card video,.asset-card img{min-height:240px}.format-card{border:1px solid rgba(243,240,231,.16);border-radius:3px;padding:12px;background:rgba(243,240,231,.04);color:rgba(243,240,231,.72);text-align:left}.format-card.active{border-color:var(--signal);background:rgba(201,242,93,.1);color:#fff}.format-card small{display:block;margin-top:3px;color:rgba(243,240,231,.5)}.runbook-shelf{display:grid;grid-template-columns:repeat(5,minmax(128px,1fr));gap:8px;margin:18px 0}.runbook-card{min-height:112px;padding:12px;border:1px solid rgba(243,240,231,.16);border-radius:3px;background:rgba(5,20,15,.28);color:var(--mineral);text-align:left}.runbook-card.active{background:var(--signal);border-color:var(--signal);color:var(--ink-deep);box-shadow:4px 4px 0 rgba(231,108,72,.75)}.runbook-card__type{font:500 8px 'DM Mono',monospace;letter-spacing:.1em;color:var(--moss)}.runbook-card.active .runbook-card__type{color:rgba(17,37,31,.7)}.runbook-card b{display:block;margin-top:8px;font-size:13px;letter-spacing:-.035em}.runbook-card small{display:block;margin-top:5px;line-height:1.35;color:rgba(243,240,231,.55);font-size:10px}.runbook-card.active small{color:rgba(17,37,31,.76)}.ad-blueprint{display:grid;grid-template-columns:74px 1fr 1fr;gap:9px;align-items:stretch;padding:11px;border:1px solid rgba(201,242,93,.28);background:rgba(201,242,93,.055);margin-top:15px}.ad-blueprint__label{font:500 8px 'DM Mono',monospace;letter-spacing:.12em;color:var(--signal);padding-top:3px}.ad-blueprint input{min-width:0;background:rgba(5,20,15,.35);border:1px solid rgba(243,240,231,.17);border-radius:2px;color:var(--mineral);padding:9px;font-size:11px}.ad-blueprint input::placeholder{color:rgba(243,240,231,.42)}@media(max-width:1000px){.creative-workspace{grid-template-columns:1fr!important}.asset-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.media-rail{grid-template-columns:repeat(8,142px)}.runbook-shelf{grid-template-columns:repeat(3,1fr)}}@media(max-width:620px){.asset-grid{grid-template-columns:1fr 1fr}.media-rail{grid-template-columns:repeat(8,128px)}.ad-room-hero{padding:22px 18px 0}.ad-room-hero__top{grid-template-columns:1fr}.ad-room-hero__title{font-size:40px}.product-truth{align-items:flex-start;flex-wrap:wrap}.product-truth select{max-width:none;flex-basis:100%}.product-truth__status{margin-left:0}.runbook-shelf{grid-template-columns:1fr 1fr}.ad-blueprint{grid-template-columns:1fr}.ad-blueprint__label{padding:0}}
     `}</style>
+    <style>{`
+      .ad-room-hero{background:linear-gradient(120deg,#6a1b0b 0%,#8c2a11 62%,#4a1007 100%)!important}
+      .ad-room-hero::after{background:radial-gradient(circle,rgba(255,193,59,.42),rgba(255,93,50,.14) 42%,transparent 68%)!important}
+      .product-truth option{background:#4a1208!important}
+      .media-rail-item,.asset-card{background:rgba(65,13,6,.50)!important}
+      .media-rail-item::after{background:rgba(44,8,3,.84)!important}
+      .asset-card .asset-footer{background:linear-gradient(transparent,rgba(45,8,3,.96) 48%)!important}
+      .format-card.active{background:rgba(255,193,59,.16)!important;border-color:var(--signal)!important}
+      .runbook-card{background:rgba(73,17,7,.38)!important}
+      .ad-blueprint{border-color:rgba(255,193,59,.40)!important;background:rgba(255,193,59,.08)!important}
+      .ad-blueprint input{background:rgba(46,8,3,.48)!important}
+      .creative-workspace .abundance-glass{background-color:rgba(71,16,7,.45)}
+    `}</style>
     <div className="flo-page" style={{ maxWidth:1280, margin:'0 auto', animation:'fadeIn .3s ease-out' }}>
       <section className="ad-room-hero" style={{ marginBottom:20 }}>
         <div className="ad-room-hero__top"><div><div className="abundance-eyebrow">Portfolio Ad Room / Production desk</div><h1 className="ad-room-hero__title" style={{ marginTop:10 }}>Build the ad. <em>Not the prompt.</em></h1><p className="abundance-copy" style={{ marginTop:13, maxWidth:640 }}>Choose the proven format, ground it in your actual product, direct the hook and proof, then render an ad set you can review and scale.</p></div><div className="abundance-glass" style={{ padding:15, borderRadius:3 }}><div className="abundance-mini-label">PRODUCTION LIBRARY</div><div style={{ display:'flex', alignItems:'baseline', gap:7, marginTop:5 }}><b style={{ fontSize:31, letterSpacing:'-.06em' }}>{assets.length}</b><span style={{ color:'rgba(243,240,231,.65)', fontSize:12 }}>real outputs</span></div><div style={{ display:'flex', gap:7, marginTop:10 }}><span className="abundance-pill"><i/>{imageAssets.length} images</span><span className="abundance-pill">{videoAssets.length} video</span></div></div></div>
         <div className="product-truth"><span className="product-truth__label">Product Truth</span>{apps.length ? <select value={activeApp?.id || ''} onChange={event => setActiveApp(apps.find(app => app.id === event.target.value) || null)}>{apps.map(app => <option value={app.id} key={app.id}>{app.name}{app.category ? ` / ${app.category}` : ''}</option>)}</select> : <span style={{ color:'rgba(243,240,231,.66)', fontSize:12 }}>Add a portfolio app to pin real product context into every render.</span>}<span className="product-truth__status">{activeApp ? `${activeApp.name} / ACTIVE` : 'NO PRODUCT SELECTED'}</span></div>
-        <div className="media-rail">{assets.slice(0,8).map(asset => <div key={asset.name} className={`media-rail-item ${asset.kind}`}><AssetVisual asset={asset} compact /></div>)}{!assets.length && <div className="abundance-glass" style={{ gridColumn:'1 / -1', padding:16, borderRadius:3, color:'rgba(243,240,231,.68)', fontSize:12 }}>Your media will arrive here after you create or upload it. FloStudio keeps the Ad Room free of fake example ads.</div>}</div>
+        <div className="media-rail">
+          {appStoreScreenshots.map((url, idx) => (
+            <div key={idx} onClick={() => setReferenceImage(url)} className="media-rail-item" style={{ cursor:'pointer', border: referenceImage === url ? '2px solid var(--signal)' : '1px solid rgba(243,240,231,.18)' }}>
+              <img src={url} alt="App Store screenshot" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+            </div>
+          ))}
+          {assets.slice(0,8).map(asset => <div key={asset.name} className={`media-rail-item ${asset.kind}`}><AssetVisual asset={asset} compact /></div>)}
+          {!appStoreScreenshots.length && !assets.length && <div className="abundance-glass" style={{ gridColumn:'1 / -1', padding:16, borderRadius:3, color:'rgba(243,240,231,.68)', fontSize:12 }}>Select your app above to instantly load Apple App Store screenshots and product artwork into the production media rail.</div>}
+        </div>
       </section>
 
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', margin:'0 0 4px' }}>{tabs.map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`creative-tab ${activeTab === tab.id ? 'active':''}`}>{tab.label} <span style={{ opacity:.72 }}>({tab.count})</span></button>)}</div>
@@ -347,7 +378,35 @@ export default function ImageBank() {
           <div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:9 }}>CREATIVE TREATMENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:9 }}>{STYLE_PRESETS.map(style => <button key={style.id} onClick={() => setStylePreset(style.id)} className={`format-card ${stylePreset === style.id ? 'active':''}`}><b style={{ display:'block', fontSize:12 }}>{style.label}</b><small>{style.desc}</small></button>)}</div></div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>PLACEMENT</div><select className="studio-input" value={aspectRatio} onChange={event => setAspectRatio(event.target.value)}>{ASPECT_RATIOS.map(ratio => <option key={ratio.id} value={ratio.id}>{ratio.label} / {ratio.visual}</option>)}</select></div><div><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>CREATIVE DELIVERY</div><div className="studio-input" style={{ minHeight:39, display:'flex', alignItems:'center', color:'rgba(243,240,231,.76)', fontSize:11 }}>One original image per take. New take = new composition.</div></div></div>
           <div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>OPTIONAL ON-IMAGE MESSAGE</div><input className="studio-input" value={textOverlay} onChange={event => setTextOverlay(event.target.value)} placeholder="e.g. EARLY ACCESS IS OPEN" /></div>
-          <div style={{ marginTop:18 }}><div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>PRODUCT REFERENCE</div>{referenceImage ? <div className="abundance-glass" style={{ padding:10, borderRadius:13, display:'flex', alignItems:'center', gap:10 }}><img src={referenceImage} alt="Product reference" style={{ width:50, height:50, objectFit:'cover', borderRadius:9 }} /><div style={{ flex:1, color:'rgba(255,255,255,.78)', fontSize:12 }}>Your screenshot is used as the product truth in reference-led creative.</div><button onClick={() => setReferenceImage(null)} className="studio-chip">Remove</button></div> : <label style={{ position:'relative', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', minHeight:68, border:'1px dashed rgba(255,255,255,.32)', borderRadius:13, color:'rgba(242,239,255,.72)', fontSize:12, cursor:'pointer', background:'rgba(255,255,255,.04)' }}>{uploading ? 'Uploading source...' : 'Upload your app screen or product image'}<input aria-label="Upload your app screen or product image" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => handleUpload(event.target.files)} style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.01, cursor:'pointer' }} /></label>}</div>
+          <div style={{ marginTop:18 }}>
+            <div style={{ color:'#fff', fontSize:12, fontWeight:800, marginBottom:8 }}>PRODUCT REFERENCE</div>
+            {referenceImage ? (
+              <div className="abundance-glass" style={{ padding:10, borderRadius:13, display:'flex', alignItems:'center', gap:10 }}>
+                <img src={referenceImage} alt="Product reference" style={{ width:50, height:50, objectFit:'cover', borderRadius:9 }} />
+                <div style={{ flex:1, color:'rgba(255,255,255,.78)', fontSize:12 }}>Your selected screenshot is pinned as product reference truth.</div>
+                <button onClick={() => setReferenceImage(null)} className="studio-chip">Clear</button>
+              </div>
+            ) : (
+              <div>
+                {appStoreScreenshots.length > 0 && (
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ color:'rgba(243,240,231,.62)', fontSize:11, marginBottom:6 }}>Click an app store screenshot to pin it:</div>
+                    <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:4 }}>
+                      {appStoreScreenshots.map((url, i) => (
+                        <div key={i} onClick={() => setReferenceImage(url)} style={{ width:52, height:64, borderRadius:6, overflow:'hidden', cursor:'pointer', border:'1px solid rgba(243,240,231,.25)', flexShrink:0, background:'#111' }}>
+                          <img src={url} alt="Store screenshot" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <label style={{ position:'relative', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', minHeight:54, border:'1px dashed rgba(255,255,255,.32)', borderRadius:13, color:'rgba(242,239,255,.72)', fontSize:12, cursor:'pointer', background:'rgba(255,255,255,.04)' }}>
+                  {uploading ? 'Uploading source...' : 'Or upload custom image / artwork'}
+                  <input aria-label="Upload custom image or artwork" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => handleUpload(event.target.files)} style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.01, cursor:'pointer' }} />
+                </label>
+              </div>
+            )}
+          </div>
           {error && <div style={{ marginTop:15, padding:'11px 13px', color:'#ffbdcf', fontSize:12, border:'1px solid rgba(255,100,143,.32)', background:'rgba(255,100,143,.1)', borderRadius:11 }}>{error}</div>}
           <button onClick={generateImages} disabled={generating || (!prompt.trim() && !referenceImage && !activeApp)} className="studio-button" style={{ width:'100%', marginTop:20, padding:14 }}>{generating ? 'Rendering your original creative...' : `Render ${selectedRunbook.label.toLowerCase()} creative · 10 tokens`}</button>
         </section>

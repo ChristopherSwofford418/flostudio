@@ -28,10 +28,10 @@ export const PRICING_TIERS = [
 
 // Fetch user token balance from Supabase
 export async function fetchUserTokens(userId) {
-  if (!userId) return { balance: 50, tier: 'free' }
+  if (!userId) return { balance: 50, tier: 'free', unlimited: false }
   const { data, error } = await supabase
     .from('user_tokens')
-    .select('balance, tier')
+    .select('balance, tier, unlimited')
     .eq('user_id', userId)
     .single()
   
@@ -39,8 +39,8 @@ export async function fetchUserTokens(userId) {
   if (!data) {
     const { data:created, error:insertError } = await supabase
       .from('user_tokens')
-      .insert([{ user_id: userId, balance: 50, tier: 'free' }])
-      .select('balance, tier')
+      .insert([{ user_id: userId, balance: 50, tier: 'free', unlimited: false }])
+      .select('balance, tier, unlimited')
       .single()
     if (insertError) throw insertError
     return created
@@ -51,6 +51,7 @@ export async function fetchUserTokens(userId) {
 // Deduct tokens or trigger progressive payment gate if balance < cost
 export async function consumeTokens(userId, cost, actionName) {
   const current = await fetchUserTokens(userId)
+  if (current.unlimited) return current.balance
   if (current.balance < cost) {
     throw new Error(`INSUFFICIENT_TOKENS: Need ${cost} tokens for ${actionName}, but you have ${current.balance}. Please top up your token balance to proceed.`)
   }
@@ -73,6 +74,7 @@ export async function refundTokens(userId, amount, actionName) {
   const credit = Math.max(0, Number(amount) || 0)
   if (!credit) return (await fetchUserTokens(userId)).balance
   const current = await fetchUserTokens(userId)
+  if (current.unlimited) return current.balance
   const newBalance = current.balance + credit
   const { error } = await supabase
     .from('user_tokens')

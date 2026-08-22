@@ -1,9 +1,28 @@
 import { supabase } from '../supabase'
 
-export async function ensurePersonalWorkspace() {
+export async function claimWorkspaceInvitation() {
+  const { data, error } = await supabase.rpc('claim_workspace_invitation')
+  if (error) throw error
+  return data || null
+}
+
+export async function ensureWorkspaceForUser() {
+  const invitedWorkspaceId = await claimWorkspaceInvitation()
+  if (invitedWorkspaceId) return invitedWorkspaceId
   const { data, error } = await supabase.rpc('ensure_personal_workspace')
   if (error) throw error
   return data
+}
+
+export async function ensurePersonalWorkspace() {
+  return ensureWorkspaceForUser()
+}
+
+export async function getWorkspaceRole(workspaceId) {
+  if (!workspaceId) return 'none'
+  const { data, error } = await supabase.rpc('get_workspace_role', { target_workspace_id: workspaceId })
+  if (error) throw error
+  return data || 'none'
 }
 
 export async function listPortfolioApps(workspaceId) {
@@ -27,6 +46,10 @@ export async function listPortfolioApps(workspaceId) {
       accentColor: facts.accentColor || (imageUrl ? '#ff8769' : '#7b61ff'),
       url: product.product_url || '',
       autopilot: facts.autopilot || { enabled:false, cadence:20, platforms:['instagram'], creativeMix:{ image:70, video:30 }, approvalMode:'review' },
+      sourceFacts: {
+        ...facts,
+        screenshots: facts.screenshots || facts.screenshotUrls || [],
+      },
     }
   })
 }

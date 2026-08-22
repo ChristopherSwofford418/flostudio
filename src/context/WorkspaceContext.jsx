@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabase'
 import { fetchUserTokens, consumeTokens as backendConsumeTokens, refundTokens as backendRefundTokens } from '../lib/billing'
-import { ensurePersonalWorkspace, listPortfolioApps } from '../lib/portfolio'
+import { ensurePersonalWorkspace, getWorkspaceRole, listPortfolioApps } from '../lib/portfolio'
 
 const WorkspaceContext = createContext(null)
 
@@ -9,8 +9,10 @@ export function WorkspaceProvider({ children }) {
   const [apps, setApps] = useState([])
   const [activeApp, setActiveApp] = useState(null)
   const [workspaceId, setWorkspaceId] = useState(null)
+  const [workspaceRole, setWorkspaceRole] = useState('none')
   const [tokens, setTokens] = useState(50)
   const [tier, setTier] = useState('free')
+  const [unlimited, setUnlimited] = useState(false)
   const [showTopUp, setShowTopUp] = useState(false)
   const [notification, setNotification] = useState(null)
   const [workspaceLoading, setWorkspaceLoading] = useState(true)
@@ -28,8 +30,10 @@ export function WorkspaceProvider({ children }) {
     setApps([])
     setActiveApp(null)
     setWorkspaceId(null)
+    setWorkspaceRole('none')
     setTokens(50)
     setTier('free')
+    setUnlimited(false)
     setWorkspaceError('')
     setWorkspaceLoading(false)
   }, [])
@@ -40,10 +44,12 @@ export function WorkspaceProvider({ children }) {
     setWorkspaceError('')
     try {
       const workspace = await ensurePersonalWorkspace()
-      const [tokenState, nextApps] = await Promise.all([fetchUserTokens(user.id), listPortfolioApps(workspace)])
+      const [tokenState, nextApps, role] = await Promise.all([fetchUserTokens(user.id), listPortfolioApps(workspace), getWorkspaceRole(workspace)])
       setWorkspaceId(workspace)
+      setWorkspaceRole(role)
       setTokens(tokenState.balance)
       setTier(tokenState.tier)
+      setUnlimited(Boolean(tokenState.unlimited))
       setApps(nextApps)
       setActiveApp(current => nextApps.find(app => app.id === current?.id) || nextApps[0] || null)
     } catch (error) {
@@ -80,6 +86,10 @@ export function WorkspaceProvider({ children }) {
   }
 
   const useTokens = async (cost, actionName) => {
+    if (unlimited) {
+      notify(`Unlimited owner access active for ${actionName}.`)
+      return true
+    }
     if (tokens < cost) {
       setShowTopUp(true)
       notify(`Token limit reached. Need ${cost} tokens for ${actionName}. Please top up.`)
@@ -119,7 +129,7 @@ export function WorkspaceProvider({ children }) {
   }
 
   return (
-      <WorkspaceContext.Provider value={{ apps, activeApp, setActiveApp, workspaceId, refreshApps, workspaceLoading, workspaceError, initializeWorkspace, tokens, tier, useTokens, refundTokens, addTokens, showTopUp, setShowTopUp }}>
+      <WorkspaceContext.Provider value={{ apps, activeApp, setActiveApp, workspaceId, workspaceRole, refreshApps, workspaceLoading, workspaceError, initializeWorkspace, tokens, tier, unlimited, useTokens, refundTokens, addTokens, showTopUp, setShowTopUp }}>
       {children}
       {notification && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(99,102,241,0.3)', color: '#f1f5f9', padding: '12px 20px', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(10px)' }}>

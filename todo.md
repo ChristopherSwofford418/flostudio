@@ -126,3 +126,29 @@
 - [x] Build Portfolio Autopilot control plane to coordinate marketing, creative production, SEO, analytics, scheduling, review, and publishing across all tenant-owned apps with one click.
 
 - [ ] Make Flo a grounded portfolio-aware marketing copilot that understands each uploaded app, performs requested actions for the selected app, persists the exact requested quantity, and reports truthful results.
+
+- [x] Restored the exact version from this morning (`f79da17` - portfolio-aware Flo Copilot, Signal Ledger editorial design, full sidebar navigation, and exact post-count persistence). Compiled via Vite and deployed live to www.flostudio.io.
+
+- [x] Fixed the `activeApp is not defined` runtime error in `Layout.jsx` by correctly destructuring `activeApp` and `apps` from `useWorkspace()`. Verified via tests and deployed live to www.flostudio.io.
+
+- [x] Fixed Apple App Store screenshot ingestion and persistence in `/api/ingest-product` and `Portfolio.jsx`, so real store artwork and screenshots load into Creative Lab. Passed all 10 unit tests and deployed live to www.flostudio.io.
+
+- [x] Updated Image Bank (`ImageBank.jsx`) and portfolio app normalization (`portfolio.js`) so selected App Store screenshots and artwork appear automatically in both the hero media rail and the Product Reference card, enabling one-click pinning for ad generation. Passed all tests and deployed live to www.flostudio.io.
+
+- [x] Built and deployed Flo Copilot Open-Ended Action Engine (`floCopilotEngine.js`), allowing owners to type any natural-language prompt in the chat drawer (such as creating social posts, generating SEO/ASO blueprints, checking analytics, or requesting creative guidance) for any active portfolio app with instant execution and rich results. Passed all 13 unit tests and deployed live to www.flostudio.io.
+
+- [x] Implemented Approval-First Post Generation in Flo Copilot (`floCopilotEngine.js` & `Layout.jsx`): when you ask Flo to "build 5 posts" or create social content for any active app, Flo instantly generates the exact requested number of draft posts with store visuals and displays them interactively in the chat drawer. You can review each draft, click "Approve & Ship" (or "Approve All") to commit them securely to your Review Queue and Calendar pipeline, or discard them. Passed all 13 unit tests and deployed live to www.flostudio.io.
+
+- [x] Upgraded Flo Copilot Post Generation Engine (`floCopilotEngine.js`): Flo now reads the active app's App Store facts (category, rating, subtitle, description, and store screenshots) to craft intelligent, highly tailored, platform-appropriate social posts paired with real store artwork. Passed all 13 unit tests and deployed live to www.flostudio.io.
+
+- [x] Added Direct Prompt-to-Ad Generation in Flo Copilot (`floCopilotEngine.js` & `Layout.jsx`): You can now type requests like "Make a square ad for ResumeFix AI" directly in the chat drawer. Flo automatically uses the active app's store screenshots as exact product reference, renders the ad via `/api/generate-image`, and displays the live image preview in chat with open/save options. Passed all 13 unit tests and deployed live to www.flostudio.io.
+
+- [x] Added secure Workspace Admin access for Marlin at info@clearpasstechnologies.com, with full portfolio operations permissions and billing ownership kept separate. A verified pending admin invitation now auto-claims the shared workspace after Marlin completes regular email-and-password sign-up.
+
+- [x] Replaced FloStudio's green-led UI theme with an orange, red, and yellow editorial palette, using blue only for restrained utility and system states. Updated global tokens, shell, Creative Lab surfaces, Flo Copilot, portfolio controls, status badges, and authentication screens; validated tests and deployed to www.flostudio.io.
+
+- [x] Removed the remaining Campaign Engine green/teal surfaces and added a small number of blue system and product highlights. Warmed intake, campaign rail, review approvals, and platform states; used blue only for memory, imported product information, and published/system status; validated and deployed to www.flostudio.io.
+
+- [ ] Complete a global no-green visual sweep, including Creative Lab hero and media-rail surfaces, while retaining restrained blue system highlights.
+
+- [ ] Grant the FloStudio owner account test@flostudio.io unlimited server-side tokens without affecting normal tenant billing.

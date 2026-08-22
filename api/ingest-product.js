@@ -93,23 +93,24 @@ async function readAppleListing(candidate) {
   const payload = await response.json()
   const result = payload.results?.[0]
   if (!result) return null
-  return {
-    source: 'Apple App Store',
-    appId,
-    name: result.trackName || '',
-    description: result.description || '',
-    category: result.primaryGenreName || result.genres?.[0] || '',
-    image: result.artworkUrl512 || result.artworkUrl100 || '',
-    siteName: 'Apple App Store',
-    developer: result.artistName || result.sellerName || '',
-    price: result.formattedPrice || '',
-    rating: result.averageUserRating ? `${Number(result.averageUserRating).toFixed(1)}/5` : '',
-    ratingCount: result.userRatingCount || 0,
-    version: result.version || '',
-    releaseNotes: result.releaseNotes || '',
-    contentRating: result.contentAdvisoryRating || '',
-    storeUrl: result.trackViewUrl || candidate.toString()
-  }
+    return {
+      source: 'Apple App Store',
+      appId,
+      name: result.trackName || '',
+      description: result.description || '',
+      category: result.primaryGenreName || result.genres?.[0] || '',
+      image: result.artworkUrl512 || result.artworkUrl100 || '',
+      screenshots: result.screenshotUrls || result.ipadScreenshotUrls || [],
+      siteName: 'Apple App Store',
+      developer: result.artistName || result.sellerName || '',
+      price: result.formattedPrice || '',
+      rating: result.averageUserRating ? `${Number(result.averageUserRating).toFixed(1)}/5` : '',
+      ratingCount: result.userRatingCount || 0,
+      version: result.version || '',
+      releaseNotes: result.releaseNotes || '',
+      contentRating: result.contentAdvisoryRating || '',
+      storeUrl: result.trackViewUrl || candidate.toString()
+    }
 }
 
 async function readGoogleListing(candidate) {
@@ -229,6 +230,7 @@ export default async function handler(req, res) {
         version: listing.version || '',
         releaseNotes: listing.releaseNotes || '',
         contentRating: listing.contentRating || '',
+        screenshots: listing.screenshots || [],
         sourceUrl: listing.storeUrl || candidate.toString()
       },
       name: aiSynthesis.productName || title,
