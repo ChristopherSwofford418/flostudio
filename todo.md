@@ -198,3 +198,7 @@
 - [x] Build an Arcads-style UGC ad mode: selected app image plus outcome prompt yields an original adult creator hook, authentic product-use moment, proof beat, readable app frame, and CTA-ready vertical cut.
 
 - [x] Redesign Creative Lab with a premium black-and-white Arcads-inspired production UI while preserving all app-scoped image-to-video controls.
+
+- [ ] Apply the premium black-and-white Arcads-inspired UI system across every FloStudio page, including navigation and authentication, while retaining all existing workflows.
+
+- [ ] Eliminate every old red, orange, yellow, green, teal, and colored-gradient UI surface from FloStudio; retain only black, charcoal, off-white, white, and gray states.

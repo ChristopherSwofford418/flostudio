@@ -17,16 +17,16 @@ export default class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#1e293b', padding: 24, fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
-          <div style={{ maxWidth: 480, width: '100%', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 24, padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.06)' }}>
-            <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 12, color: '#0f172a' }}>Something needs attention</h2>
-            <p style={{ fontSize: 13.5, color: '#64748b', lineHeight: 1.6, marginBottom: 24 }}>
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fafafa', color: '#282828', padding: 24, fontFamily: 'Plus Jakarta Sans, sans-serif' }}>
+          <div style={{ maxWidth: 480, width: '100%', background: '#ffffff', border: '1px solid #e7e7e7', borderRadius: 24, padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.06)' }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 12, color: '#171717' }}>Something needs attention</h2>
+            <p style={{ fontSize: 13.5, color: '#727272', lineHeight: 1.6, marginBottom: 24 }}>
               FloStudio caught a temporary rendering issue. Click below to reload your workspace safely.
             </p>
-            <div style={{ background: '#f1f5f9', borderRadius: 12, padding: 12, fontSize: 11.5, fontFamily: 'monospace', color: '#e11d48', marginBottom: 20, wordBreak: 'break-all' }}>
+            <div style={{ background: '#f4f4f4', borderRadius: 12, padding: 12, fontSize: 11.5, fontFamily: 'monospace', color: '#4a4a4a', marginBottom: 20, wordBreak: 'break-all' }}>
               {this.state.error?.message || 'Unknown runtime error'}
             </div>
-            <button onClick={() => window.location.href = '/auth'} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg,#6366f1,#ec4899)', color: '#fff', border: 0, fontWeight: 800, fontSize: 13.5, cursor: 'pointer', boxShadow: '0 10px 20px rgba(99,102,241,0.25)' }}>
+            <button onClick={() => window.location.href = '/auth'} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg,#6f6f6f,#717171)', color: '#ffffff', border: 0, fontWeight: 800, fontSize: 13.5, cursor: 'pointer', boxShadow: '0 10px 20px rgba(111,111,111,0.25)' }}>
               Return to secure sign-in →
             </button>
           </div>

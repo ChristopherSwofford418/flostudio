@@ -3,15 +3,15 @@ import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
 
 const PLATFORM_CONFIG = {
-  facebook: { color: '#1877f2', bg: 'rgba(24,119,242,0.1)', label: 'Facebook' },
-  instagram: { color: '#e1306c', bg: 'rgba(225,48,108,0.1)', label: 'Instagram' },
-  twitter: { color: '#1da1f2', bg: 'rgba(29,161,242,0.1)', label: 'Twitter / X' },
-  linkedin: { color: '#0a66c2', bg: 'rgba(10,102,194,0.1)', label: 'LinkedIn' },
+  facebook: { color: '#6c6c6c', bg: 'rgba(108,108,108,0.1)', label: 'Facebook' },
+  instagram: { color: '#5a5a5a', bg: 'rgba(90,90,90,0.1)', label: 'Instagram' },
+  twitter: { color: '#8b8b8b', bg: 'rgba(139,139,139,0.1)', label: 'Twitter / X' },
+  linkedin: { color: '#595959', bg: 'rgba(89,89,89,0.1)', label: 'LinkedIn' },
 }
 
 const BRAND_CONFIG = {
-  clearpass: { color: '#10b981', bg: 'rgba(16,185,129,0.1)', label: 'ClearPass' },
-  resumefix: { color: '#60a5fa', bg: 'rgba(96,165,250,0.1)', label: 'ResumeFix' },
+  clearpass: { color: '#919191', bg: 'rgba(145,145,145,0.1)', label: 'ClearPass' },
+  resumefix: { color: '#9c9c9c', bg: 'rgba(156,156,156,0.1)', label: 'ResumeFix' },
 }
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
@@ -32,9 +32,9 @@ const BLOTADO_RESUMEFIX = {
 function charColor(count, limit) {
   if (!limit) return 'var(--text-muted)'
   const pct = count / limit
-  if (pct < 0.7) return '#10b981'
-  if (pct < 0.9) return '#f59e0b'
-  return '#ef4444'
+  if (pct < 0.7) return '#919191'
+  if (pct < 0.9) return '#a6a6a6'
+  return '#686868'
 }
 
 const CHAR_LIMITS = { facebook: 2200, instagram: 2200, twitter: 280, linkedin: 3000 }
@@ -130,7 +130,7 @@ export default function Approve() {
           <div style={{
             width: 72,
             height: 72,
-            background: 'rgba(16,185,129,0.1)',
+            background: 'rgba(145,145,145,0.1)',
             borderRadius: '50%',
             display: 'flex',
             alignItems: 'center',
@@ -138,7 +138,7 @@ export default function Approve() {
             margin: '0 auto 20px',
             fontSize: 30,
           }}>
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#919191" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
           </div>
@@ -183,7 +183,7 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
       : new Date(Date.now() + 3600000).toISOString().slice(0, 16)
   )
 
-  const platCfg = PLATFORM_CONFIG[post.platform] || { color: '#6366f1', bg: 'rgba(99,102,241,0.1)', label: post.platform }
+  const platCfg = PLATFORM_CONFIG[post.platform] || { color: '#6f6f6f', bg: 'rgba(111,111,111,0.1)', label: post.platform }
   const brandCfg = BRAND_CONFIG[post.brand]
 
   const loadImages = async () => {
@@ -274,7 +274,7 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
               style={{
                 width: '100%',
                 background: 'var(--surface)',
-                border: '1px solid rgba(99,102,241,0.35)',
+                border: '1px solid rgba(111,111,111,0.35)',
                 borderRadius: 10,
                 padding: '11px 13px',
                 color: 'var(--text-primary)',
@@ -327,15 +327,15 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                 onClick={() => { onEdit(post, editContent); setEditing(false) }}
                 style={{
                   flex: 1,
-                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                  color: '#fff',
+                  background: 'linear-gradient(135deg, #6f6f6f, #717171)',
+                  color: '#ffffff',
                   border: 'none',
                   borderRadius: 8,
                   padding: '9px',
                   fontWeight: 600,
                   fontSize: 13,
                   cursor: 'pointer',
-                  boxShadow: '0 2px 10px rgba(99,102,241,0.3)',
+                  boxShadow: '0 2px 10px rgba(111,111,111,0.3)',
                   transition: 'all 0.15s',
                 }}
                 onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
@@ -369,12 +369,12 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                   <div style={{ position: 'relative' }}>
                     <img src={selectedImage} alt="" onClick={() => window.open(selectedImage, '_blank')} style={{ width: '100%', maxHeight: 140, objectFit: 'cover', borderRadius: 8, display: 'block', cursor: 'zoom-in' }} />
                     <div style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 4 }}>
-                      <button onClick={() => window.open(selectedImage, '_blank')} style={{ background: 'rgba(0,0,0,0.65)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 11, padding: '3px 8px', cursor: 'pointer' }}>⛶ Expand</button>
-                      <button onClick={async () => { setSelectedImage(null); await supabase.from('flo_posts').update({ image_url: null }).eq('id', post.id) }} style={{ background: 'rgba(0,0,0,0.65)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}>✕</button>
+                      <button onClick={() => window.open(selectedImage, '_blank')} style={{ background: 'rgba(0,0,0,0.65)', border: 'none', borderRadius: 6, color: '#ffffff', fontSize: 11, padding: '3px 8px', cursor: 'pointer' }}>⛶ Expand</button>
+                      <button onClick={async () => { setSelectedImage(null); await supabase.from('flo_posts').update({ image_url: null }).eq('id', post.id) }} style={{ background: 'rgba(0,0,0,0.65)', border: 'none', borderRadius: 6, color: '#ffffff', fontSize: 12, padding: '3px 8px', cursor: 'pointer', fontWeight: 600 }}>✕</button>
                     </div>
                   </div>
                 ) : (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', color: '#a5b4fc', fontSize: 13, fontWeight: 500 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(111,111,111,0.08)', border: '1px solid rgba(111,111,111,0.2)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', color: '#b6b6b6', fontSize: 13, fontWeight: 500 }}>
                     <span style={{ fontFamily:'DM Mono, monospace', fontSize:10 }}>IMG</span> Add Image
                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
                       const file = e.target.files?.[0]
@@ -406,7 +406,7 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                   type="datetime-local"
                   value={scheduleTime}
                   onChange={e => setScheduleTime(e.target.value)}
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 12px', color: '#e2e8f0', fontSize: 13, width: '100%', boxSizing: 'border-box' }}
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 12px', color: '#e7e7e7', fontSize: 13, width: '100%', boxSizing: 'border-box' }}
                 />
               </div>
               <button
@@ -415,9 +415,9 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                 style={{
                   flex: 1,
                   background: processing === post.id
-                    ? 'rgba(16,185,129,0.25)'
-                    : 'linear-gradient(135deg, #10b981, #059669)',
-                  color: '#fff',
+                    ? 'rgba(145,145,145,0.25)'
+                    : 'linear-gradient(135deg, #919191, #747474)',
+                  color: '#ffffff',
                   border: 'none',
                   borderRadius: 8,
                   padding: '9px',
@@ -428,7 +428,7 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 6,
-                  boxShadow: processing === post.id ? 'none' : '0 2px 10px rgba(16,185,129,0.28)',
+                  boxShadow: processing === post.id ? 'none' : '0 2px 10px rgba(145,145,145,0.28)',
                   transition: 'all 0.15s',
                 }}
                 onMouseEnter={e => { if (processing !== post.id) e.currentTarget.style.transform = 'translateY(-1px)' }}
@@ -449,9 +449,9 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
               <button
                 onClick={() => setEditing(true)}
                 style={{
-                  background: 'rgba(99,102,241,0.1)',
-                  color: '#a5b4fc',
-                  border: '1px solid rgba(99,102,241,0.2)',
+                  background: 'rgba(111,111,111,0.1)',
+                  color: '#b6b6b6',
+                  border: '1px solid rgba(111,111,111,0.2)',
                   borderRadius: 8,
                   padding: '9px 14px',
                   fontSize: 13,
@@ -462,8 +462,8 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                   gap: 5,
                   transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.17)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(99,102,241,0.1)'}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(111,111,111,0.17)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(111,111,111,0.1)'}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
@@ -474,9 +474,9 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
               <button
                 onClick={() => onReject(post.id)}
                 style={{
-                  background: 'rgba(239,68,68,0.07)',
-                  color: '#f87171',
-                  border: '1px solid rgba(239,68,68,0.2)',
+                  background: 'rgba(104,104,104,0.07)',
+                  color: '#8e8e8e',
+                  border: '1px solid rgba(104,104,104,0.2)',
                   borderRadius: 8,
                   padding: '9px 14px',
                   fontSize: 13,
@@ -487,8 +487,8 @@ function PostCard({ post, processing, onApprove, onReject, onEdit, index }) {
                   gap: 5,
                   transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.13)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.07)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.2)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(104,104,104,0.13)'; e.currentTarget.style.borderColor = 'rgba(104,104,104,0.35)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(104,104,104,0.07)'; e.currentTarget.style.borderColor = 'rgba(104,104,104,0.2)' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>

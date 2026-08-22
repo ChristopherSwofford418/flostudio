@@ -138,42 +138,42 @@ function AgentDrawer({ onClose, activeApp, apps }) {
               <button onClick={() => approveAllDrafts(index, m.result.drafts)} className="studio-chip" style={{ fontSize:10, padding:'3px 8px', background:'var(--signal)', color:'var(--ink-deep)', border:0, fontWeight:700, cursor:'pointer' }}>Approve All</button>
             </div>
             {m.result.drafts.map((draft) => (
-              <div key={draft.id} style={{ background:'rgba(5,20,15,.45)', border:'1px solid rgba(243,240,231,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:6 }}>
+              <div key={draft.id} style={{ background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:6 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <span style={{ fontSize:9, textTransform:'uppercase', letterSpacing:'.08em', color:'rgba(243,240,231,.65)' }}>{draft.platform} · {new Date(draft.scheduledAt).toLocaleDateString()}</span>
-                  <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, background: draft.status === 'approved' ? 'rgba(34,197,94,.2)' : draft.status === 'rejected' ? 'rgba(239,68,68,.2)' : 'rgba(234,179,8,.2)', color: draft.status === 'approved' ? '#4ade80' : draft.status === 'rejected' ? '#f87171' : '#fbbf24' }}>{draft.status.toUpperCase()}</span>
+                  <span style={{ fontSize:9, textTransform:'uppercase', letterSpacing:'.08em', color:'rgba(240,240,240,.65)' }}>{draft.platform} · {new Date(draft.scheduledAt).toLocaleDateString()}</span>
+                  <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, background: draft.status === 'approved' ? 'rgba(155,155,155,.2)' : draft.status === 'rejected' ? 'rgba(104,104,104,.2)' : 'rgba(178,178,178,.2)', color: draft.status === 'approved' ? '#b8b8b8' : draft.status === 'rejected' ? '#8e8e8e' : '#c1c1c1' }}>{draft.status.toUpperCase()}</span>
                 </div>
                 {draft.mediaUrl && <img src={draft.mediaUrl} alt="Draft visual" style={{ width:'100%', height:90, objectFit:'cover', borderRadius:4 }} />}
-                <p style={{ fontSize:11.5, color:'#fff', margin:0, lineHeight:1.4 }}>{draft.content}</p>
+                <p style={{ fontSize:11.5, color:'#ffffff', margin:0, lineHeight:1.4 }}>{draft.content}</p>
                 {draft.status === 'draft' ? (
                   <div style={{ display:'flex', gap:6, marginTop:4 }}>
                     <button onClick={() => approveDraft(draft, index)} style={{ flex:1, padding:'5px', background:'var(--signal)', color:'var(--ink-deep)', border:0, borderRadius:4, fontSize:10.5, fontWeight:800, cursor:'pointer' }}>Approve & Ship</button>
-                    <button onClick={() => rejectDraft(draft.id, index)} style={{ padding:'5px 10px', background:'rgba(255,255,255,.08)', color:'#fff', border:'1px solid rgba(255,255,255,.15)', borderRadius:4, fontSize:10.5, fontWeight:600, cursor:'pointer' }}>Discard</button>
+                    <button onClick={() => rejectDraft(draft.id, index)} style={{ padding:'5px 10px', background:'rgba(255,255,255,.08)', color:'#ffffff', border:'1px solid rgba(255,255,255,.15)', borderRadius:4, fontSize:10.5, fontWeight:600, cursor:'pointer' }}>Discard</button>
                   </div>
                 ) : (
-                  <div style={{ fontSize:10, color:'rgba(243,240,231,.6)', fontStyle:'italic' }}>{draft.status === 'approved' ? '✓ Saved to Review Queue and Calendar pipeline' : '✕ Discarded'}</div>
+                  <div style={{ fontSize:10, color:'rgba(240,240,240,.6)', fontStyle:'italic' }}>{draft.status === 'approved' ? '✓ Saved to Review Queue and Calendar pipeline' : '✕ Discarded'}</div>
                 )}
               </div>
             ))}
           </div>
         )}
         {m.actionType === 'seo_blueprint' && m.result && (
-          <div style={{ marginTop:10, background:'rgba(5,20,15,.45)', border:'1px solid rgba(243,240,231,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:5 }}>
+          <div style={{ marginTop:10, background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:5 }}>
             <div style={{ fontSize:10, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--signal)', fontWeight:700 }}>SEO & ASO Blueprint</div>
-            <div style={{ fontSize:11, color:'#fff' }}><b>Title:</b> {m.result.metaTitle}</div>
-            <div style={{ fontSize:11, color:'rgba(243,240,231,.8)' }}><b>Keywords:</b> {m.result.targetKeywords.join(', ')}</div>
+            <div style={{ fontSize:11, color:'#ffffff' }}><b>Title:</b> {m.result.metaTitle}</div>
+            <div style={{ fontSize:11, color:'rgba(240,240,240,.8)' }}><b>Keywords:</b> {m.result.targetKeywords.join(', ')}</div>
           </div>
         )}
         {m.actionType === 'ad_created' && m.result && (
-          <div style={{ marginTop:10, background:'rgba(5,20,15,.45)', border:'1px solid rgba(243,240,231,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:8 }}>
+          <div style={{ marginTop:10, background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:8 }}>
             <div style={{ fontSize:10, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--signal)', fontWeight:700 }}>Generated Ad Creative</div>
-            <img src={m.result.imageUrl} alt="Generated ad" style={{ width:'100%', height:200, objectFit:'cover', borderRadius:6, border:'1px solid rgba(243,240,231,.2)' }} />
-            <div style={{ fontSize:11, color:'rgba(243,240,231,.8)' }}><b>Prompt:</b> {m.result.promptUsed}</div>
+            <img src={m.result.imageUrl} alt="Generated ad" style={{ width:'100%', height:200, objectFit:'cover', borderRadius:6, border:'1px solid rgba(240,240,240,.2)' }} />
+            <div style={{ fontSize:11, color:'rgba(240,240,240,.8)' }}><b>Prompt:</b> {m.result.promptUsed}</div>
             <a href={m.result.imageUrl} target="_blank" rel="noreferrer" style={{ textAlign:'center', padding:'6px', background:'var(--signal)', color:'var(--ink-deep)', borderRadius:4, fontSize:11, fontWeight:800, textDecoration:'none' }}>Open Full Resolution →</a>
           </div>
         )}
       </div>)}
-      {loading && <div className="flo-bubble assistant"><div style={{ display:'flex', gap:5, alignItems:'center', marginBottom:8 }}>{[0,1,2].map(i => <span key={i} style={{ width:7, height:7, borderRadius:'50%', background:'#ff9cc3', animation:`dot 1.25s ${i*.16}s infinite` }} />)}<span style={{ fontSize:11, marginLeft:4, opacity:.75 }}>Flo is working</span></div>{steps.slice(-3).map((s, i) => <div key={i} style={{ fontSize:11, opacity:i === steps.slice(-3).length - 1 ? 1:.55, marginTop:4 }}>• {s}</div>)}</div>}
+      {loading && <div className="flo-bubble assistant"><div style={{ display:'flex', gap:5, alignItems:'center', marginBottom:8 }}>{[0,1,2].map(i => <span key={i} style={{ width:7, height:7, borderRadius:'50%', background:'#b4b4b4', animation:`dot 1.25s ${i*.16}s infinite` }} />)}<span style={{ fontSize:11, marginLeft:4, opacity:.75 }}>Flo is working</span></div>{steps.slice(-3).map((s, i) => <div key={i} style={{ fontSize:11, opacity:i === steps.slice(-3).length - 1 ? 1:.55, marginTop:4 }}>• {s}</div>)}</div>}
       <div ref={endRef}/>
     </div>
     <div className="flo-drawer-footer"><div className="flo-drawer-suggestions">{['Build a campaign', 'Create 5 posts', 'Show pipeline stats'].map(q => <button key={q} onClick={() => send(q)}>{q}</button>)}</div><div className="flo-drawer-compose"><textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey){e.preventDefault();send()} }} rows={2} placeholder="Ask Flo to make something…"/><button onClick={() => send()} disabled={!input.trim() || loading} className="flo-drawer-send">GO</button></div></div>

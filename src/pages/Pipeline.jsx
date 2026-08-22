@@ -18,7 +18,7 @@ async function callAI(messages, maxTokens = 800) {
   return d?.content || d?.choices?.[0]?.message?.content || ''
 }
 
-const PLATFORM_COLORS = { instagram: '#ff5d32', twitter: '#63b7ff', linkedin: '#63b7ff', facebook: '#63b7ff', tiktok: '#ffc13b' }
+const PLATFORM_COLORS = { instagram: '#7c7c7c', twitter: '#aaaaaa', linkedin: '#aaaaaa', facebook: '#aaaaaa', tiktok: '#c5c5c5' }
 const STATUS_TABS = ['pending', 'approved', 'published', 'all']
 
 export default function Pipeline() {
@@ -219,17 +219,17 @@ export default function Pipeline() {
         <section className="abundance-shell" style={{ display:'grid', gridTemplateColumns:'1.18fr .82fr', minHeight:230, marginBottom:24 }}>
           <div style={{ padding:'27px 30px', position:'relative', zIndex:1, display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
             <div><div className="abundance-eyebrow">Review queue / Decision desk</div><h1 className="abundance-title" style={{ fontSize:'clamp(32px,4vw,48px)', maxWidth:500, marginTop:10 }}>Strong ideas need a <em>final call.</em></h1><p className="abundance-copy" style={{ marginTop:14, maxWidth:490 }}>Score what is worth shipping, revise what needs a sharper edge, and keep your brand’s creative quality high.</p></div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center' }}>{counts.pending > 0 && <button onClick={bulkApproveAll} disabled={bulkApproving} className="studio-button" style={{ alignSelf:'flex-start' }}>{bulkApproving ? 'Approving drafts…' : `Approve all pending (${counts.pending}) →`}</button>}<button onClick={generateQueueVisuals} disabled={Boolean(batchVisualProgress && batchVisualProgress.complete < batchVisualProgress.total)} className="studio-chip" style={{ background:'rgba(255,255,255,.12)', color:'#fff', borderColor:'rgba(255,255,255,.25)', padding:'10px 13px' }}>{batchVisualProgress ? `Creating visuals ${batchVisualProgress.complete}/${batchVisualProgress.total}` : 'Create visuals for next 5'}</button></div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center' }}>{counts.pending > 0 && <button onClick={bulkApproveAll} disabled={bulkApproving} className="studio-button" style={{ alignSelf:'flex-start' }}>{bulkApproving ? 'Approving drafts…' : `Approve all pending (${counts.pending}) →`}</button>}<button onClick={generateQueueVisuals} disabled={Boolean(batchVisualProgress && batchVisualProgress.complete < batchVisualProgress.total)} className="studio-chip" style={{ background:'rgba(255,255,255,.12)', color:'#ffffff', borderColor:'rgba(255,255,255,.25)', padding:'10px 13px' }}>{batchVisualProgress ? `Creating visuals ${batchVisualProgress.complete}/${batchVisualProgress.total}` : 'Create visuals for next 5'}</button></div>
           </div>
-          <div style={{ position:'relative', minHeight:230, overflow:'hidden' }}><img src="/visuals/flo-preview-editorial.jpg" alt="Creative review moodboard" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', opacity:.9 }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#5d1a0a 0%,rgba(93,26,10,.18) 55%,rgba(20,5,3,.1))' }} /><div className="abundance-glass" style={{ position:'absolute', right:18, bottom:18, color:'#fff', padding:'10px 12px', borderRadius:12 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, letterSpacing:'.08em', color:'#ffc13b' }}>IN REVIEW</div><b style={{ display:'block', marginTop:2, fontSize:12 }}>{counts.pending} decision{counts.pending === 1 ? '' : 's'} waiting</b></div></div>
+          <div style={{ position:'relative', minHeight:230, overflow:'hidden' }}><img src="/visuals/flo-preview-editorial.jpg" alt="Creative review moodboard" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', opacity:.9 }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#272727 0%,rgba(39,39,39,.18) 55%,rgba(8,8,8,.1))' }} /><div className="abundance-glass" style={{ position:'absolute', right:18, bottom:18, color:'#ffffff', padding:'10px 12px', borderRadius:12 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, letterSpacing:'.08em', color:'#c5c5c5' }}>IN REVIEW</div><b style={{ display:'block', marginTop:2, fontSize:12 }}>{counts.pending} decision{counts.pending === 1 ? '' : 's'} waiting</b></div></div>
         </section>
 
         {/* Stats row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 22 }}>
-          {[['pending','Pending Review','#ffc13b'],['approved','Approved','#ff7b45'],['published','Published','#63b7ff']].map(([s,label,c]) => (
+          {[['pending','Pending Review','#c5c5c5'],['approved','Approved','#939393'],['published','Published','#aaaaaa']].map(([s,label,c]) => (
             <div key={s} onClick={() => setActiveTab(s)} className="abundance-card" style={{ border: `1px solid ${activeTab === s ? c : 'rgba(255,255,255,.13)'}`, padding: '20px 24px', cursor: 'pointer', transition: 'all 0.15s ease', boxShadow: activeTab === s ? `0 8px 28px ${c}28` : undefined }}>
-              <div style={{ fontSize: 26, fontWeight: 800, color: activeTab === s ? c : '#fff', letterSpacing: '-0.5px' }}>{counts[s] || 0}</div>
-              <div style={{ fontSize: 12.5, color: 'rgba(234,229,255,.64)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 4 }}>{label}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: activeTab === s ? c : '#ffffff', letterSpacing: '-0.5px' }}>{counts[s] || 0}</div>
+              <div style={{ fontSize: 12.5, color: 'rgba(232,232,232,.64)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 4 }}>{label}</div>
             </div>
           ))}
         </div>
@@ -237,19 +237,19 @@ export default function Pipeline() {
         {/* Tabs */}
         <div className="abundance-glass" style={{ display: 'flex', gap: 6, marginBottom: 20, borderRadius: 12, padding: 6, width: 'fit-content' }}>
           {STATUS_TABS.map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', borderRadius: 8, background: activeTab === tab ? 'linear-gradient(135deg,#ff5d32,#ffc13b)' : 'transparent', border: 'none', color: activeTab === tab ? '#2b0b06' : 'rgba(255,247,230,.68)', fontSize: 13, fontWeight: activeTab === tab ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'all 0.15s' }}>{tab}</button>
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', borderRadius: 8, background: activeTab === tab ? 'linear-gradient(135deg,#7c7c7c,#c5c5c5)' : 'transparent', border: 'none', color: activeTab === tab ? '#111111' : 'rgba(247,247,247,.68)', fontSize: 13, fontWeight: activeTab === tab ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'all 0.15s' }}>{tab}</button>
           ))}
         </div>
 
         {/* Post list */}
         {loading ? (
           <div className="abundance-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220 }}>
-            <span style={{ width: 30, height: 30, border: '3px solid #e2e8f0', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+            <span style={{ width: 30, height: 30, border: '3px solid #e7e7e7', borderTopColor: '#535353', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
           </div>
         ) : posts.length === 0 ? (
           <div className="abundance-card" style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 6 }}>No {activeTab} posts found</div>
-            <div style={{ fontSize: 13, color: 'rgba(234,229,255,.64)' }}>Use Ask Flo or Agent HQ to generate campaign content</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff', marginBottom: 6 }}>No {activeTab} posts found</div>
+            <div style={{ fontSize: 13, color: 'rgba(232,232,232,.64)' }}>Use Ask Flo or Agent HQ to generate campaign content</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -260,32 +260,32 @@ export default function Pipeline() {
                 <div key={post.id} className="abundance-card" style={{ padding: '16px 18px', display: 'flex', gap: 16, alignItems: 'stretch', transition: 'all 0.15s' }}>
                   
                   {/* Platform badge */}
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${PLATFORM_COLORS[post.platform] || '#4f46e5'}12`, border: `1px solid ${PLATFORM_COLORS[post.platform] || '#4f46e5'}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: PLATFORM_COLORS[post.platform] || '#4f46e5', textTransform: 'uppercase' }}>{post.platform?.substring(0,2)}</span>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${PLATFORM_COLORS[post.platform] || '#535353'}12`, border: `1px solid ${PLATFORM_COLORS[post.platform] || '#535353'}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: PLATFORM_COLORS[post.platform] || '#535353', textTransform: 'uppercase' }}>{post.platform?.substring(0,2)}</span>
                   </div>
 
-                  <div style={{ width:126, minHeight:126, borderRadius:12, overflow:'hidden', flexShrink:0, background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.14)', position:'relative' }}>{postAssets.length > 0 ? (postAssets[0].kind === 'video' ? <video src={postAssets[0].asset_url} controls playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={postAssets[0].asset_url} alt="Campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />) : <div style={{ height:'100%', padding:12, display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(145deg,rgba(99,183,255,.30),rgba(255,93,50,.18))' }}><div style={{ font:'700 9px DM Mono,monospace', letterSpacing:'.08em', color:'#ffc13b' }}>VISUAL NEEDED</div><button onClick={() => generateVisual(post)} disabled={visualGenerating[post.id] === 'working'} style={{ border:'1px solid rgba(255,255,255,.22)', background:'rgba(43,11,6,.62)', color:'#fff', borderRadius:7, padding:'7px 5px', fontSize:10, fontWeight:800, cursor:'pointer' }}>{visualGenerating[post.id] === 'working' ? 'CREATING…' : 'GENERATE · 10'}</button></div>}</div>
+                  <div style={{ width:126, minHeight:126, borderRadius:12, overflow:'hidden', flexShrink:0, background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.14)', position:'relative' }}>{postAssets.length > 0 ? (postAssets[0].kind === 'video' ? <video src={postAssets[0].asset_url} controls playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={postAssets[0].asset_url} alt="Campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />) : <div style={{ height:'100%', padding:12, display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(145deg,rgba(170,170,170,.30),rgba(124,124,124,.18))' }}><div style={{ font:'700 9px DM Mono,monospace', letterSpacing:'.08em', color:'#c5c5c5' }}>VISUAL NEEDED</div><button onClick={() => generateVisual(post)} disabled={visualGenerating[post.id] === 'working'} style={{ border:'1px solid rgba(255,255,255,.22)', background:'rgba(17,17,17,.62)', color:'#ffffff', borderRadius:7, padding:'7px 5px', fontSize:10, fontWeight:800, cursor:'pointer' }}>{visualGenerating[post.id] === 'working' ? 'CREATING…' : 'GENERATE · 10'}</button></div>}</div>
 
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, color: '#fff', lineHeight: 1.6, marginBottom: 10, fontWeight: 500 }}>{post.content}</div>
+                    <div style={{ fontSize: 14, color: '#ffffff', lineHeight: 1.6, marginBottom: 10, fontWeight: 500 }}>{post.content}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                      {post.scheduled_at && <span style={{ fontSize: 12, color: 'rgba(234,229,255,.64)', fontWeight: 500 }}>{new Date(post.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
-                      <span style={{ fontSize: 11.5, padding: '3px 10px', borderRadius: 20, background: post.status === 'approved' ? '#fff0c6' : post.status === 'published' ? '#e0efff' : '#fff3cf', color: post.status === 'approved' ? '#d65724' : post.status === 'published' ? '#2577be' : '#b65c10', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{post.status}</span>
-                      {score && score !== 'loading' && <span style={{ fontSize: 12, fontWeight: 700, color: score.score >= 8 ? '#d65724' : score.score >= 6 ? '#b65c10' : '#dc2626' }}>AI Score: {score.score}/10</span>}
+                      {post.scheduled_at && <span style={{ fontSize: 12, color: 'rgba(232,232,232,.64)', fontWeight: 500 }}>{new Date(post.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
+                      <span style={{ fontSize: 11.5, padding: '3px 10px', borderRadius: 20, background: post.status === 'approved' ? '#f0f0f0' : post.status === 'published' ? '#ededed' : '#f3f3f3', color: post.status === 'approved' ? '#6e6e6e' : post.status === 'published' ? '#6b6b6b' : '#6a6a6a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{post.status}</span>
+                      {score && score !== 'loading' && <span style={{ fontSize: 12, fontWeight: 700, color: score.score >= 8 ? '#6e6e6e' : score.score >= 6 ? '#6a6a6a' : '#4d4d4d' }}>AI Score: {score.score}/10</span>}
                     </div>
-                    {publishErrors[post.id] && <div style={{ marginTop:9, color:'#ffb5cc', fontSize:11, lineHeight:1.5 }}>Publish stopped: {publishErrors[post.id]} <a href="/accounts" style={{ color:'#d9ff75', fontWeight:800 }}>Open Channels</a></div>}
+                    {publishErrors[post.id] && <div style={{ marginTop:9, color:'#c6c6c6', fontSize:11, lineHeight:1.5 }}>Publish stopped: {publishErrors[post.id]} <a href="/accounts" style={{ color:'#ededed', fontWeight:800 }}>Open Channels</a></div>}
                   </div>
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button onClick={() => scorePost(post)} title="AI Score" style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {score === 'loading' ? <span style={{ width: 12, height: 12, border: '2px solid #cbd5e1', borderTopColor: '#8c74ff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : 'Score'}
+                    <button onClick={() => scorePost(post)} title="AI Score" style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e7e7e7', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {score === 'loading' ? <span style={{ width: 12, height: 12, border: '2px solid #d4d4d4', borderTopColor: '#838383', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : 'Score'}
                     </button>
-                    <button onClick={() => openPost(post)} title="Attach or change campaign creative" style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e9e4ff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{postAssets.length ? `Creative ${postAssets.length}` : 'Choose Creative'}</button>
-                    {post.status === 'pending' && <button onClick={() => updateStatus(post.id, 'approved')} title="Approve" style={{ padding: '8px 16px', borderRadius: 8, background: '#fff0c6', border: '1px solid #ffc13b', color: '#b1441c', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Approve</button>}
-                    {post.status === 'approved' && <button onClick={() => publishPost(post)} disabled={publishing[post.id]} title="Publish through connected channel" style={{ padding: '8px 16px', borderRadius: 8, background: '#e0e7ff', border: '1px solid #c7d2fe', color: '#4f46e5', cursor: publishing[post.id] ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, opacity:publishing[post.id] ? .7 : 1 }}>{publishing[post.id] ? 'Sending…' : 'Publish to channel'}</button>}
-                    <button onClick={() => deletePost(post.id)} title="Delete" style={{ padding: '8px 12px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Delete</button>
+                    <button onClick={() => openPost(post)} title="Attach or change campaign creative" style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e7e7e7', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{postAssets.length ? `Creative ${postAssets.length}` : 'Choose Creative'}</button>
+                    {post.status === 'pending' && <button onClick={() => updateStatus(post.id, 'approved')} title="Approve" style={{ padding: '8px 16px', borderRadius: 8, background: '#f0f0f0', border: '1px solid #c5c5c5', color: '#585858', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Approve</button>}
+                    {post.status === 'approved' && <button onClick={() => publishPost(post)} disabled={publishing[post.id]} title="Publish through connected channel" style={{ padding: '8px 16px', borderRadius: 8, background: '#e7e7e7', border: '1px solid #d3d3d3', color: '#535353', cursor: publishing[post.id] ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, opacity:publishing[post.id] ? .7 : 1 }}>{publishing[post.id] ? 'Sending…' : 'Publish to channel'}</button>}
+                    <button onClick={() => deletePost(post.id)} title="Delete" style={{ padding: '8px 12px', borderRadius: 8, background: '#f5f5f5', border: '1px solid #d5d5d5', color: '#4d4d4d', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Delete</button>
                   </div>
                 </div>
               )
@@ -296,35 +296,35 @@ export default function Pipeline() {
 
       {/* Edit modal */}
       {selectedPost && (
-        <div onClick={() => setSelectedPost(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 32, maxWidth: 560, width: '90%', animation: 'fadeIn 0.2s ease', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
+        <div onClick={() => setSelectedPost(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(23,23,23,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e7e7e7', borderRadius: 20, padding: 32, maxWidth: 560, width: '90%', animation: 'fadeIn 0.2s ease', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ padding: '4px 12px', borderRadius: 20, background: `${PLATFORM_COLORS[selectedPost.platform] || '#4f46e5'}15`, color: PLATFORM_COLORS[selectedPost.platform] || '#4f46e5', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>{selectedPost.platform}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Edit Post Content</span>
+                <span style={{ padding: '4px 12px', borderRadius: 20, background: `${PLATFORM_COLORS[selectedPost.platform] || '#535353'}15`, color: PLATFORM_COLORS[selectedPost.platform] || '#535353', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>{selectedPost.platform}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#171717' }}>Edit Post Content</span>
               </div>
-              <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 22 }}>×</button>
+              <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#727272', cursor: 'pointer', fontSize: 22 }}>×</button>
             </div>
-            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={6} style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '14px 16px', color: '#0f172a', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.7 }} />
-            <div style={{ marginTop:14, borderTop:'1px solid #e2e8f0', paddingTop:14 }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}><div><div style={{ fontSize:11, fontWeight:800, color:'#4f46e5', letterSpacing:'.06em' }}>CAMPAIGN MEDIA</div><div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>Attach an image or video from your durable Creative Lab library.</div></div><button onClick={() => setShowAssetPicker(value => !value)} style={{ padding:'8px 11px', border:'1px solid #c7d2fe', background:'#eef2ff', color:'#4f46e5', borderRadius:8, fontSize:12, fontWeight:800 }}>{showAssetPicker ? 'Close media' : 'Add from Creative Lab'}</button></div>
-              {attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:10, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:74, height:74, flexShrink:0, borderRadius:9, overflow:'hidden', background:'#f1f5f9' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Attached creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}<button onClick={() => detachAsset(asset)} style={{ position:'absolute', top:4, right:4, border:'none', borderRadius:6, background:'rgba(15,23,42,.76)', color:'#fff', fontSize:10, padding:'3px 5px' }}>Remove</button></div>)}</div>}
-              {showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button key={asset.id} onClick={() => attachAsset(asset)} style={{ padding:0, height:88, overflow:'hidden', border:'1px solid #cbd5e1', borderRadius:9, background:'#f8fafc', cursor:'pointer' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Available campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</button>) : <div style={{ gridColumn:'1 / -1', color:'#64748b', fontSize:12, padding:'10px 0' }}>No unattached media yet. Generate or upload it in Creative Lab first.</div>}</div>}
+            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={6} style={{ width: '100%', background: '#fafafa', border: '1px solid #d4d4d4', borderRadius: 12, padding: '14px 16px', color: '#171717', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.7 }} />
+            <div style={{ marginTop:14, borderTop:'1px solid #e7e7e7', paddingTop:14 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}><div><div style={{ fontSize:11, fontWeight:800, color:'#535353', letterSpacing:'.06em' }}>CAMPAIGN MEDIA</div><div style={{ fontSize:12, color:'#727272', marginTop:3 }}>Attach an image or video from your durable Creative Lab library.</div></div><button onClick={() => setShowAssetPicker(value => !value)} style={{ padding:'8px 11px', border:'1px solid #d3d3d3', background:'#f2f2f2', color:'#535353', borderRadius:8, fontSize:12, fontWeight:800 }}>{showAssetPicker ? 'Close media' : 'Add from Creative Lab'}</button></div>
+              {attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:10, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:74, height:74, flexShrink:0, borderRadius:9, overflow:'hidden', background:'#f4f4f4' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Attached creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}<button onClick={() => detachAsset(asset)} style={{ position:'absolute', top:4, right:4, border:'none', borderRadius:6, background:'rgba(23,23,23,.76)', color:'#ffffff', fontSize:10, padding:'3px 5px' }}>Remove</button></div>)}</div>}
+              {showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button key={asset.id} onClick={() => attachAsset(asset)} style={{ padding:0, height:88, overflow:'hidden', border:'1px solid #d4d4d4', borderRadius:9, background:'#fafafa', cursor:'pointer' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Available campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</button>) : <div style={{ gridColumn:'1 / -1', color:'#727272', fontSize:12, padding:'10px 0' }}>No unattached media yet. Generate or upload it in Creative Lab first.</div>}</div>}
             </div>
             {aiSuggestion && (
-              <div style={{ marginTop: 14, padding: '14px 16px', background: '#e0e7ff', border: '1px solid #c7d2fe', borderRadius: 12 }}>
-                <div style={{ fontSize: 11.5, color: '#b9a8ff', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase' }}>AI Rewritten Suggestion</div>
-                <div style={{ fontSize: 13.5, color: '#312e81', lineHeight: 1.6, marginBottom: 10, whiteSpace: 'pre-wrap' }}>{aiSuggestion}</div>
-                <button onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} style={{ padding: '6px 14px', background: '#4f46e5', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Apply Suggestion</button>
+              <div style={{ marginTop: 14, padding: '14px 16px', background: '#e7e7e7', border: '1px solid #d3d3d3', borderRadius: 12 }}>
+                <div style={{ fontSize: 11.5, color: '#b2b2b2', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase' }}>AI Rewritten Suggestion</div>
+                <div style={{ fontSize: 13.5, color: '#353535', lineHeight: 1.6, marginBottom: 10, whiteSpace: 'pre-wrap' }}>{aiSuggestion}</div>
+                <button onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} style={{ padding: '6px 14px', background: '#535353', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Apply Suggestion</button>
               </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24 }}>
-              <button onClick={aiRewrite} disabled={aiRewriting} style={{ padding: '10px 18px', background: '#fdf2f8', border: '1px solid rgba(219,39,119,0.3)', borderRadius: 10, color: '#db2777', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
-                {aiRewriting ? <span style={{ width: 14, height: 14, border: '2px solid rgba(219,39,119,0.2)', borderTopColor: '#db2777', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : 'AI Rewrite'}
+              <button onClick={aiRewrite} disabled={aiRewriting} style={{ padding: '10px 18px', background: '#f5f5f5', border: '1px solid rgba(83,83,83,0.3)', borderRadius: 10, color: '#535353', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {aiRewriting ? <span style={{ width: 14, height: 14, border: '2px solid rgba(83,83,83,0.2)', borderTopColor: '#535353', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : 'AI Rewrite'}
               </button>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setSelectedPost(null)} style={{ padding: '10px 18px', background: '#f1f5f9', border: 'none', borderRadius: 10, color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-                <button onClick={saveEdit} style={{ padding: '10px 22px', background: 'linear-gradient(135deg,#db2777,#7c3aed,#4f46e5)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(219,39,119,0.3)' }}>Save Changes</button>
+                <button onClick={() => setSelectedPost(null)} style={{ padding: '10px 18px', background: '#f4f4f4', border: 'none', borderRadius: 10, color: '#727272', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                <button onClick={saveEdit} style={{ padding: '10px 22px', background: 'linear-gradient(135deg,#535353,#555555,#535353)', border: 'none', borderRadius: 10, color: '#ffffff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(83,83,83,0.3)' }}>Save Changes</button>
               </div>
             </div>
           </div>

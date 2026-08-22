@@ -132,7 +132,7 @@ export function WorkspaceProvider({ children }) {
       <WorkspaceContext.Provider value={{ apps, activeApp, setActiveApp, workspaceId, workspaceRole, refreshApps, workspaceLoading, workspaceError, initializeWorkspace, tokens, tier, unlimited, useTokens, refundTokens, addTokens, showTopUp, setShowTopUp }}>
       {children}
       {notification && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(99,102,241,0.3)', color: '#f1f5f9', padding: '12px 20px', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(10px)' }}>
+        <div style={{ position: 'fixed', bottom: 24, right: 24, background: 'rgba(23,23,23, 0.95)', border: '1px solid rgba(111,111,111,0.3)', color: '#f4f4f4', padding: '12px 20px', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, backdropFilter: 'blur(10px)' }}>
           <span>{notification}</span>
         </div>
       )}

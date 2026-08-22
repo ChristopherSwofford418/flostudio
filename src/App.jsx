@@ -52,8 +52,8 @@ export default function App() {
   }, [])
 
   if (loading) return (
-    <div style={{ display: 'flex', flexDirection:'column', gap:16, alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'radial-gradient(circle at 70% 12%,rgba(125,89,255,.55),transparent 24rem),linear-gradient(135deg,#060518,#110936 55%,#29114b)', color:'#fff', fontFamily:'Inter, sans-serif' }}>
-      <div style={{ width: 34, height: 34, border: '3px solid rgba(255,255,255,0.16)', borderTop: '3px solid #f472b6', borderRadius: '50%', animation: 'flo-spin 0.8s linear infinite' }} />
+    <div style={{ display: 'flex', flexDirection:'column', gap:16, alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'radial-gradient(circle at 70% 12%,rgba(109,109,109,.55),transparent 24rem),linear-gradient(135deg,#070707,#0e0e0e 55%,#1a1a1a)', color:'#ffffff', fontFamily:'Inter, sans-serif' }}>
+      <div style={{ width: 34, height: 34, border: '3px solid rgba(255,255,255,0.16)', borderTop: '3px solid #939393', borderRadius: '50%', animation: 'flo-spin 0.8s linear infinite' }} />
       <strong style={{ fontSize:16 }}>FloStudio</strong>
       <span style={{ color:'rgba(255,255,255,.65)', fontSize:13 }}>{bootMessage}</span>
       <style>{`@keyframes flo-spin { to { transform: rotate(360deg) } }`}</style>

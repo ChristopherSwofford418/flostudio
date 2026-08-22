@@ -50,8 +50,8 @@ export default function PortfolioOperations() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
           <div>
             <div className="studio-kicker">OPERATIONAL CONTROL CENTER</div>
-            <h1 className="studio-display" style={{ fontSize: 38, color: '#fff', marginTop: 4 }}>Portfolio Command & Execution</h1>
-            <p style={{ color: 'rgba(243,240,231,.7)', fontSize: 14, marginTop: 6 }}>Manage live operating queues, approval states, and automated execution history across your 20+ portfolio apps.</p>
+            <h1 className="studio-display" style={{ fontSize: 38, color: '#ffffff', marginTop: 4 }}>Portfolio Command & Execution</h1>
+            <p style={{ color: 'rgba(240,240,240,.7)', fontSize: 14, marginTop: 6 }}>Manage live operating queues, approval states, and automated execution history across your 20+ portfolio apps.</p>
           </div>
           <div>
             <select
@@ -61,7 +61,7 @@ export default function PortfolioOperations() {
                 const matched = apps.find(a => a.id === e.target.value);
                 if (matched) setActiveApp(matched);
               }}
-              style={{ background: '#1c1f24', color: '#fff', border: '1px solid #333', padding: '10px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600 }}
+              style={{ background: '#1f1f1f', color: '#ffffff', border: '1px solid #333333', padding: '10px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600 }}
             >
               {apps.map(app => (
                 <option key={app.id} value={app.id}>{app.name || 'Unnamed App'}</option>
@@ -71,64 +71,64 @@ export default function PortfolioOperations() {
         </div>
 
         {notice && (
-          <div style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#4ade80', padding: '12px 18px', borderRadius: 8, marginBottom: 24, fontSize: 14 }}>
+          <div style={{ background: 'rgba(173,173,173,0.1)', border: '1px solid rgba(173,173,173,0.3)', color: '#b8b8b8', padding: '12px 18px', borderRadius: 8, marginBottom: 24, fontSize: 14 }}>
             {notice}
           </div>
         )}
 
         {currentApp ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-            <div style={{ background: '#17191c', border: '1px solid #272a30', borderRadius: 12, padding: 24 }}>
-              <h3 style={{ color: '#fff', fontSize: 18, marginBottom: 16 }}>Quick Operational Actions</h3>
+            <div style={{ background: '#191919', border: '1px solid #2a2a2a', borderRadius: 12, padding: 24 }}>
+              <h3 style={{ color: '#ffffff', fontSize: 18, marginBottom: 16 }}>Quick Operational Actions</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <button
                   disabled={executing}
                   onClick={() => triggerAction('autopilot_sync', 'Full Monthly Autopilot')}
-                  style={{ background: '#e05a3f', color: '#fff', border: 'none', padding: '12px 16px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                  style={{ background: '#757575', color: '#ffffff', border: 'none', padding: '12px 16px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
                 >
                   ⚡ Trigger Monthly Autopilot Sync
                 </button>
                 <button
                   disabled={executing}
                   onClick={() => triggerAction('aso_boost', 'ASO & Keyword Refresh')}
-                  style={{ background: '#22262e', color: '#fff', border: '1px solid #333', padding: '12px 16px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                  style={{ background: '#262626', color: '#ffffff', border: '1px solid #333333', padding: '12px 16px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
                 >
                   🔍 Run ASO & SEO Blueprint Refresh
                 </button>
                 <button
                   disabled={executing}
                   onClick={() => triggerAction('creative_batch', 'Store-Grounded Ad Batch')}
-                  style={{ background: '#22262e', color: '#fff', border: '1px solid #333', padding: '12px 16px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                  style={{ background: '#262626', color: '#ffffff', border: '1px solid #333333', padding: '12px 16px', borderRadius: 8, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
                 >
                   🖼️ Generate Store-Grounded Ad Batch
                 </button>
               </div>
 
-              <h3 style={{ color: '#fff', fontSize: 18, marginTop: 32, marginBottom: 16 }}>SEO & ASO Queue</h3>
+              <h3 style={{ color: '#ffffff', fontSize: 18, marginTop: 32, marginBottom: 16 }}>SEO & ASO Queue</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {queues.seoQueue.map(item => (
-                  <div key={item.id} style={{ background: '#1c1f24', padding: '10px 14px', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, color: '#ccc' }}>
+                  <div key={item.id} style={{ background: '#1f1f1f', padding: '10px 14px', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, color: '#cccccc' }}>
                     <span>{item.keyword}</span>
-                    <span style={{ color: '#4ade80', fontWeight: 600 }}>Rank #{item.rank}</span>
+                    <span style={{ color: '#b8b8b8', fontWeight: 600 }}>Rank #{item.rank}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div style={{ background: '#17191c', border: '1px solid #272a30', borderRadius: 12, padding: 24 }}>
-              <h3 style={{ color: '#fff', fontSize: 18, marginBottom: 16 }}>Durable Run History ({currentApp.name})</h3>
+            <div style={{ background: '#191919', border: '1px solid #2a2a2a', borderRadius: 12, padding: 24 }}>
+              <h3 style={{ color: '#ffffff', fontSize: 18, marginBottom: 16 }}>Durable Run History ({currentApp.name})</h3>
               {history.length === 0 ? (
-                <p style={{ color: '#888', fontSize: 13, fontStyle: 'italic' }}>No automation runs recorded yet for this app. Trigger an action above to initialize execution history.</p>
+                <p style={{ color: '#888888', fontSize: 13, fontStyle: 'italic' }}>No automation runs recorded yet for this app. Trigger an action above to initialize execution history.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 380, overflowY: 'auto' }}>
                   {history.map(run => (
-                    <div key={run.id} style={{ background: '#1c1f24', border: '1px solid #282c34', padding: '12px 14px', borderRadius: 8 }}>
+                    <div key={run.id} style={{ background: '#1f1f1f', border: '1px solid #2c2c2c', padding: '12px 14px', borderRadius: 8 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>{run.actionType}</span>
-                        <span style={{ color: run.status === 'success' ? '#4ade80' : '#f87171', fontSize: 12, fontWeight: 600 }}>{run.status.toUpperCase()}</span>
+                        <span style={{ color: '#ffffff', fontWeight: 600, fontSize: 13 }}>{run.actionType}</span>
+                        <span style={{ color: run.status === 'success' ? '#b8b8b8' : '#8e8e8e', fontSize: 12, fontWeight: 600 }}>{run.status.toUpperCase()}</span>
                       </div>
-                      <p style={{ color: '#aaa', fontSize: 12, margin: 0 }}>{run.summary}</p>
-                      <span style={{ color: '#666', fontSize: 10, display: 'block', marginTop: 6 }}>{new Date(run.timestamp).toLocaleString()}</span>
+                      <p style={{ color: '#aaaaaa', fontSize: 12, margin: 0 }}>{run.summary}</p>
+                      <span style={{ color: '#666666', fontSize: 10, display: 'block', marginTop: 6 }}>{new Date(run.timestamp).toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -136,7 +136,7 @@ export default function PortfolioOperations() {
             </div>
           </div>
         ) : (
-          <p style={{ color: '#888' }}>No apps found in portfolio. Add an app in the Portfolio workspace to begin operations.</p>
+          <p style={{ color: '#888888' }}>No apps found in portfolio. Add an app in the Portfolio workspace to begin operations.</p>
         )}
       </div>
     </Layout>
