@@ -166,3 +166,7 @@
 - [x] Add an editable, selected-app Vendor Number field directly in App Insights with save-and-pull reporting behavior.
 
 - [x] Correct the Apple monthly Sales and Trends report-date format so ResumeFix reporting sync can complete.
+
+- [ ] Resolve App Store Connect API-key authorization for Sales and Trends reports, then verify real ResumeFix metrics load.
+
+- [x] Add secure per-app editing and replacement of App Store Connect App ID, Issuer ID, Key ID, key type, and `.p8` file without exposing the current key.
