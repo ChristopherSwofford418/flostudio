@@ -187,6 +187,6 @@
 
 - [ ] Repair Creative Lab image-to-video ads: expose app-scoped source-image selection, pass it to the video renderer, persist the resulting video, and surface actionable failures.
 
-- [ ] Move the video source-image selector into the render form and auto-seed a valid video brief so video creation cannot fail on an empty initial prompt.
+- [x] Move the video source-image selector into the render form and auto-seed a valid video brief so video creation cannot fail on an empty initial prompt.
 
 - [ ] Evolve Creative Lab into a CapCut-style AI ad editor with scene sequencing, timeline-level edits, captions, voice and sound controls, video variations, and export-ready app-marketing cuts.
