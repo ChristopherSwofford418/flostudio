@@ -159,4 +159,4 @@
 
 - [x] Add an App Insights tab under Manage that displays only the selected app’s authorized App Store Connect performance data and sync health.
 
-- [ ] Fix App Store Connect secure connection persistence so the selected portfolio app UUID is saved correctly after `.p8` validation.
+- [x] Fix App Store Connect secure connection persistence so the selected portfolio app UUID is saved correctly after `.p8` validation.
