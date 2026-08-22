@@ -162,3 +162,5 @@
 - [x] Fix App Store Connect secure connection persistence so the selected portfolio app UUID is saved correctly after `.p8` validation.
 
 - [ ] Pull real per-app Apple Sales and Trends downloads and proceeds into App Insights with vendor-number and report-readiness handling.
+
+- [x] Add an editable, selected-app Vendor Number field directly in App Insights with save-and-pull reporting behavior.
