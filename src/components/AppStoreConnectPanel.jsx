@@ -16,7 +16,7 @@ async function ascRequest(payload) {
   return body
 }
 
-export default function AppStoreConnectPanel({ apps = [] }) {
+export default function AppStoreConnectPanel({ apps = [], initialProductId = '' }) {
   const navigate = useNavigate()
   const [productId, setProductId] = useState('')
   const [connection, setConnection] = useState(null)
@@ -33,6 +33,16 @@ export default function AppStoreConnectPanel({ apps = [] }) {
   useEffect(() => {
     if (!productId && apps[0]?.id) setProductId(apps[0].id)
   }, [apps, productId])
+
+  useEffect(() => {
+    if (!initialProductId || !apps.some(app => app.id === initialProductId)) return
+    setProductId(initialProductId)
+    setConnection(null)
+    setEditing(false)
+    setForm({ appStoreAppId:'', issuerId:'', keyId:'', keyType:'team', vendorNumber:'', privateKey:'', fileName:'' })
+    setFileEpoch(value => value + 1)
+    setMessage(`Ready to connect ${apps.find(app => app.id === initialProductId)?.name || 'the selected app'}. This connection will remain separate from every other portfolio app.`)
+  }, [initialProductId, apps])
 
   useEffect(() => {
     if (!productId) { setConnection(null); setEditing(false); return }
@@ -122,7 +132,7 @@ export default function AppStoreConnectPanel({ apps = [] }) {
     setMessage('')
   }
 
-  return <section className="studio-panel" style={{ marginTop:16, padding:20, borderColor:'rgba(255,193,59,.42)', background:'linear-gradient(120deg,rgba(112,35,9,.44),rgba(70,13,7,.48))' }}>
+  return <section id="app-store-connect" className="studio-panel" style={{ marginTop:16, padding:20, borderColor:'rgba(255,193,59,.42)', background:'linear-gradient(120deg,rgba(112,35,9,.44),rgba(70,13,7,.48))' }}>
     <style>{`.portfolio-autopilot:has(input[placeholder*="BEGIN PRIVATE KEY"]){display:none!important}`}</style>
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16, flexWrap:'wrap' }}>
       <div><div className="studio-kicker" style={{ color:'var(--signal)' }}>APP STORE CONNECT / PRIVATE PER-APP VAULT</div><h2 style={{ color:'#fff', fontSize:22, letterSpacing:'-.055em', marginTop:6 }}>Connect the selected app. Keep its data separate.</h2><p style={{ color:'rgba(243,240,231,.68)', fontSize:12, lineHeight:1.55, marginTop:7, maxWidth:680 }}>Upload the API key once. FloStudio encrypts it on the server, validates the exact App Store Connect app, and keeps the result scoped to this portfolio app. The `.p8` file is never placed in local storage or shown again.</p></div>
