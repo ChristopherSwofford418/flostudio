@@ -1,4 +1,5 @@
 import crypto, { sign } from 'node:crypto'
+import { gunzipSync } from 'node:zlib'
 
 export const config = { maxDuration: 30 }
 
@@ -117,7 +118,86 @@ async function appleRequest(path, token) {
   return payload
 }
 
-export function buildAppMetrics({ app, versions = [], reviews = [] }) {
+async function appleBinaryRequest(path, token) {
+  const response = await fetch(`${APPLE_API}${path}`, { headers: { Authorization:`Bearer ${token}`, Accept:'application/a-gzip, application/gzip' } })
+  if (!response.ok) {
+    const text = await response.text()
+    const payload = text ? (() => { try { return JSON.parse(text) } catch { return null } })() : null
+    const detail = Array.isArray(payload?.errors) ? payload.errors.map(item => item.detail || item.title).filter(Boolean).join('; ') : ''
+    const fallback = response.status === 403 ? 'Apple authenticated the key but its role cannot download Sales and Trends reports.' : response.status === 401 ? 'Apple rejected the Sales and Trends request.' : 'Apple could not provide this Sales and Trends report yet.'
+    throw apiError('ASC_SALES_REPORT_FAILED', detail || fallback, response.status, { providerStatus:response.status })
+  }
+  return Buffer.from(await response.arrayBuffer())
+}
+
+function salesReportPeriod(now = new Date()) {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
+}
+
+function parseTabDelimitedReport(buffer) {
+  const text = gunzipSync(buffer).toString('utf8').replace(/^\uFEFF/, '').trim()
+  if (!text) return []
+  const [header, ...lines] = text.split(/\r?\n/)
+  const columns = header.split('\t').map(column => column.trim())
+  return lines.filter(Boolean).map(line => {
+    const values = line.split('\t')
+    return Object.fromEntries(columns.map((column, index) => [column, values[index] ?? '']))
+  })
+}
+
+function numberOrZero(value) {
+  const number = Number.parseFloat(String(value || '').replace(/,/g, ''))
+  return Number.isFinite(number) ? number : 0
+}
+
+export function summarizeSalesReport(rows, { appStoreAppId, sku }) {
+  const appId = String(appStoreAppId || '').trim()
+  const appSku = String(sku || '').trim()
+  const filtered = rows.filter(row => String(row['Apple Identifier'] || '').trim() === appId || (appSku && String(row['Parent Identifier'] || '').trim() === appSku))
+  const proceedsByCurrency = {}
+  let appUnits = 0
+  let allUnits = 0
+  let startDate = null
+  let endDate = null
+  for (const row of filtered) {
+    const units = numberOrZero(row.Units)
+    const proceeds = units * numberOrZero(row['Developer Proceeds'] ?? row['Developer Proceeds (per unit)'])
+    const currency = String(row['Currency of Proceeds'] || row['Customer Currency'] || 'UNKNOWN').trim() || 'UNKNOWN'
+    allUnits += units
+    if (String(row['Apple Identifier'] || '').trim() === appId) appUnits += units
+    proceedsByCurrency[currency] = Number(((proceedsByCurrency[currency] || 0) + proceeds).toFixed(2))
+    startDate = startDate || row['Begin Date'] || null
+    endDate = endDate || row['End Date'] || null
+  }
+  return {
+    status:'available',
+    matchedRows:filtered.length,
+    appUnits:Number(appUnits.toFixed(2)),
+    totalUnits:Number(allUnits.toFixed(2)),
+    proceedsByCurrency,
+    period:{ startDate, endDate },
+  }
+}
+
+async function monthlySalesMetrics({ connection, token, app }) {
+  if (!connection.vendor_number) return { status:'requires_vendor_number', message:'Add the Apple Vendor Number shown in App Store Connect → Reports to pull Sales and Trends numbers.' }
+  const params = new URLSearchParams({
+    'filter[frequency]':'MONTHLY',
+    'filter[reportDate]':salesReportPeriod(),
+    'filter[reportSubType]':'SUMMARY',
+    'filter[reportType]':'SALES',
+    'filter[vendorNumber]':connection.vendor_number,
+    'filter[version]':'1_0',
+  })
+  try {
+    const rows = parseTabDelimitedReport(await appleBinaryRequest(`/v1/salesReports?${params}`, token))
+    return { ...summarizeSalesReport(rows, { appStoreAppId:connection.app_store_app_id, sku:app?.attributes?.sku }), frequency:'MONTHLY', reportDate:salesReportPeriod() }
+  } catch (error) {
+    return { status:'unavailable', message:error.message || 'Apple could not provide the monthly Sales and Trends report.', providerStatus:error.providerStatus || error.details?.providerStatus || null }
+  }
+}
+
+export function buildAppMetrics({ app, versions = [], reviews = [], sales = null }) {
   const ratings = reviews.map(review => Number(review?.attributes?.rating)).filter(Number.isFinite)
   const latestVersion = versions[0]?.attributes || null
   const ratingAverage = ratings.length ? Number((ratings.reduce((sum, value) => sum + value, 0) / ratings.length).toFixed(2)) : null
@@ -129,6 +209,7 @@ export function buildAppMetrics({ app, versions = [], reviews = [] }) {
       proceeds: { status: 'requires_vendor_number', message: 'Proceeds require a Sales and Trends vendor number and an authorized report.' },
       subscriptions: { status: 'requires_analytics_report', message: 'Subscription state and event metrics are provided through Apple Analytics Reports after report setup and availability.' },
     },
+    sales,
   }
 }
 
@@ -142,6 +223,14 @@ async function syncMetrics({ connection, privateKey }) {
   const metrics = buildAppMetrics({ app: app.data, versions: versionsResult.status === 'fulfilled' ? versionsResult.value.data || [] : [], reviews: reviewsResult.status === 'fulfilled' ? reviewsResult.value.data || [] : [] })
   metrics.availability.versions = versionsResult.status === 'fulfilled' ? { status: 'available' } : { status: 'not_authorized_or_unavailable', message: 'This key could not load App Store versions.' }
   metrics.availability.reviews = reviewsResult.status === 'fulfilled' ? { status: 'available' } : { status: 'not_authorized_or_unavailable', message: 'This key could not load customer reviews.' }
+  const sales = await monthlySalesMetrics({ connection, token, app:app.data })
+  metrics.sales = sales
+  metrics.availability.downloads = sales.status === 'available'
+    ? { status:'available', message:`${sales.appUnits} app units in the report period.` }
+    : { status:sales.status, message:sales.message }
+  metrics.availability.proceeds = sales.status === 'available'
+    ? { status:'available', message:'Estimated developer proceeds are broken out by Apple reporting currency.' }
+    : { status:sales.status, message:sales.message }
   return metrics
 }
 
@@ -186,6 +275,18 @@ export default async function handler(req, res) {
       const metrics = await syncMetrics({ connection, privateKey: decryptPrivateKey(connection.encrypted_private_key) })
       await rpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: connection.app_store_app_id, target_issuer_id: connection.issuer_id, target_key_id: connection.key_id, target_key_type: connection.key_type, target_vendor_number: connection.vendor_number, target_encrypted_private_key: connection.encrypted_private_key, target_metrics: metrics, target_status: 'connected', target_error: null }, accessToken)
       return res.status(200).json({ success: true, status: 'connected', productId, metrics, syncedAt: new Date().toISOString() })
+    }
+    if (action === 'update_vendor_number') {
+      const productId = String(body.productId || '').trim()
+      const vendorNumber = String(body.vendorNumber || '').trim()
+      if (!productId || !vendorNumber) throw apiError('ASC_VENDOR_NUMBER_REQUIRED', 'Enter the Vendor Number shown in App Store Connect → Reports.')
+      const rows = await rpc('get_app_store_connect_connection', { target_product_id: productId }, accessToken)
+      const connection = rows?.[0]
+      if (!connection?.encrypted_private_key) throw apiError('ASC_NOT_CONNECTED', 'Connect this app’s App Store Connect key before adding its Vendor Number.', 409)
+      const statusRows = await rpc('get_app_store_connect_status', { target_product_id:productId }, accessToken)
+      const publicConnection = statusRows?.[0]
+      await rpc('save_app_store_connect_connection', { target_product_id:productId, target_app_store_app_id:connection.app_store_app_id, target_issuer_id:connection.issuer_id, target_key_id:connection.key_id, target_key_type:connection.key_type, target_vendor_number:vendorNumber, target_encrypted_private_key:connection.encrypted_private_key, target_metrics:publicConnection?.metrics || {}, target_status:'connected', target_error:null }, accessToken)
+      return res.status(200).json({ success:true, productId, vendorNumber })
     }
     throw apiError('ASC_ACTION_INVALID', 'FloStudio did not recognize that App Store Connect action.')
   } catch (error) { return sendError(res, error) }

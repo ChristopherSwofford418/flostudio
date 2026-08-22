@@ -160,3 +160,5 @@
 - [x] Add an App Insights tab under Manage that displays only the selected app’s authorized App Store Connect performance data and sync health.
 
 - [x] Fix App Store Connect secure connection persistence so the selected portfolio app UUID is saved correctly after `.p8` validation.
+
+- [ ] Pull real per-app Apple Sales and Trends downloads and proceeds into App Insights with vendor-number and report-readiness handling.

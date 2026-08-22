@@ -11,3 +11,15 @@ The initial sync should verify the selected App Store Connect API app resource, 
 [1]: https://developer.apple.com/documentation/appstoreconnectapi/generating-tokens-for-api-requests "Generating Tokens for API Requests"
 [2]: https://developer.apple.com/help/app-store-connect/get-started/app-store-connect-api/ "App Store Connect API"
 [3]: https://developer.apple.com/help/app-store-connect-analytics/overview/analytics-reports-api/ "Analytics Reports API"
+
+## Sales and Trends Report Notes
+
+The `GET /v1/salesReports` endpoint requires a vendor number, report type, subtype, frequency, and compatible version. Apple supports a `SALES` / `SUMMARY` report at daily, weekly, monthly, or yearly frequency with version `1_0`. For non-daily reports, report date is a `YYYY-MM-DD` value.[4]
+
+The Summary Sales Report contains app-level Apple Identifier, Units, Developer Proceeds per unit, customer currency, and proceeds currency. FloStudio must filter source rows by the selected app’s Apple Identifier, multiply units by per-unit proceeds, retain a currency breakdown, and never combine currencies into a false total.[5]
+
+Apple’s reporting UI documents that the vendor number appears in the Reports area under the legal entity name and is required for API report downloads. The Sales and Trends “proceeds” measure is estimated; finalized payment information belongs to Payments and Financial Reports.[6]
+
+[4]: https://developer.apple.com/documentation/appstoreconnectapi/get-v1-salesreports "Download sales and trends reports"
+[5]: https://developer.apple.com/help/app-store-connect/reference/reporting/summary-sales-report/ "Summary Sales Report"
+[6]: https://developer.apple.com/help/app-store-connect/getting-paid/view-payments-and-proceeds/ "View payments and proceeds"
