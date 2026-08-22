@@ -1,5 +1,6 @@
 import { resolveVideoProvider } from './media-provider.js'
 import sharp from 'sharp'
+import { authenticatedProviderUser, resolveWorkspaceOpenAIKey } from './provider-key-vault.js'
 export const maxDuration = 60
 
 const ALLOWED_SIZES = new Set(['1280x720', '720x1280', '1792x1024', '1024x1792'])
@@ -58,10 +59,16 @@ export async function prepareVideoReference(value, size) {
 
 export default async function handler(req, res) {
   try {
-    const provider = resolveVideoProvider()
     const body = req.method === 'POST' ? await parseBody(req) : {}
     const action = req.method === 'GET' ? req.query?.action : body.action
     const id = req.method === 'GET' ? req.query?.id : null
+    const workspaceId = String((req.method === 'GET' ? req.query?.workspaceId : body.workspaceId) || '').trim()
+    let providerApiKey = null
+    if (workspaceId) {
+      const { accessToken } = await authenticatedProviderUser(req)
+      providerApiKey = await resolveWorkspaceOpenAIKey({ workspaceId, accessToken })
+    }
+    const provider = resolveVideoProvider({ apiKey:providerApiKey || undefined })
 
     if (req.method === 'GET' && action === 'status') {
       if (!id) return res.status(400).json({ error:'A video render ID is required to check status.' })

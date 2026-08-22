@@ -78,6 +78,14 @@ function kindFromName(name) {
   return /\.(mp4|webm|mov)$/i.test(name) ? 'video' : 'image'
 }
 
+function presentProviderError(message, kind = 'render') {
+  const text = String(message || '')
+  if (/credit|quota|billing|insufficient/i.test(text)) {
+    return `The connected OpenAI provider key has no available API credits for this live ${kind}. Your FloStudio testing entitlement remains unlimited. Add provider API credits or replace the workspace key, then retry.`
+  }
+  return text || `The ${kind} could not be started.`
+}
+
 function AssetVisual({ asset, compact = false }) {
   if (asset.kind === 'video') return <video src={asset.url} muted playsInline preload="metadata" controls={!compact} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
   return <img src={asset.url} alt={asset.name || 'Generated FloStudio creative'} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
@@ -109,6 +117,9 @@ export default function ImageBank() {
   const [storyboard, setStoryboard] = useState(() => createStoryboard(AD_RUNBOOKS[0]))
   const [videoJob, setVideoJob] = useState(null)
   const [videoError, setVideoError] = useState('')
+  const [providerConnection, setProviderConnection] = useState({ loading:true, configured:false, keyLast4:null, error:'' })
+  const [providerKeyInput, setProviderKeyInput] = useState('')
+  const [savingProviderKey, setSavingProviderKey] = useState(false)
   const [runbookId, setRunbookId] = useState('showcase')
   const [hook, setHook] = useState('')
   const [proof, setProof] = useState('')
@@ -187,6 +198,60 @@ export default function ImageBank() {
     if (requestVersion === assetLoadVersion.current) setLoadingAssets(false)
   }
 
+  const providerHeaders = async () => {
+    const { data:{ session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Sign in again before using the connected workspace provider key.')
+    return { Authorization:`Bearer ${session.access_token}` }
+  }
+
+  const loadProviderConnection = async () => {
+    if (!workspaceId) {
+      setProviderConnection({ loading:false, configured:false, keyLast4:null, error:'' })
+      return
+    }
+    setProviderConnection(current => ({ ...current, loading:true, error:'' }))
+    try {
+      const headers = await providerHeaders()
+      const response = await fetch(`/api/provider-key?workspaceId=${encodeURIComponent(workspaceId)}`, { headers })
+      const data = await response.json()
+      if (!response.ok || data.error) throw new Error(data.error || 'The workspace provider connection could not be checked.')
+      setProviderConnection({ loading:false, configured:Boolean(data.configured), keyLast4:data.keyLast4 || null, error:'' })
+    } catch (connectionError) {
+      setProviderConnection({ loading:false, configured:false, keyLast4:null, error:connectionError.message || 'The workspace provider connection could not be checked.' })
+    }
+  }
+
+  const saveProviderKey = async () => {
+    if (!providerKeyInput.trim()) return
+    setSavingProviderKey(true)
+    setProviderConnection(current => ({ ...current, error:'' }))
+    try {
+      const headers = await providerHeaders()
+      const response = await fetch('/api/provider-key', { method:'POST', headers:{ ...headers, 'Content-Type':'application/json' }, body:JSON.stringify({ workspaceId, apiKey:providerKeyInput.trim() }) })
+      const data = await response.json()
+      if (!response.ok || data.error) throw new Error(data.error || 'The OpenAI provider key could not be connected.')
+      setProviderKeyInput('')
+      setProviderConnection({ loading:false, configured:true, keyLast4:data.keyLast4 || null, error:'' })
+    } catch (connectionError) {
+      setProviderConnection(current => ({ ...current, error:presentProviderError(connectionError.message, 'provider connection') }))
+    }
+    setSavingProviderKey(false)
+  }
+
+  const disconnectProviderKey = async () => {
+    setSavingProviderKey(true)
+    try {
+      const headers = await providerHeaders()
+      const response = await fetch('/api/provider-key', { method:'DELETE', headers:{ ...headers, 'Content-Type':'application/json' }, body:JSON.stringify({ workspaceId }) })
+      const data = await response.json()
+      if (!response.ok || data.error) throw new Error(data.error || 'The workspace provider key could not be removed.')
+      setProviderConnection({ loading:false, configured:false, keyLast4:null, error:'' })
+    } catch (connectionError) {
+      setProviderConnection(current => ({ ...current, error:connectionError.message || 'The workspace provider key could not be removed.' }))
+    }
+    setSavingProviderKey(false)
+  }
+
   useEffect(() => {
     setReferenceImage(null)
     setVideoSource(null)
@@ -194,6 +259,7 @@ export default function ImageBank() {
     setHandoffState({ status:'idle', message:'' })
     loadAssets(activeApp?.id)
   }, [activeApp?.id])
+  useEffect(() => { loadProviderConnection() }, [workspaceId])
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('flostudio_active_video_render') || 'null')
@@ -248,10 +314,11 @@ export default function ImageBank() {
   }
 
   const persistRemoteOutput = async (url, prefix, fallbackKind = 'image', details = {}) => {
-    const response = await fetch(url)
+    const { requestHeaders, ...assetDetails } = details
+    const response = await fetch(url, requestHeaders ? { headers:requestHeaders } : undefined)
     if (!response.ok) throw new Error('A generated output could not be saved to your asset bank.')
     const blob = await response.blob()
-    const saved = await uploadAsset(new File([blob], `${prefix}.${extensionFor(blob.type)}`, { type:blob.type }), prefix, { kind:fallbackKind, ...details })
+    const saved = await uploadAsset(new File([blob], `${prefix}.${extensionFor(blob.type)}`, { type:blob.type }), prefix, { kind:fallbackKind, ...assetDetails })
     return { ...saved, kind:fallbackKind }
   }
 
@@ -270,7 +337,8 @@ export default function ImageBank() {
       const nextRound = creativeRound + 1
       const controller = new AbortController()
       const timeout = window.setTimeout(() => controller.abort(), 70000)
-      const response = await fetch('/api/generate-image', { method:'POST', signal:controller.signal, headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations:1, referenceImage, creativeRound:nextRound }) }).finally(() => window.clearTimeout(timeout))
+      const authHeaders = await providerHeaders()
+      const response = await fetch('/api/generate-image', { method:'POST', signal:controller.signal, headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations:1, referenceImage, creativeRound:nextRound, workspaceId }) }).finally(() => window.clearTimeout(timeout))
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
       const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${nextRound}-${index + 1}`, 'image', { source:'ai_image', provider:'openai', prompt:brief, metadata:{ aspectRatio, stylePreset, textOverlay, variation:index + 1, creativeRound:nextRound, concept:image.concept || null, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp?.id || null, hook, proof } })))
@@ -279,7 +347,7 @@ export default function ImageBank() {
       await loadAssets()
     } catch (generationError) {
       if (chargedTokens) await refundTokens(chargedTokens, 'the AI image render').catch(() => {})
-      setError(generationError.name === 'AbortError' ? 'The render took too long to finish. Your tokens were restored—try one creative or a shorter brief.' : (generationError.message || 'The creative could not be generated.'))
+      setError(generationError.name === 'AbortError' ? 'The render took too long to finish. Your FloStudio tokens were restored—try one creative or a shorter brief.' : presentProviderError(generationError.message, 'image render'))
     }
     setGenerating(false)
   }
@@ -333,7 +401,8 @@ export default function ImageBank() {
         reference_asset_id:videoSource?.id || null,
         metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, creatorMode, ugcStoryShape, referenceIncluded:Boolean(sourceReference), referenceSource:videoSource?.source || (sourceReference ? 'pinned_reference' : null), referenceName:videoSource?.name || null, storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
       })
-      const response = await fetch('/api/generate-video', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(request) })
+      const authHeaders = await providerHeaders()
+      const response = await fetch('/api/generate-video', { method:'POST', headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ ...request, workspaceId }) })
       const job = await response.json()
       if (!response.ok || job.error) throw new Error(job.error || 'Video render could not be started.')
       const persisted = await updateMediaAsset(renderAsset.id, { provider_job_id:job.id, render_status:job.status || 'queued', metadata:{ ...renderAsset.metadata, providerModel:job.model || null, size:videoFormat, seconds:videoSeconds, quality:videoQuality } })
@@ -348,14 +417,16 @@ export default function ImageBank() {
     } catch (startError) {
       if (renderAsset?.id) await updateMediaAsset(renderAsset.id, { render_status:'failed', error_message:startError.message || 'Video render could not be started.' }).catch(() => {})
       if (chargedTokens) await refundTokens(chargedTokens, 'the AI video render that did not start').catch(() => {})
-      setVideoError(startError.message || 'Video render could not be started.')
+      setVideoError(presentProviderError(startError.message, 'video render'))
     }
   }
 
   const completeVideo = async job => {
+    const authHeaders = await providerHeaders()
+    const workspaceQuery = `&workspaceId=${encodeURIComponent(workspaceId || '')}`
     const [video, thumbnail] = await Promise.all([
-      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=video`, 'ai-video', 'video', { persistRecord:false, source:'ai_video', provider:'openai', prompt:job.prompt, metadata:{ providerJobId:job.id, role:'completed-video' } }),
-      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=thumbnail`, 'ai-video-thumbnail', 'image', { persistRecord:false, source:'ai_video', provider:'openai', prompt:job.prompt, metadata:{ providerJobId:job.id, role:'video-thumbnail' } }),
+      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=video${workspaceQuery}`, 'ai-video', 'video', { persistRecord:false, requestHeaders:authHeaders, source:'ai_video', provider:'openai', prompt:job.prompt, metadata:{ providerJobId:job.id, role:'completed-video' } }),
+      persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=thumbnail${workspaceQuery}`, 'ai-video-thumbnail', 'image', { persistRecord:false, requestHeaders:authHeaders, source:'ai_video', provider:'openai', prompt:job.prompt, metadata:{ providerJobId:job.id, role:'video-thumbnail' } }),
     ])
     if (job.mediaAssetId) {
       await updateMediaAsset(job.mediaAssetId, { render_status:'completed', asset_url:video.url, storage_path:video.storage_path, thumbnail_url:thumbnail.url, thumbnail_path:thumbnail.storage_path, completed_at:new Date().toISOString(), error_message:null })
@@ -368,7 +439,8 @@ export default function ImageBank() {
     if (!videoJob?.id || !['queued', 'in_progress'].includes(videoJob.status)) return undefined
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/generate-video?action=status&id=${encodeURIComponent(videoJob.id)}`)
+        const authHeaders = await providerHeaders()
+        const response = await fetch(`/api/generate-video?action=status&id=${encodeURIComponent(videoJob.id)}&workspaceId=${encodeURIComponent(workspaceId || '')}`, { headers:authHeaders })
         const status = await response.json()
         if (!response.ok || status.error) throw new Error(status.error || 'Video render status could not be retrieved.')
         const next = { ...videoJob, ...status }
@@ -377,7 +449,7 @@ export default function ImageBank() {
         if (status.status === 'failed') {
           localStorage.removeItem('flostudio_active_video_render')
           if (videoJob.mediaAssetId) await updateMediaAsset(videoJob.mediaAssetId, { render_status:'failed', error_message:status.error?.message || 'The video provider declined this render.' })
-          setVideoError(status.error?.message || 'The video provider declined this render. Adjust the prompt or reference image and try again.')
+          setVideoError(presentProviderError(status.error?.message, 'video render'))
           await loadAssets()
         }
       } catch (pollError) { setVideoError(pollError.message) }

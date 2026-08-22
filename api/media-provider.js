@@ -31,8 +31,8 @@ async function fetchWithRenderDeadline(url, options, timeoutMs = 52000) {
   }
 }
 
-export function resolveVideoProvider() {
-  const apiKey = process.env.OPENAI_API_KEY
+export function resolveVideoProvider({ apiKey: suppliedApiKey } = {}) {
+  const apiKey = suppliedApiKey || process.env.OPENAI_API_KEY
   if (!apiKey) throw providerError('Video generation is not configured. Add OPENAI_API_KEY to the production environment.')
   const endpoint = 'https://api.openai.com/v1/videos'
 
@@ -74,9 +74,9 @@ export function resolveVideoProvider() {
   }
 }
 
-export function resolveImageProvider() {
+export function resolveImageProvider({ apiKey: suppliedApiKey } = {}) {
   const configured = process.env.FLOSTUDIO_IMAGE_PROVIDER || 'openai_gpt_image'
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = suppliedApiKey || process.env.OPENAI_API_KEY
   if (configured !== 'openai_gpt_image') throw providerError(`The configured image provider "${configured}" is not installed in FloStudio yet.`)
   if (!apiKey) throw providerError('Image generation is not configured. Add OPENAI_API_KEY to the production environment.')
 

@@ -1,5 +1,7 @@
 import { resolveImageProvider } from './media-provider.js';
 
+import { authenticatedProviderUser, resolveWorkspaceOpenAIKey } from './provider-key-vault.js';
+
 export const maxDuration = 60;
 
 const SIZE_BY_RATIO = {
@@ -36,7 +38,13 @@ export default async function handler(req, res) {
     // FloStudio therefore delivers one real creative per take; the next take uses a new visual direction.
     const count = 1;
     const referenceImage = await fetchImageAsDataUrl(body.referenceImage).catch(() => null);
-    const provider = resolveImageProvider();
+    const workspaceId = String(body.workspaceId || '').trim();
+    let providerApiKey = null;
+    if (workspaceId) {
+      const { accessToken } = await authenticatedProviderUser(req);
+      providerApiKey = await resolveWorkspaceOpenAIKey({ workspaceId, accessToken });
+    }
+    const provider = resolveImageProvider({ apiKey:providerApiKey || undefined });
     const creativeAngles = [
       'high-contrast commercial hero with dramatic product lighting',
       'candid creator-native social frame with authentic performance energy',

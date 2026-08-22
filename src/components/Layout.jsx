@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { runFloAgent } from '../lib/floAgent'
 import { executeFloCopilotCommand } from '../lib/floCopilotEngine'
+import WorkspaceProviderKey from './WorkspaceProviderKey.jsx'
 
 const navGroups = [
   { label: 'PORTFOLIO', items: [['portfolio', 'My Portfolio', '00']] },
@@ -186,6 +187,7 @@ export default function Layout({ children, title }) {
   const { tokens, tier, unlimited, activeApp, apps } = useWorkspace()
   const [user, setUser] = useState(null)
   const [copilotOpen, setCopilotOpen] = useState(false)
+  const [providerKeyOpen, setProviderKeyOpen] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data?.user || null)) }, [])
   const meta = pageMeta[location.pathname] || [title || 'FloStudio', 'Build what moves your business forward.']
@@ -204,9 +206,10 @@ export default function Layout({ children, title }) {
       <div className="flo-sidebar-footer">{!navCollapsed && <div className="flo-fuel"><div className="flo-fuel-label">SIGNAL FUEL</div><div className="flo-fuel-amount"><b>{unlimited ? '∞' : tokens}</b><span>{unlimited ? 'unlimited' : 'tokens'}</span></div></div>}<div className="flo-profile" style={{ justifyContent:navCollapsed ? 'center':'flex-start' }}><div className="flo-avatar">{initial}</div>{!navCollapsed && <div className="flo-profile-copy" style={{ minWidth:0, flex:1 }}><div className="flo-profile-email">{user?.email || 'FloStudio user'}</div><div className="flo-profile-tier">{tier} workspace</div></div>}{!navCollapsed && <button onClick={logout} className="flo-signout" title="Sign out">→</button>}</div></div>
     </aside>
     <main className={`flo-main ${navCollapsed ? 'is-collapsed' : ''}`}>
-      <header className="flo-topbar"><div><div className="flo-topbar-crumb">FLOSTUDIO / {meta[0]}</div><div className="flo-topbar-meta">{meta[1]}</div></div><div className="flo-topbar-actions"><span className="signal-stamp">LIVE SYSTEM</span><button onClick={() => setCopilotOpen(true)} className="flo-topbar-copilot">Flo Operator</button><button onClick={() => navigate('/pricing')} className="flo-topbar-tokens">{unlimited ? 'Unlimited' : `${tokens} tokens`}</button></div></header>
+      <header className="flo-topbar"><div><div className="flo-topbar-crumb">FLOSTUDIO / {meta[0]}</div><div className="flo-topbar-meta">{meta[1]}</div></div><div className="flo-topbar-actions"><span className="signal-stamp">LIVE SYSTEM</span>{location.pathname === '/images' && <button onClick={() => setProviderKeyOpen(true)} className="flo-topbar-copilot">Connect OpenAI</button>}<button onClick={() => setCopilotOpen(true)} className="flo-topbar-copilot">Flo Operator</button><button onClick={() => navigate('/pricing')} className="flo-topbar-tokens">{unlimited ? 'Unlimited' : `${tokens} tokens`}</button></div></header>
       <div style={{ maxWidth:1360, margin:'0 auto' }}>{children}</div>
     </main>
     {copilotOpen && <AgentDrawer onClose={() => setCopilotOpen(false)} activeApp={activeApp} apps={apps} />}
+    {providerKeyOpen && <WorkspaceProviderKey onClose={() => setProviderKeyOpen(false)} />}
   </div>
 }
