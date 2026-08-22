@@ -130,8 +130,8 @@ async function appleBinaryRequest(path, token) {
   return Buffer.from(await response.arrayBuffer())
 }
 
-function salesReportPeriod(now = new Date()) {
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
+export function salesReportPeriod(now = new Date()) {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
 function parseTabDelimitedReport(buffer) {

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { buildAppMetrics, createAppleToken, summarizeSalesReport } from '../api/app-store-connect.js'
+import { buildAppMetrics, createAppleToken, salesReportPeriod, summarizeSalesReport } from '../api/app-store-connect.js'
 
 describe('App Store Connect secure sync primitives', () => {
   it('creates a short-lived ES256 team JWT using the supplied key ID and issuer ID', () => {
@@ -36,5 +36,9 @@ describe('App Store Connect secure sync primitives', () => {
       { 'Apple Identifier':'1234567890', 'Parent Identifier':'other-app', Units:'99', 'Developer Proceeds':'10.00', 'Currency of Proceeds':'USD' },
     ], { appStoreAppId:'6776187110', sku:'resumefix-001' })
     expect(sales).toMatchObject({ status:'available', matchedRows:2, appUnits:5, totalUnits:7, proceedsByCurrency:{ USD:3.5, GBP:8.4 }, period:{ startDate:'08/01/2026', endDate:'08/31/2026' } })
+  })
+
+  it('uses Apple’s year-month report-date format for monthly Sales and Trends reports', () => {
+    expect(salesReportPeriod(new Date('2026-08-22T12:00:00Z'))).toBe('2026-08')
   })
 })

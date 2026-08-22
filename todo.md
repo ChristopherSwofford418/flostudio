@@ -164,3 +164,5 @@
 - [ ] Pull real per-app Apple Sales and Trends downloads and proceeds into App Insights with vendor-number and report-readiness handling.
 
 - [x] Add an editable, selected-app Vendor Number field directly in App Insights with save-and-pull reporting behavior.
+
+- [x] Correct the Apple monthly Sales and Trends report-date format so ResumeFix reporting sync can complete.
