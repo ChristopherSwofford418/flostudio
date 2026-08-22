@@ -207,10 +207,10 @@
 
 - [x] Replace FloStudio’s global dark canvas with a premium white workspace, light-gray surfaces, charcoal text, and restrained blue highlights while preserving every working flow.
 
-- [ ] Clarify external OpenAI provider-credit exhaustion in Creative Lab without implying the owner’s unlimited FloStudio testing entitlement has been depleted.
+- [x] Clarify external OpenAI provider-credit exhaustion in Creative Lab without implying the owner’s unlimited FloStudio testing entitlement has been depleted.
 
-- [ ] Verify the owner account bypasses every FloStudio token deduction and present external provider-credit failures as a separate live-render prerequisite.
+- [x] Verify the owner account bypasses every FloStudio token deduction and present external provider-credit failures as a separate live-render prerequisite.
 
 - [ ] Add a transparent no-cost video workflow validation mode that checks prompt, source image, canvas preparation, and asset persistence without claiming to generate a live provider-funded MP4.
 
-- [ ] Add a secure encrypted Bring Your Own OpenAI API key connection for each workspace so funded user-provided provider accounts can power real image and video renders without browser key storage.
+- [x] Add a secure encrypted Bring Your Own OpenAI API key connection for each workspace so funded user-provided provider accounts can power real image and video renders without browser key storage.
