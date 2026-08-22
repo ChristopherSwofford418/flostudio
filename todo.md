@@ -189,4 +189,6 @@
 
 - [x] Move the video source-image selector into the render form and auto-seed a valid video brief so video creation cannot fail on an empty initial prompt.
 
+- [ ] Prepare every selected video source image to the target video canvas server-side so the provider never rejects a valid app image for dimension mismatch.
+
 - [ ] Evolve Creative Lab into a CapCut-style AI ad editor with scene sequencing, timeline-level edits, captions, voice and sound controls, video variations, and export-ready app-marketing cuts.

@@ -1,4 +1,5 @@
 import { resolveVideoProvider } from './media-provider.js'
+import sharp from 'sharp'
 export const maxDuration = 60
 
 const ALLOWED_SIZES = new Set(['1280x720', '720x1280', '1792x1024', '1024x1792'])
@@ -8,16 +9,31 @@ async function parseBody(req) {
   return typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
 }
 
-async function toReferenceBlob(value) {
+export async function prepareVideoReference(value, size) {
   if (!value) return null
+  let source
   if (value.startsWith('data:')) {
     const [meta, encoded] = value.split(',')
     const contentType = /data:([^;]+)/.exec(meta)?.[1] || 'image/png'
-    return new Blob([Buffer.from(encoded, 'base64')], { type:contentType })
+    source = new Blob([Buffer.from(encoded, 'base64')], { type:contentType })
+  } else {
+    const response = await fetch(value)
+    if (!response.ok) throw new Error('The selected video source image could not be retrieved.')
+    source = new Blob([await response.arrayBuffer()], { type:response.headers.get('content-type') || 'image/png' })
   }
-  const response = await fetch(value)
-  if (!response.ok) throw new Error('The uploaded video reference image could not be retrieved.')
-  return new Blob([await response.arrayBuffer()], { type:response.headers.get('content-type') || 'image/png' })
+  const [width, height] = String(size || '720x1280').split('x').map(Number)
+  if (!width || !height) throw new Error('The selected video canvas is not valid.')
+  try {
+    const sourceBuffer = Buffer.from(await source.arrayBuffer())
+    const prepared = await sharp(sourceBuffer, { limitInputPixels:64_000_000 })
+      .rotate()
+      .resize(width, height, { fit:'contain', background:{ r:11, g:16, b:24, alpha:1 }, withoutEnlargement:false })
+      .png()
+      .toBuffer()
+    return new Blob([prepared], { type:'image/png' })
+  } catch {
+    throw new Error('FloStudio could not prepare this image for the selected video canvas. Choose a PNG, JPG, or WebP image and try again.')
+  }
 }
 
 export default async function handler(req, res) {
@@ -56,7 +72,7 @@ export default async function handler(req, res) {
     })) : []
     const storyboardPrompt = storyboard.length ? ` Follow this editable storyboard exactly as a visual plan: ${storyboard.map(beat => `Shot ${beat.index} ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover direction: ${beat.voiceover}.`).join(' ')}` : ''
     const enhancedPrompt = `Create a finished social advertising video. ${prompt}.${storyboardPrompt} Use a clear shot sequence with deliberate camera motion, product focus, brand-safe lighting, and a strong final call-to-action composition. Do not depict real people, public figures, copyrighted characters, or copyrighted music.`
-    const reference = await toReferenceBlob(body.referenceImage).catch(() => null)
+    const reference = await prepareVideoReference(body.referenceImage, size)
     const job = await provider.create({ model, prompt:enhancedPrompt, size, seconds, reference })
     return res.status(200).json({ ...job, provider:provider.id })
   } catch (error) {
