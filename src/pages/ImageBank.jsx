@@ -23,6 +23,19 @@ const VIDEO_FORMATS = [
   { id: '1280x720', label: 'Landscape 16:9', detail: 'YouTube / display' },
 ]
 
+const CREATOR_MODES = [
+  { id:'creator_demo', label:'UGC talk-to-camera', detail:'Original adult creator hooks, reacts, and uses the app.' },
+  { id:'professional', label:'Professional at work', detail:'Original adult professional uses the product in context.' },
+  { id:'customer_moment', label:'Customer moment', detail:'Original adult customer shows a credible before-and-after moment.' },
+  { id:'product_only', label:'Product only', detail:'No person; keep the app screen and product motion central.' },
+]
+
+const UGC_STORY_SHAPES = [
+  { id:'problem_solution', label:'Problem → product → payoff', detail:'Direct-response UGC structure with a clear outcome.' },
+  { id:'testimonial', label:'Creator discovery', detail:'Natural “I found this” creator reaction with proof.' },
+  { id:'screen_demo', label:'Screen-led walkthrough', detail:'Creator introduces the product, then the app does the selling.' },
+]
+
 const AD_RUNBOOKS = [
   { id:'showcase', label:'Product showcase', type:'PRODUCT HERO', style:'product', description:'Close visual proof with one clear payoff.', prompt:'Show the product as the undisputed hero. Use a strong opening composition, one concrete benefit, and a clear action moment.', video:'Premium product showcase with intentional camera movement, feature detail, and a decisive final product frame.' },
   { id:'creator', label:'Creator testimony', type:'CREATOR FORMAT', style:'ugc', description:'Natural, direct-response proof that feels native.', prompt:'Creator-led social ad with credible personal context, natural light, and an immediate problem-to-payoff story.', video:'Creator-style performance ad. Start with a natural spoken hook, show the product in use, then land the proof and direct call to action.' },
@@ -91,6 +104,8 @@ export default function ImageBank() {
   const [videoFormat, setVideoFormat] = useState('720x1280')
   const [videoSeconds, setVideoSeconds] = useState('8')
   const [videoQuality, setVideoQuality] = useState('draft')
+  const [creatorMode, setCreatorMode] = useState('creator_demo')
+  const [ugcStoryShape, setUgcStoryShape] = useState('problem_solution')
   const [storyboard, setStoryboard] = useState(() => createStoryboard(AD_RUNBOOKS[0]))
   const [videoJob, setVideoJob] = useState(null)
   const [videoError, setVideoError] = useState('')
@@ -304,7 +319,7 @@ export default function ImageBank() {
     const storyboardPrompt = storyboard.map((beat, index) => `Shot ${index + 1} — ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover: ${beat.voiceover}.`).join(' ')
     const runbookPrompt = `${selectedRunbook.label} format. ${videoPrompt || selectedRunbook.video} Hook: ${hook || 'derive a clear, credible hook.'} Proof: ${proof || 'show only supportable product truth.'}${productContext} Structured storyboard: ${storyboardPrompt}`
     const sourceReference = resolvedVideoReference(videoSource, referenceImage)
-    const request = { prompt:runbookPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage:sourceReference, storyboard }
+    const request = { prompt:runbookPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage:sourceReference, creatorMode, ugcStoryShape, storyboard }
     let renderAsset = null
     let chargedTokens = 0
     try {
@@ -316,7 +331,7 @@ export default function ImageBank() {
         kind:'video', source:'ai_video', provider:'openai', render_status:'queued', prompt:runbookPrompt,
         product_id:activeApp.id, workspace_id:workspaceId || null,
         reference_asset_id:videoSource?.id || null,
-        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, referenceIncluded:Boolean(sourceReference), referenceSource:videoSource?.source || (sourceReference ? 'pinned_reference' : null), referenceName:videoSource?.name || null, storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
+        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, creatorMode, ugcStoryShape, referenceIncluded:Boolean(sourceReference), referenceSource:videoSource?.source || (sourceReference ? 'pinned_reference' : null), referenceName:videoSource?.name || null, storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
       })
       const response = await fetch('/api/generate-video', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(request) })
       const job = await response.json()
@@ -431,6 +446,7 @@ export default function ImageBank() {
           </button>)}
         </div>
         {!videoSourceOptions.length && <div style={{ marginTop:12, padding:11, border:'1px dashed rgba(243,240,231,.22)', color:'rgba(243,240,231,.62)', fontSize:11.5 }}>Create an image ad or add an App Store link in Portfolio to choose a real source frame here.</div>}
+        <div style={{ marginTop:14, paddingTop:13, borderTop:'1px solid rgba(243,240,231,.14)' }}><div className="abundance-mini-label">ON-CAMERA DIRECTION / ORIGINAL ADULT TALENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_MODES.map(mode => <button key={mode.id} onClick={() => setCreatorMode(mode.id)} className={`format-card ${creatorMode === mode.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{mode.label}</b><small>{mode.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'160px minmax(0,1fr)', gap:10, alignItems:'center', marginTop:11 }}><div className="abundance-mini-label">UGC STORY SHAPE</div><select className="studio-input" value={ugcStoryShape} onChange={event => setUgcStoryShape(event.target.value)}>{UGC_STORY_SHAPES.map(shape => <option value={shape.id} key={shape.id}>{shape.label} — {shape.detail}</option>)}</select></div><p style={{ color:'rgba(243,240,231,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>Creator modes use original, non-identifiable adult talent. FloStudio never asks the model to imitate a real person. The selected app screen remains the canonical product reference.</p></div>
       </section>}
       {activeTab !== 'library' && <section><div className="abundance-mini-label" style={{ marginTop:18 }}>FORMAT SHELF / START FROM THE AD YOU WANT TO MAKE</div><div className="runbook-shelf">{AD_RUNBOOKS.map(runbook => <button key={runbook.id} onClick={() => selectRunbook(runbook)} className={`runbook-card ${runbookId === runbook.id ? 'active':''}`}><span className="runbook-card__type">{runbook.type}</span><b>{runbook.label}</b><small>{runbook.description}</small></button>)}</div></section>}
 
