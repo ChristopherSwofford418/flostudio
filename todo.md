@@ -193,6 +193,6 @@
 
 - [ ] Evolve Creative Lab into a CapCut-style AI ad editor with scene sequencing, timeline-level edits, captions, voice and sound controls, video variations, and export-ready app-marketing cuts.
 
-- [ ] Add creator-led video direction controls and app-screen legibility guidance so image-guided ads can use original adult talent without obscuring the selected product.
+- [x] Add creator-led video direction controls and app-screen legibility guidance so image-guided ads can use original adult talent without obscuring the selected product.
 
-- [ ] Build an Arcads-style UGC ad mode: selected app image plus outcome prompt yields an original adult creator hook, authentic product-use moment, proof beat, readable app frame, and CTA-ready vertical cut.
+- [x] Build an Arcads-style UGC ad mode: selected app image plus outcome prompt yields an original adult creator hook, authentic product-use moment, proof beat, readable app frame, and CTA-ready vertical cut.
