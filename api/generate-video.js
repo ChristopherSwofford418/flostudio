@@ -1,6 +1,4 @@
 import { resolveVideoProvider } from './media-provider.js'
-import { resolveVideoProvider } from './media-provider.js'
-
 export const maxDuration = 60
 
 const ALLOWED_SIZES = new Set(['1280x720', '720x1280', '1792x1024', '1024x1792'])
