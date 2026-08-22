@@ -197,4 +197,4 @@
 
 - [x] Build an Arcads-style UGC ad mode: selected app image plus outcome prompt yields an original adult creator hook, authentic product-use moment, proof beat, readable app frame, and CTA-ready vertical cut.
 
-- [ ] Redesign Creative Lab with a premium black-and-white Arcads-inspired production UI while preserving all app-scoped image-to-video controls.
+- [x] Redesign Creative Lab with a premium black-and-white Arcads-inspired production UI while preserving all app-scoped image-to-video controls.
