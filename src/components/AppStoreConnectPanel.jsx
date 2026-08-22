@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
+import { selectConnectionTarget } from '../lib/appStoreConnectRouting'
 
 async function ascRequest(payload) {
   const { data } = await supabase.auth.getSession()
@@ -31,17 +32,18 @@ export default function AppStoreConnectPanel({ apps = [], initialProductId = '' 
   const selectedApp = useMemo(() => apps.find(app => app.id === productId) || null, [apps, productId])
 
   useEffect(() => {
-    if (!productId && apps[0]?.id) setProductId(apps[0].id)
+    if (!productId) setProductId(selectConnectionTarget(apps))
   }, [apps, productId])
 
   useEffect(() => {
-    if (!initialProductId || !apps.some(app => app.id === initialProductId)) return
-    setProductId(initialProductId)
+    const targetProductId = selectConnectionTarget(apps, initialProductId)
+    if (!initialProductId || targetProductId !== initialProductId) return
+    setProductId(targetProductId)
     setConnection(null)
     setEditing(false)
     setForm({ appStoreAppId:'', issuerId:'', keyId:'', keyType:'team', vendorNumber:'', privateKey:'', fileName:'' })
     setFileEpoch(value => value + 1)
-    setMessage(`Ready to connect ${apps.find(app => app.id === initialProductId)?.name || 'the selected app'}. This connection will remain separate from every other portfolio app.`)
+    setMessage(`Ready to connect ${apps.find(app => app.id === targetProductId)?.name || 'the selected app'}. This connection will remain separate from every other portfolio app.`)
   }, [initialProductId, apps])
 
   useEffect(() => {
