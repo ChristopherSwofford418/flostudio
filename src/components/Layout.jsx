@@ -8,7 +8,7 @@ import { executeFloCopilotCommand } from '../lib/floCopilotEngine'
 const navGroups = [
   { label: 'PORTFOLIO', items: [['portfolio', 'My Portfolio', '00']] },
   { label: 'CREATE', items: [['agent', 'Campaign Engine', '01'], ['images', 'Creative Lab', '02'], ['ai-calendar', 'Campaign Map', '03']] },
-  { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['experiments', 'Experiments', '05'], ['dashboard', 'Performance', '06'], ['accounts', 'Channels', '07']] },
+  { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['experiments', 'Experiments', '05'], ['dashboard', 'Performance', '06'], ['accounts', 'Channels', '07'], ['insights', 'App Insights', '08']] },
 ]
 
 const pageMeta = {
@@ -19,6 +19,7 @@ const pageMeta = {
   '/pipeline': ['Review Queue', 'Decide, refine, and ship your highest-potential ideas.'],
   '/experiments': ['Experiments', 'Turn creative, listing, and content hypotheses into verified portfolio learning.'],
   '/dashboard': ['Performance', 'Your campaign command center.'],
+  '/insights': ['App Insights', 'Verified App Store Connect data for the selected portfolio app.'],
   '/pricing': ['Plans & Tokens', 'Scale your creative output with transparent usage.'],
 }
 

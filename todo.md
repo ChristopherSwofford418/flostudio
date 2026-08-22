@@ -154,3 +154,7 @@
 - [x] Grant the FloStudio owner account test@flostudio.io unlimited server-side tokens without affecting normal tenant billing.
 
 - [x] Enforce strict per-app Creative Lab media isolation so switching portfolio apps never exposes another app’s generated assets or App Store references.
+
+- [x] Build secure per-app App Store Connect setup with App ID, Issuer ID, Key ID, `.p8` upload, JWT validation, and authorized data sync.
+
+- [x] Add an App Insights tab under Manage that displays only the selected app’s authorized App Store Connect performance data and sync health.

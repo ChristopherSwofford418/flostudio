@@ -16,6 +16,7 @@ import ResetPassword from './pages/ResetPassword.jsx'
 import Pricing from './pages/Pricing.jsx'
 import Portfolio from './pages/Portfolio.jsx'
 import Experiments from './pages/Experiments.jsx'
+import AppInsights from './pages/AppInsights.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="/accounts" element={session ? <Accounts /> : <Navigate to="/auth" />} />
         <Route path="/approve" element={session ? <Approve /> : <Navigate to="/auth" />} />
         <Route path="/dashboard" element={session ? <Dashboard /> : <Navigate to="/auth" />} />
+        <Route path="/insights" element={session ? <AppInsights /> : <Navigate to="/auth" />} />
         <Route path="*" element={<Navigate to={session ? '/portfolio' : '/auth'} replace />} />
       </Routes>
     </WorkspaceProvider>
