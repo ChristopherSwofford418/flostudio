@@ -3,6 +3,8 @@ import Layout from '../components/Layout.jsx'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { supabase } from '../supabase'
 import PerformanceConnectionDesk from '../components/PerformanceConnectionDesk'
+import AppSocialStudio from '../components/AppSocialStudio'
+import AppAwarePostStudio from '../components/AppAwarePostStudio'
 
 const PLATFORMS = [
   { id:'facebook', label:'Facebook Pages', icon:'F', color:'#8b8b8b', summary:'Authorize a real Meta identity, then choose the Page that FloStudio may publish approved posts to.', requirement:'Requires Facebook Login for Business, Page access, approved Page permissions, and a secure server-side callback.' },
@@ -152,6 +154,10 @@ export default function Accounts() {
           return <article key={platform.id} className="studio-panel" style={{ padding:20, borderLeft:`4px solid ${platform.color}` }}><div style={{ display:'flex', alignItems:'center', gap:15, flexWrap:'wrap' }}><div style={{ width:44, height:44, borderRadius:13, color:platform.color, background:`${platform.color}1c`, border:`1px solid ${platform.color}48`, display:'grid', placeItems:'center', fontWeight:900, fontSize:platform.icon.length > 1 ? 12 : 14 }}>{platform.icon}</div><div style={{ flex:1, minWidth:240 }}><div style={{ display:'flex', alignItems:'center', gap:9, flexWrap:'wrap' }}><h3 style={{ color:'#ffffff', fontSize:16, fontWeight:850 }}>{platform.label}</h3><span className="studio-chip" style={{ color, borderColor:`${color}52`, background:`${color}12` }}>{loading ? 'CHECKING' : labelFor(status)}</span></div><p style={{ color:'rgba(242,242,242,.66)', fontSize:11.5, lineHeight:1.55, marginTop:5 }}>{ready ? <><b style={{ color:'#ffffff' }}>{status.connection?.accountName}</b>{status.connection?.accountHandle ? ` · ${status.connection.accountHandle}` : ''} is the verified FloStudio publishing destination.</> : platform.summary}</p><div style={{ color:'rgba(242,242,242,.45)', fontSize:10, marginTop:7 }}><b style={{ color:'rgba(242,242,242,.7)' }}>{status?.error ? 'Status:' : 'Requirement:'}</b> {userFacingStatus(status, platform)}</div></div><button onClick={() => requestConnection(platform)} disabled={checking === platform.id || loading} className={ready ? 'studio-button studio-button--soft' : 'studio-button'} style={{ padding:'9px 12px', fontSize:10.5, whiteSpace:'nowrap', opacity:(checking === platform.id || loading) ? .65 : 1 }}>{actionLabel}</button></div></article>
         })}</div>
       </section>
+
+      <AppSocialStudio apps={apps} workspaceId={workspaceId} />
+
+      <AppAwarePostStudio apps={apps} workspaceId={workspaceId} />
 
       <PerformanceConnectionDesk workspaceId={workspaceId} />
 
