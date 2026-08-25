@@ -16,14 +16,33 @@ const UGC_STORY_SHAPES = {
   testimonial:'Use a natural creator-discovery arc: the original adult creator opens with a candid “I found this” style reaction, shows the selected app in real use, then gives one grounded reason they would keep using it before the CTA.',
   screen_demo:'Use a screen-led UGC walkthrough: the original adult creator gives a short spoken-style hook, the selected app screen becomes the clear central proof, then return to the creator for a concise outcome and CTA.',
 }
+const CREATOR_DELIVERIES = {
+  candid:'Deliver with candid creator discovery energy: direct eye-line, relaxed pace, grounded wording, and no exaggerated reactions.',
+  proof_demo:'Lead with visible hands, screen proof, and product interaction. Keep the explanation simple and let the product action carry the claim.',
+  comment_reply:'Open as a natural reply to a common customer question without displaying fabricated comments, then answer it through visible product proof.',
+  founder_note:'Use a thoughtful founder-style delivery only for supportable product facts. Avoid unverified origin stories, performance claims, or invented testimonials.',
+}
+const EDIT_PACES = {
+  punchy:'Use a fast but readable social edit with immediate first-frame clarity, purposeful cut points, and no visual clutter.',
+  considered:'Use a measured premium pace, deliberate camera movement, and enough hold time for product proof to register clearly.',
+  demo:'Use clear instructional pacing: establish the product, show one understandable interaction, then land the customer payoff.',
+}
+const CAPTION_TREATMENTS = {
+  minimal:'Use only a few large, legible on-screen key phrases. Do not crowd the frame or render dense small text.',
+  native:'Use short creator-native subtitles in safe areas with clean contrast. Keep every caption concise and never rely on tiny text.',
+  none:'Do not add on-screen captions beyond any supplied product interface. Keep the frame clean and let visual proof carry the story.',
+}
 
-export function buildEnhancedVideoPrompt({ prompt, storyboardPrompt = '', creatorMode = 'creator_demo', ugcStoryShape = 'problem_solution', hasReference = false }) {
+export function buildEnhancedVideoPrompt({ prompt, storyboardPrompt = '', creatorMode = 'creator_demo', ugcStoryShape = 'problem_solution', creatorDelivery = 'candid', editPace = 'punchy', captionTreatment = 'minimal', hasReference = false }) {
   const creatorDirection = CREATOR_DIRECTIONS[creatorMode] || CREATOR_DIRECTIONS.creator_demo
   const ugcDirection = UGC_STORY_SHAPES[ugcStoryShape] || UGC_STORY_SHAPES.problem_solution
+  const deliveryDirection = CREATOR_DELIVERIES[creatorDelivery] || CREATOR_DELIVERIES.candid
+  const paceDirection = EDIT_PACES[editPace] || EDIT_PACES.punchy
+  const captionDirection = CAPTION_TREATMENTS[captionTreatment] || CAPTION_TREATMENTS.minimal
   const referenceDirection = hasReference
     ? 'The supplied first-frame image is the canonical app asset. Preserve its product identity, logo, color, layout, and visible app interface faithfully. Hold a crisp, readable device-screen shot at the opening and closing; do not invent substitute app interfaces, warped screen text, or competing UI.'
     : 'Create a product-led video with a clean, legible final product composition.'
-  return `Create a finished Arcads-style UGC short-form social advertising video. ${prompt}.${storyboardPrompt} ${creatorDirection} ${ugcDirection} ${referenceDirection} Use vertical creator-native composition, clean cinematic lighting, one deliberate camera move per shot, stable hands and faces, natural motion, sharp focus, and an uncluttered final call-to-action frame. Do not depict or imitate real people, public figures, copyrighted characters, or copyrighted music.`
+  return `Create a finished Arcads-style UGC short-form social advertising video. ${prompt}.${storyboardPrompt} ${creatorDirection} ${ugcDirection} ${deliveryDirection} ${paceDirection} ${captionDirection} ${referenceDirection} Use vertical creator-native composition, clean cinematic lighting, one deliberate camera move per shot, stable hands and faces, natural motion, sharp focus, and an uncluttered final call-to-action frame. The first 1.5 seconds must make the product category and hook immediately clear. Preserve product identity across every shot. Do not depict or imitate real people, public figures, copyrighted characters, or copyrighted music.`
 }
 
 async function parseBody(req) {
@@ -98,7 +117,7 @@ export default async function handler(req, res) {
       voiceover:String(beat?.voiceover || '').slice(0, 240),
     })) : []
     const storyboardPrompt = storyboard.length ? ` Follow this editable storyboard exactly as a visual plan: ${storyboard.map(beat => `Shot ${beat.index} ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover direction: ${beat.voiceover}.`).join(' ')}` : ''
-    const enhancedPrompt = buildEnhancedVideoPrompt({ prompt, storyboardPrompt, creatorMode:body.creatorMode, ugcStoryShape:body.ugcStoryShape, hasReference:Boolean(body.referenceImage) })
+    const enhancedPrompt = buildEnhancedVideoPrompt({ prompt, storyboardPrompt, creatorMode:body.creatorMode, ugcStoryShape:body.ugcStoryShape, creatorDelivery:body.creatorDelivery, editPace:body.editPace, captionTreatment:body.captionTreatment, hasReference:Boolean(body.referenceImage) })
     const reference = await prepareVideoReference(body.referenceImage, size)
     const job = await provider.create({ model, prompt:enhancedPrompt, size, seconds, reference })
     return res.status(200).json({ ...job, provider:provider.id })
