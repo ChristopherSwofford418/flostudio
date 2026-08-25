@@ -501,13 +501,37 @@ export function buildAppMetrics({ app, versions = [], reviews = [], sales = null
 async function syncMetrics({ connection, privateKey }) {
   const token = createAppleToken({ issuerId: connection.issuer_id, keyId: connection.key_id, privateKey, keyType: connection.key_type || 'team' })
   const app = await appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}?fields[apps]=name,bundleId,sku,primaryLocale`, token)
-  const [versionsResult, reviewsResult] = await Promise.allSettled([
-    appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appStoreVersions?limit=10&sort=-createdDate&fields[appStoreVersions]=versionString,appStoreState,releaseDate,createdDate,platform`, token),
+  const [versionsResult, reviewsResult, appInfosResult] = await Promise.allSettled([
+    appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appStoreVersions?limit=10&sort=-createdDate&include=appStoreVersionLocalizations&fields[appStoreVersions]=versionString,appStoreState,releaseDate,createdDate,platform&fields[appStoreVersionLocalizations]=locale,description,keywords,marketingUrl,promotionalText,supportUrl,versionDescription,whatsNew`, token),
     appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/customerReviews?limit=200&sort=-createdDate&fields[customerReviews]=rating,title,body,createdDate,territory`, token),
+    appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appInfos?include=appInfoLocalizations&fields[appInfos]=appStoreState,appStoreAgeRating&fields[appInfoLocalizations]=locale,name,subtitle,privacyPolicyUrl`, token),
   ])
   const metrics = buildAppMetrics({ app: app.data, versions: versionsResult.status === 'fulfilled' ? versionsResult.value.data || [] : [], reviews: reviewsResult.status === 'fulfilled' ? reviewsResult.value.data || [] : [] })
   metrics.availability.versions = versionsResult.status === 'fulfilled' ? { status: 'available' } : { status: 'not_authorized_or_unavailable', message: 'This key could not load App Store versions.' }
   metrics.availability.reviews = reviewsResult.status === 'fulfilled' ? { status: 'available' } : { status: 'not_authorized_or_unavailable', message: 'This key could not load customer reviews.' }
+  const appInfoPayload = appInfosResult.status === 'fulfilled' ? appInfosResult.value : null
+  const appInfoLocalizations = (appInfoPayload?.included || []).filter(resource => resource.type === 'appInfoLocalizations').map(resource => ({
+    id:resource.id,
+    locale:resource.attributes?.locale || '',
+    name:resource.attributes?.name || '',
+    subtitle:resource.attributes?.subtitle || '',
+    privacyPolicyUrl:resource.attributes?.privacyPolicyUrl || '',
+  }))
+  const versionLocalizations = (versionsResult.status === 'fulfilled' ? versionsResult.value.included || [] : []).filter(resource => resource.type === 'appStoreVersionLocalizations').map(resource => ({
+    id:resource.id,
+    locale:resource.attributes?.locale || '',
+    description:resource.attributes?.description || '',
+    keywords:resource.attributes?.keywords || '',
+    marketingUrl:resource.attributes?.marketingUrl || '',
+    promotionalText:resource.attributes?.promotionalText || '',
+    supportUrl:resource.attributes?.supportUrl || '',
+    versionDescription:resource.attributes?.versionDescription || '',
+    whatsNew:resource.attributes?.whatsNew || '',
+  }))
+  metrics.localizedStoreMetadata = { status:appInfosResult.status === 'fulfilled' ? 'available' : 'not_authorized_or_unavailable', appInfoLocalizations, versionLocalizations }
+  metrics.availability.localizedMetadata = appInfosResult.status === 'fulfilled'
+    ? { status:'available', message:`App Store Connect returned ${appInfoLocalizations.length} app information localizations and ${versionLocalizations.length} current-version localizations.` }
+    : { status:'not_authorized_or_unavailable', message:'This key could not load localized App Store metadata.' }
   const analytics = await analyticsMetrics({ connection, token })
   metrics.analytics = analytics
   metrics.availability.analytics = analytics.status === 'available'

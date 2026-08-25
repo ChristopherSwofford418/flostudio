@@ -93,7 +93,42 @@ async function readAppleListing(candidate) {
   const payload = await response.json()
   const result = payload.results?.[0]
   if (!result) return null
-    return {
+  const storeMetadata = {
+    appStoreId: result.trackId ? String(result.trackId) : appId,
+    bundleId: result.bundleId || '',
+    sellerName: result.sellerName || '',
+    sellerUrl: result.sellerUrl || '',
+    artistId: result.artistId ? String(result.artistId) : '',
+    artistUrl: result.artistViewUrl || '',
+    trackUrl: result.trackViewUrl || candidate.toString(),
+    releaseDate: result.releaseDate || '',
+    currentVersionReleaseDate: result.currentVersionReleaseDate || '',
+    version: result.version || '',
+    minimumOsVersion: result.minimumOsVersion || '',
+    fileSizeBytes: result.fileSizeBytes || '',
+    formattedPrice: result.formattedPrice || '',
+    price: result.price ?? null,
+    currency: result.currency || '',
+    genres: result.genres || [],
+    genreIds: result.genreIds || [],
+    languageCodes: result.languageCodesISO2A || [],
+    supportedDevices: result.supportedDevices || [],
+    features: result.features || [],
+    advisories: result.advisories || [],
+    contentRating: result.contentAdvisoryRating || '',
+    rating: result.averageUserRating ?? null,
+    ratingCount: result.userRatingCount ?? 0,
+    currentVersionRating: result.averageUserRatingForCurrentVersion ?? null,
+    currentVersionRatingCount: result.userRatingCountForCurrentVersion ?? 0,
+    artworkUrl512: result.artworkUrl512 || '',
+    artworkUrl100: result.artworkUrl100 || '',
+    screenshots: result.screenshotUrls || [],
+    ipadScreenshots: result.ipadScreenshotUrls || [],
+    appletvScreenshots: result.appletvScreenshotUrls || [],
+    isGameCenterEnabled: Boolean(result.isGameCenterEnabled),
+    kind: result.kind || '',
+  }
+  return {
       source: 'Apple App Store',
       appId,
       name: result.trackName || '',
@@ -109,7 +144,8 @@ async function readAppleListing(candidate) {
       version: result.version || '',
       releaseNotes: result.releaseNotes || '',
       contentRating: result.contentAdvisoryRating || '',
-      storeUrl: result.trackViewUrl || candidate.toString()
+      storeUrl: result.trackViewUrl || candidate.toString(),
+      storeMetadata
     }
 }
 
@@ -194,7 +230,7 @@ export default async function handler(req, res) {
     }
 
     const apiKey = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY
-    if (apiKey) {
+    if (apiKey && !body.enrichOnly) {
       try {
         const openai = new OpenAI({ apiKey })
         const completion = await openai.chat.completions.create({
@@ -231,6 +267,7 @@ export default async function handler(req, res) {
         releaseNotes: listing.releaseNotes || '',
         contentRating: listing.contentRating || '',
         screenshots: listing.screenshots || [],
+        storeMetadata: listing.storeMetadata || {},
         sourceUrl: listing.storeUrl || candidate.toString()
       },
       name: aiSynthesis.productName || title,
