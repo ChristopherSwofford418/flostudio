@@ -4,6 +4,8 @@ import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { belongsToProduct, createMediaAsset, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
 import { buildVideoSourceOptions, resolvedVideoReference } from '../lib/videoReferences'
+import UGCCastingPanel from '../components/UGCCastingPanel.jsx'
+import { castingProfile, voiceProfile } from '../lib/ugcCasting'
 
 const STYLE_PRESETS = [
   { id: 'product', label: 'Product hero', desc: 'Sculptural product focus with commercial light' },
@@ -144,6 +146,8 @@ export default function ImageBank() {
   const [creatorDelivery, setCreatorDelivery] = useState('candid')
   const [editPace, setEditPace] = useState('punchy')
   const [captionTreatment, setCaptionTreatment] = useState('minimal')
+  const [actorId, setActorId] = useState('maya')
+  const [voiceId, setVoiceId] = useState('aoede')
   const [storyboard, setStoryboard] = useState(() => createStoryboard(AD_RUNBOOKS[0]))
   const [videoJob, setVideoJob] = useState(null)
   const [videoError, setVideoError] = useState('')
@@ -179,6 +183,8 @@ export default function ImageBank() {
   const selectedCreatorDelivery = CREATOR_DELIVERIES.find(delivery => delivery.id === creatorDelivery) || CREATOR_DELIVERIES[0]
   const selectedEditPace = EDIT_PACES.find(pace => pace.id === editPace) || EDIT_PACES[0]
   const selectedCaptionTreatment = CAPTION_TREATMENTS.find(treatment => treatment.id === captionTreatment) || CAPTION_TREATMENTS[0]
+  const selectedActor = castingProfile(actorId)
+  const selectedVoice = voiceProfile(voiceId)
   const creativeReadiness = useMemo(() => [
     { label:'Product truth', ready:Boolean(activeApp || referenceImage), next:'Select an app or pin a real product image.' },
     { label:'Scroll-stopping hook', ready:Boolean(hook.trim()), next:'Name the opening promise or friction point.' },
@@ -427,9 +433,10 @@ export default function ImageBank() {
     const productContext = activeApp ? ` Product: ${activeApp.name}. ${activeApp.description || ''}` : ''
     const storyboardPrompt = storyboard.map((beat, index) => `Shot ${index + 1} — ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover: ${beat.voiceover}.`).join(' ')
     const directorPrompt = `Creator delivery: ${selectedCreatorDelivery.label}. ${selectedCreatorDelivery.prompt} Edit pace: ${selectedEditPace.label}. ${selectedEditPace.prompt} Caption treatment: ${selectedCaptionTreatment.label}. ${selectedCaptionTreatment.prompt}`
-    const runbookPrompt = `${selectedRunbook.label} format. ${videoPrompt || selectedRunbook.video} Hook: ${hook || 'derive a clear, credible hook.'} Proof: ${proof || 'show only supportable product truth.'}${productContext} ${directorPrompt} Structured storyboard: ${storyboardPrompt}`
+    const castingPrompt = creatorMode === 'product_only' ? 'No on-camera talent or dialogue. Keep the app and product motion central.' : `Selected synthetic actor: ${selectedActor.name}, ${selectedActor.role}. Selected voice style: ${selectedVoice.name}. Use only this fictional, synthetic adult casting direction; never imitate a real person or named voice.`
+    const runbookPrompt = `${selectedRunbook.label} format. ${videoPrompt || selectedRunbook.video} Hook: ${hook || 'derive a clear, credible hook.'} Proof: ${proof || 'show only supportable product truth.'}${productContext} ${directorPrompt} ${castingPrompt} Structured storyboard: ${storyboardPrompt}`
     const sourceReference = resolvedVideoReference(videoSource, referenceImage)
-    const request = { prompt:runbookPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage:sourceReference, creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, storyboard }
+    const request = { prompt:runbookPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage:sourceReference, creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, actorId, voiceId, storyboard }
     let renderAsset = null
     let chargedTokens = 0
     try {
@@ -441,7 +448,7 @@ export default function ImageBank() {
         kind:'video', source:'ai_video', provider:'openai', render_status:'queued', prompt:runbookPrompt,
         product_id:activeApp.id, workspace_id:workspaceId || null,
         reference_asset_id:videoSource?.id || null,
-        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, referenceIncluded:Boolean(sourceReference), referenceSource:videoSource?.source || (sourceReference ? 'pinned_reference' : null), referenceName:videoSource?.name || null, storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
+        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, actorId, actorName:selectedActor.name, voiceId, voiceStyle:selectedVoice.name, referenceIncluded:Boolean(sourceReference), referenceSource:videoSource?.source || (sourceReference ? 'pinned_reference' : null), referenceName:videoSource?.name || null, storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
       })
       const authHeaders = await providerHeaders()
       const response = await fetch('/api/generate-video', { method:'POST', headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ ...request, workspaceId }) })
@@ -589,7 +596,7 @@ export default function ImageBank() {
           </button>)}
         </div>
         {!videoSourceOptions.length && <div style={{ marginTop:12, padding:11, border:'1px dashed rgba(240,240,240,.22)', color:'rgba(240,240,240,.62)', fontSize:11.5 }}>Create an image ad or add an App Store link in Portfolio to choose a real source frame here.</div>}
-        <div style={{ marginTop:14, paddingTop:13, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">ON-CAMERA DIRECTION / ORIGINAL ADULT TALENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_MODES.map(mode => <button key={mode.id} onClick={() => setCreatorMode(mode.id)} className={`format-card ${creatorMode === mode.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{mode.label}</b><small>{mode.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'160px minmax(0,1fr)', gap:10, alignItems:'center', marginTop:11 }}><div className="abundance-mini-label">UGC STORY SHAPE</div><select className="studio-input" value={ugcStoryShape} onChange={event => setUgcStoryShape(event.target.value)}>{UGC_STORY_SHAPES.map(shape => <option value={shape.id} key={shape.id}>{shape.label} — {shape.detail}</option>)}</select></div><p style={{ color:'rgba(240,240,240,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>Creator modes use original, non-identifiable adult talent. FloStudio never asks the model to imitate a real person. The selected app screen remains the canonical product reference.</p></div>
+        <UGCCastingPanel actorId={actorId} voiceId={voiceId} onActorChange={setActorId} onVoiceChange={setVoiceId} /><div style={{ marginTop:14, paddingTop:13, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">ON-CAMERA DIRECTION / ORIGINAL ADULT TALENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_MODES.map(mode => <button key={mode.id} onClick={() => setCreatorMode(mode.id)} className={`format-card ${creatorMode === mode.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{mode.label}</b><small>{mode.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'160px minmax(0,1fr)', gap:10, alignItems:'center', marginTop:11 }}><div className="abundance-mini-label">UGC STORY SHAPE</div><select className="studio-input" value={ugcStoryShape} onChange={event => setUgcStoryShape(event.target.value)}>{UGC_STORY_SHAPES.map(shape => <option value={shape.id} key={shape.id}>{shape.label} — {shape.detail}</option>)}</select></div><p style={{ color:'rgba(240,240,240,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>Creator modes use original, non-identifiable adult talent. FloStudio never asks the model to imitate a real person. The selected app screen remains the canonical product reference.</p></div>
       </section>}
       {activeTab !== 'library' && <section className="abundance-card" style={{ marginTop:18, padding:'14px 16px', borderColor:'rgba(49,130,246,.32)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="abundance-mini-label">CREATIVE DIRECTOR CHECK</div><h2 style={{ fontSize:17, letterSpacing:'-.045em', marginTop:4 }}>Production readiness: {readinessScore} / {creativeReadiness.length}</h2><p style={{ color:'rgba(240,240,240,.6)', fontSize:11, lineHeight:1.5, marginTop:5 }}>FloStudio never blocks an early concept, but complete briefs produce stronger image and UGC-video direction.</p></div><span className="abundance-pill">{readinessScore === creativeReadiness.length ? 'ready to render' : 'brief in progress'}</span></div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:8, marginTop:12 }}>{creativeReadiness.map(item => <div key={item.label} style={{ border:'1px solid rgba(240,240,240,.14)', background:item.ready ? 'rgba(49,130,246,.08)' : 'rgba(240,240,240,.025)', padding:9, borderRadius:3 }}><b style={{ display:'block', fontSize:10.5, color:item.ready ? 'var(--signal)' : '#ffffff' }}>{item.ready ? '✓ ' : '○ '}{item.label}</b><span style={{ display:'block', marginTop:4, color:'rgba(240,240,240,.55)', fontSize:9.5, lineHeight:1.35 }}>{item.ready ? 'Locked into the production brief.' : item.next}</span></div>)}</div></section>}
       {activeTab !== 'library' && <section><div className="abundance-mini-label" style={{ marginTop:18 }}>FORMAT SHELF / START FROM THE AD YOU WANT TO MAKE</div><div className="runbook-shelf">{AD_RUNBOOKS.map(runbook => <button key={runbook.id} onClick={() => selectRunbook(runbook)} className={`runbook-card ${runbookId === runbook.id ? 'active':''}`}><span className="runbook-card__type">{runbook.type}</span><b>{runbook.label}</b><small>{runbook.description}</small></button>)}</div></section>}

@@ -1,6 +1,7 @@
 import { resolveVideoProvider } from './media-provider.js'
 import sharp from 'sharp'
 import { authenticatedProviderUser, resolveWorkspaceOpenAIKey } from './provider-key-vault.js'
+import { castingDirection } from './ugc-casting.js'
 export const maxDuration = 60
 
 const ALLOWED_SIZES = new Set(['1280x720', '720x1280', '1792x1024', '1024x1792'])
@@ -33,16 +34,17 @@ const CAPTION_TREATMENTS = {
   none:'Do not add on-screen captions beyond any supplied product interface. Keep the frame clean and let visual proof carry the story.',
 }
 
-export function buildEnhancedVideoPrompt({ prompt, storyboardPrompt = '', creatorMode = 'creator_demo', ugcStoryShape = 'problem_solution', creatorDelivery = 'candid', editPace = 'punchy', captionTreatment = 'minimal', hasReference = false }) {
+export function buildEnhancedVideoPrompt({ prompt, storyboardPrompt = '', creatorMode = 'creator_demo', ugcStoryShape = 'problem_solution', creatorDelivery = 'candid', editPace = 'punchy', captionTreatment = 'minimal', actorId = 'maya', voiceId = 'aoede', hasReference = false }) {
   const creatorDirection = CREATOR_DIRECTIONS[creatorMode] || CREATOR_DIRECTIONS.creator_demo
   const ugcDirection = UGC_STORY_SHAPES[ugcStoryShape] || UGC_STORY_SHAPES.problem_solution
   const deliveryDirection = CREATOR_DELIVERIES[creatorDelivery] || CREATOR_DELIVERIES.candid
   const paceDirection = EDIT_PACES[editPace] || EDIT_PACES.punchy
   const captionDirection = CAPTION_TREATMENTS[captionTreatment] || CAPTION_TREATMENTS.minimal
+  const actorDirection = castingDirection(actorId, voiceId, creatorMode)
   const referenceDirection = hasReference
     ? 'The supplied first-frame image is the canonical app asset. Preserve its product identity, logo, color, layout, and visible app interface faithfully. Hold a crisp, readable device-screen shot at the opening and closing; do not invent substitute app interfaces, warped screen text, or competing UI.'
     : 'Create a product-led video with a clean, legible final product composition.'
-  return `Create a finished Arcads-style UGC short-form social advertising video. ${prompt}.${storyboardPrompt} ${creatorDirection} ${ugcDirection} ${deliveryDirection} ${paceDirection} ${captionDirection} ${referenceDirection} Use vertical creator-native composition, clean cinematic lighting, one deliberate camera move per shot, stable hands and faces, natural motion, sharp focus, and an uncluttered final call-to-action frame. The first 1.5 seconds must make the product category and hook immediately clear. Preserve product identity across every shot. Do not depict or imitate real people, public figures, copyrighted characters, or copyrighted music.`
+  return `Create a finished Arcads-style UGC short-form social advertising video. ${prompt}.${storyboardPrompt} ${creatorDirection} ${ugcDirection} ${deliveryDirection} ${paceDirection} ${captionDirection} ${actorDirection} ${referenceDirection} Use vertical creator-native composition, clean cinematic lighting, one deliberate camera move per shot, stable hands and faces, natural motion, sharp focus, and an uncluttered final call-to-action frame. The first 1.5 seconds must make the product category and hook immediately clear. Preserve product identity across every shot. Do not depict or imitate real people, public figures, copyrighted characters, or copyrighted music.`
 }
 
 async function parseBody(req) {
@@ -117,7 +119,7 @@ export default async function handler(req, res) {
       voiceover:String(beat?.voiceover || '').slice(0, 240),
     })) : []
     const storyboardPrompt = storyboard.length ? ` Follow this editable storyboard exactly as a visual plan: ${storyboard.map(beat => `Shot ${beat.index} ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover direction: ${beat.voiceover}.`).join(' ')}` : ''
-    const enhancedPrompt = buildEnhancedVideoPrompt({ prompt, storyboardPrompt, creatorMode:body.creatorMode, ugcStoryShape:body.ugcStoryShape, creatorDelivery:body.creatorDelivery, editPace:body.editPace, captionTreatment:body.captionTreatment, hasReference:Boolean(body.referenceImage) })
+    const enhancedPrompt = buildEnhancedVideoPrompt({ prompt, storyboardPrompt, creatorMode:body.creatorMode, ugcStoryShape:body.ugcStoryShape, creatorDelivery:body.creatorDelivery, editPace:body.editPace, captionTreatment:body.captionTreatment, actorId:body.actorId, voiceId:body.voiceId, hasReference:Boolean(body.referenceImage) })
     const reference = await prepareVideoReference(body.referenceImage, size)
     const job = await provider.create({ model, prompt:enhancedPrompt, size, seconds, reference })
     return res.status(200).json({ ...job, provider:provider.id })
