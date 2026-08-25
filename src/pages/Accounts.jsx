@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Layout from '../components/Layout.jsx'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { supabase } from '../supabase'
+import PerformanceConnectionDesk from '../components/PerformanceConnectionDesk'
 
 const PLATFORMS = [
   { id:'facebook', label:'Facebook Pages', icon:'F', color:'#8b8b8b', summary:'Authorize a real Meta identity, then choose the Page that FloStudio may publish approved posts to.', requirement:'Requires Facebook Login for Business, Page access, approved Page permissions, and a secure server-side callback.' },
@@ -33,7 +34,7 @@ function userFacingStatus(status, platform) {
 }
 
 export default function Accounts() {
-  const { apps } = useWorkspace()
+  const { apps, workspaceId } = useWorkspace()
   const [statuses, setStatuses] = useState({})
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState('')
@@ -151,6 +152,8 @@ export default function Accounts() {
           return <article key={platform.id} className="studio-panel" style={{ padding:20, borderLeft:`4px solid ${platform.color}` }}><div style={{ display:'flex', alignItems:'center', gap:15, flexWrap:'wrap' }}><div style={{ width:44, height:44, borderRadius:13, color:platform.color, background:`${platform.color}1c`, border:`1px solid ${platform.color}48`, display:'grid', placeItems:'center', fontWeight:900, fontSize:platform.icon.length > 1 ? 12 : 14 }}>{platform.icon}</div><div style={{ flex:1, minWidth:240 }}><div style={{ display:'flex', alignItems:'center', gap:9, flexWrap:'wrap' }}><h3 style={{ color:'#ffffff', fontSize:16, fontWeight:850 }}>{platform.label}</h3><span className="studio-chip" style={{ color, borderColor:`${color}52`, background:`${color}12` }}>{loading ? 'CHECKING' : labelFor(status)}</span></div><p style={{ color:'rgba(242,242,242,.66)', fontSize:11.5, lineHeight:1.55, marginTop:5 }}>{ready ? <><b style={{ color:'#ffffff' }}>{status.connection?.accountName}</b>{status.connection?.accountHandle ? ` · ${status.connection.accountHandle}` : ''} is the verified FloStudio publishing destination.</> : platform.summary}</p><div style={{ color:'rgba(242,242,242,.45)', fontSize:10, marginTop:7 }}><b style={{ color:'rgba(242,242,242,.7)' }}>{status?.error ? 'Status:' : 'Requirement:'}</b> {userFacingStatus(status, platform)}</div></div><button onClick={() => requestConnection(platform)} disabled={checking === platform.id || loading} className={ready ? 'studio-button studio-button--soft' : 'studio-button'} style={{ padding:'9px 12px', fontSize:10.5, whiteSpace:'nowrap', opacity:(checking === platform.id || loading) ? .65 : 1 }}>{actionLabel}</button></div></article>
         })}</div>
       </section>
+
+      <PerformanceConnectionDesk workspaceId={workspaceId} />
 
       {destinationSelection && <div style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(15,15,15,.76)', backdropFilter:'blur(9px)', display:'grid', placeItems:'center', padding:20 }}><section className="studio-panel" style={{ width:'min(620px,100%)', padding:25, background:'#2e2e2e', borderColor:'rgba(255,255,255,.18)' }}><div className="studio-kicker" style={{ color:'#ededed' }}>META DESTINATION SELECTION</div><h2 style={{ color:'#ffffff', fontSize:28, letterSpacing:'-.05em', marginTop:8 }}>Choose where FloStudio may <span className="studio-serif" style={{ color:'#c0c0c0' }}>publish.</span></h2><p style={{ color:'rgba(242,242,242,.66)', marginTop:9, fontSize:12, lineHeight:1.65 }}>Meta returned these eligible destinations. FloStudio will save the one you select and keep its provider credential in the server-side credential vault.</p><div style={{ display:'grid', gap:9, marginTop:18 }}>{destinationSelection.destinations.map(destination => <button key={destination.id} onClick={() => selectDestination(destination)} disabled={checking === destinationSelection.platform} style={{ textAlign:'left', padding:'14px 16px', borderRadius:10, border:'1px solid rgba(255,255,255,.17)', background:'rgba(255,255,255,.06)', color:'#ffffff', cursor:'pointer' }}><div style={{ fontSize:14, fontWeight:850 }}>{destination.accountName}</div><div style={{ color:'rgba(242,242,242,.58)', fontSize:11, marginTop:4 }}>{destination.accountType}{destination.accountHandle ? ` · ${destination.accountHandle}` : ''}</div></button>)}</div><button onClick={() => setDestinationSelection(null)} className="studio-button studio-button--soft" style={{ marginTop:16, padding:'9px 12px', fontSize:11 }}>Cancel selection</button></section></div>}
     </div>

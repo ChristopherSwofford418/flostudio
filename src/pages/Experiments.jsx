@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { addExperimentVariant, createExperiment, listExperiments, recordExperimentOutcome, setExperimentStatus } from '../lib/experiments'
+import CreativeExperimentMatrix from '../components/CreativeExperimentMatrix'
 
 const channelOptions = [
   ['store_listing', 'App Store / Play listing'], ['paid_social', 'Paid social'], ['organic_social', 'Organic social'], ['seo', 'SEO content'], ['email', 'Email'], ['landing_page', 'Landing page'],
@@ -84,6 +85,8 @@ export default function Experiments() {
           <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:18 }}><span className="studio-chip" style={{ color:'#ededed', borderColor:'rgba(226,226,226,.28)', background:'rgba(226,226,226,.08)' }}>{scoped.length} active app experiment{scoped.length === 1 ? '' : 's'}</span><span className="studio-chip" style={{ color:'#e9e9e9' }}>Store · paid · social · SEO</span></div>
         </div><div className="abundance-orb abundance-orb--one"/><div className="abundance-orb abundance-orb--two"/>
       </section>
+
+      <CreativeExperimentMatrix apps={apps} workspaceId={workspaceId} userId={userId} onCreated={() => refresh()} />
 
       <section className="studio-panel" style={{ padding:20, marginTop:16 }}>
         <div className="studio-kicker" style={{ color:'#c9c9c9' }}>PLAN A CONTROLLED TEST</div>
