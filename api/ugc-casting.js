@@ -5,6 +5,7 @@ const ACTOR_PROFILES = {
   leo:'Cast Leo: a fictional synthetic adult creator with optimistic, approachable energy and clear product-first demonstration. Keep this fictional appearance internally consistent within the video. Never make him resemble a real person or public figure.',
   sofia:'Cast Sofia: a fictional synthetic adult creator with polished, thoughtful presence and quiet confidence. Keep this fictional appearance internally consistent within the video. Never make her resemble a real person or public figure.',
   alex:'Cast Alex: a fictional synthetic adult creator with a calm, informative, approachable delivery. Keep this fictional appearance internally consistent within the video. Never make them resemble a real person or public figure.',
+  darius:'Cast Darius: a fictional synthetic Black adult creator with grounded confidence, a warm product-first delivery, and a practical strategist presence. Keep his appearance internally consistent within the video. Never make him resemble a real person or public figure.',
 }
 
 const VOICE_PROFILES = {
@@ -14,6 +15,7 @@ const VOICE_PROFILES = {
   puck:'If dialogue is present, use an upbeat, friendly, natural delivery at a lively but clear pace. The voice must sound original and non-identifiable, never like a named or real person.',
   vindemiatrix:'If dialogue is present, use a gentle, polished, thoughtful delivery at a natural pace. The voice must sound original and non-identifiable, never like a named or real person.',
   charon:'If dialogue is present, use a clear, informed, reassuring delivery at a natural pace. The voice must sound original and non-identifiable, never like a named or real person.',
+  alnilam:'If dialogue is present, use a confident, warm, grounded delivery at a natural pace. The voice must sound original and non-identifiable, never like a named or real person.',
 }
 
 export function castingDirection(actorId, voiceId, creatorMode) {

@@ -7,7 +7,7 @@ function Waveform({ active }) {
   </span>
 }
 
-export default function UGCCastingPanel({ actorId, voiceId, onActorChange, onVoiceChange }) {
+export default function UGCCastingPanel({ appName, actorId, voiceId, onActorChange, onVoiceChange }) {
   const audioRef = useRef(null)
   const [playingVoiceId, setPlayingVoiceId] = useState(null)
   const selectedActor = useMemo(() => castingProfile(actorId), [actorId])
@@ -42,10 +42,10 @@ export default function UGCCastingPanel({ actorId, voiceId, onActorChange, onVoi
         <h3 style={{ fontSize:17, letterSpacing:'-.045em', marginTop:4 }}>Choose the on-camera talent before you render.</h3>
         <p style={{ color:'rgba(240,240,240,.58)', fontSize:10.5, lineHeight:1.5, marginTop:5, maxWidth:620 }}>Every profile is a fictional, synthetic adult performer. Use **Play demo** to hear the supplied voice style; the final video uses the selected talent profile as direction, never an imitation of a real person.</p>
       </div>
-      <span className="abundance-pill">{selectedActor.name} · {selectedVoice.shortName}</span>
+      <span className="abundance-pill">{appName ? `${appName} · ${selectedActor.name} · ${selectedVoice.shortName}` : `${selectedActor.name} · ${selectedVoice.shortName}`}</span>
     </div>
     <audio ref={audioRef} preload="none" onEnded={() => setPlayingVoiceId(null)} onPause={() => setPlayingVoiceId(null)} />
-    <div style={{ display:'grid', gridTemplateColumns:'repeat(6,minmax(92px,1fr))', gap:8, marginTop:12, overflowX:'auto', paddingBottom:3 }}>
+    <div style={{ display:'grid', gridTemplateColumns:'repeat(7,minmax(92px,1fr))', gap:8, marginTop:12, overflowX:'auto', paddingBottom:3 }}>
       {SYNTHETIC_ACTORS.map(actor => {
         const selected = actor.id === selectedActor.id
         return <button type="button" key={actor.id} onClick={() => chooseActor(actor)} aria-pressed={selected} style={{ minWidth:92, textAlign:'left', overflow:'hidden', border:selected ? '2px solid var(--signal)' : '1px solid rgba(240,240,240,.17)', borderRadius:9, padding:0, background:selected ? 'rgba(49,130,246,.1)' : 'rgba(240,240,240,.03)', cursor:'pointer', color:'#fff' }}>

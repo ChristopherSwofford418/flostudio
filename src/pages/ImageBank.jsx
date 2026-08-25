@@ -300,6 +300,21 @@ export default function ImageBank() {
   }
 
   useEffect(() => {
+    if (!activeApp?.id) return
+    try {
+      const savedCasting = JSON.parse(localStorage.getItem(`flostudio_casting_${activeApp.id}`) || 'null')
+      setActorId(castingProfile(savedCasting?.actorId).id)
+      setVoiceId(voiceProfile(savedCasting?.voiceId).id)
+    } catch {
+      setActorId('maya')
+      setVoiceId('aoede')
+    }
+  }, [activeApp?.id])
+  useEffect(() => {
+    if (!activeApp?.id) return
+    try { localStorage.setItem(`flostudio_casting_${activeApp.id}`, JSON.stringify({ actorId, voiceId })) } catch {}
+  }, [activeApp?.id, actorId, voiceId])
+  useEffect(() => {
     setReferenceImage(null)
     setVideoSource(null)
     setGeneratedResults([])
@@ -596,7 +611,7 @@ export default function ImageBank() {
           </button>)}
         </div>
         {!videoSourceOptions.length && <div style={{ marginTop:12, padding:11, border:'1px dashed rgba(240,240,240,.22)', color:'rgba(240,240,240,.62)', fontSize:11.5 }}>Create an image ad or add an App Store link in Portfolio to choose a real source frame here.</div>}
-        <UGCCastingPanel actorId={actorId} voiceId={voiceId} onActorChange={setActorId} onVoiceChange={setVoiceId} /><div style={{ marginTop:14, paddingTop:13, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">ON-CAMERA DIRECTION / ORIGINAL ADULT TALENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_MODES.map(mode => <button key={mode.id} onClick={() => setCreatorMode(mode.id)} className={`format-card ${creatorMode === mode.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{mode.label}</b><small>{mode.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'160px minmax(0,1fr)', gap:10, alignItems:'center', marginTop:11 }}><div className="abundance-mini-label">UGC STORY SHAPE</div><select className="studio-input" value={ugcStoryShape} onChange={event => setUgcStoryShape(event.target.value)}>{UGC_STORY_SHAPES.map(shape => <option value={shape.id} key={shape.id}>{shape.label} — {shape.detail}</option>)}</select></div><p style={{ color:'rgba(240,240,240,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>Creator modes use original, non-identifiable adult talent. FloStudio never asks the model to imitate a real person. The selected app screen remains the canonical product reference.</p></div>
+        <UGCCastingPanel appName={activeApp?.name} actorId={actorId} voiceId={voiceId} onActorChange={setActorId} onVoiceChange={setVoiceId} /><div style={{ marginTop:14, paddingTop:13, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">ON-CAMERA DIRECTION / ORIGINAL ADULT TALENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_MODES.map(mode => <button key={mode.id} onClick={() => setCreatorMode(mode.id)} className={`format-card ${creatorMode === mode.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{mode.label}</b><small>{mode.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'160px minmax(0,1fr)', gap:10, alignItems:'center', marginTop:11 }}><div className="abundance-mini-label">UGC STORY SHAPE</div><select className="studio-input" value={ugcStoryShape} onChange={event => setUgcStoryShape(event.target.value)}>{UGC_STORY_SHAPES.map(shape => <option value={shape.id} key={shape.id}>{shape.label} — {shape.detail}</option>)}</select></div><p style={{ color:'rgba(240,240,240,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>Creator modes use original, non-identifiable adult talent. FloStudio never asks the model to imitate a real person. The selected app screen remains the canonical product reference.</p></div>
       </section>}
       {activeTab !== 'library' && <section className="abundance-card" style={{ marginTop:18, padding:'14px 16px', borderColor:'rgba(49,130,246,.32)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="abundance-mini-label">CREATIVE DIRECTOR CHECK</div><h2 style={{ fontSize:17, letterSpacing:'-.045em', marginTop:4 }}>Production readiness: {readinessScore} / {creativeReadiness.length}</h2><p style={{ color:'rgba(240,240,240,.6)', fontSize:11, lineHeight:1.5, marginTop:5 }}>FloStudio never blocks an early concept, but complete briefs produce stronger image and UGC-video direction.</p></div><span className="abundance-pill">{readinessScore === creativeReadiness.length ? 'ready to render' : 'brief in progress'}</span></div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:8, marginTop:12 }}>{creativeReadiness.map(item => <div key={item.label} style={{ border:'1px solid rgba(240,240,240,.14)', background:item.ready ? 'rgba(49,130,246,.08)' : 'rgba(240,240,240,.025)', padding:9, borderRadius:3 }}><b style={{ display:'block', fontSize:10.5, color:item.ready ? 'var(--signal)' : '#ffffff' }}>{item.ready ? '✓ ' : '○ '}{item.label}</b><span style={{ display:'block', marginTop:4, color:'rgba(240,240,240,.55)', fontSize:9.5, lineHeight:1.35 }}>{item.ready ? 'Locked into the production brief.' : item.next}</span></div>)}</div></section>}
       {activeTab !== 'library' && <section><div className="abundance-mini-label" style={{ marginTop:18 }}>FORMAT SHELF / START FROM THE AD YOU WANT TO MAKE</div><div className="runbook-shelf">{AD_RUNBOOKS.map(runbook => <button key={runbook.id} onClick={() => selectRunbook(runbook)} className={`runbook-card ${runbookId === runbook.id ? 'active':''}`}><span className="runbook-card__type">{runbook.type}</span><b>{runbook.label}</b><small>{runbook.description}</small></button>)}</div></section>}

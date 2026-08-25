@@ -53,6 +53,15 @@ export const SYNTHETIC_ACTORS = [
     tags:['Informative', 'Calm', 'Trust'],
     prompt:'Alex is a fictional synthetic adult creator with a calm, informative, approachable delivery. Keep their appearance internally consistent within the video. They must not resemble any real person or public figure.',
   },
+  {
+    id:'darius',
+    name:'Darius',
+    role:'Grounded product strategist',
+    portrait:'/visuals/casting/darius-cole.webp',
+    defaultVoice:'alnilam',
+    tags:['Grounded', 'Confident', 'Trust'],
+    prompt:'Darius is a fictional synthetic Black adult creator with a grounded, confident, warm on-camera presence. Keep his appearance internally consistent within the video. He must not resemble any real person or public figure.',
+  },
 ]
 
 export const SYNTHETIC_VOICES = [
@@ -109,6 +118,15 @@ export const SYNTHETIC_VOICES = [
     actorId:'alex',
     detail:'Reassuring product explanation with authority.',
     prompt:'If dialogue is present, use a clear, informed, reassuring delivery at a natural pace. It should sound original and non-identifiable, never like a named or real person.',
+  },
+  {
+    id:'alnilam',
+    name:'Grounded confident',
+    shortName:'Grounded',
+    sample:'/visuals/casting/darius-alnilam-demo.wav',
+    actorId:'darius',
+    detail:'Warm, assured product guidance with an original baritone.',
+    prompt:'If dialogue is present, use a confident, warm, grounded delivery at a natural pace. It should sound original and non-identifiable, never like a named or real person.',
   },
 ]
 
