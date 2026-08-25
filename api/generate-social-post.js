@@ -1,6 +1,7 @@
 import { authenticatedProviderUser, resolveWorkspaceOpenAIKey, providerKeyError } from './provider-key-vault.js'
 
 const SUPABASE_URL = 'https://jtogllurcrxxaguoxeus.supabase.co'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0b2dsbHVyY3J4eGFndW94ZXVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MDE2OTEsImV4cCI6MjEwMjM3NzY5MX0.2BanYaDFNpDMrwaBfz4vSa-CroeOhynemXh7m5YmBYM'
 const PLATFORM_RULES = {
   instagram:{ label:'Instagram', maxCaption:1800, hashtags:'Use 5–10 purposeful hashtags. Lead with a hook and end with a natural CTA. Write scannable line breaks; do not pad.' },
   tiktok:{ label:'TikTok', maxCaption:1000, hashtags:'Use 3–7 focused hashtags. Make the first line creator-native, specific, and conversational.' },
@@ -32,20 +33,18 @@ function error(code, message, status = 400) {
   return result
 }
 
-async function serviceDb(path, { method='GET', body, prefer='return=representation' } = {}) {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!key) throw error('SOCIAL_DRAFT_STORAGE_SETUP_REQUIRED', 'FloStudio’s secure social-draft storage is not configured in production yet.', 503)
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers:{ apikey:key, Authorization:`Bearer ${key}`, 'Content-Type':'application/json', Prefer:prefer }, ...(body !== undefined ? { body:JSON.stringify(body) } : {}) })
+async function serviceDb(accessToken, path, { method='GET', body, prefer='return=representation' } = {}) {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json', Prefer:prefer }, ...(body !== undefined ? { body:JSON.stringify(body) } : {}) })
   const text = await response.text()
   const payload = text ? (() => { try { return JSON.parse(text) } catch { return text } })() : null
-  if (!response.ok) throw error('SOCIAL_DRAFT_STORAGE_ERROR', payload?.message || 'FloStudio could not save the generated post draft.', 500)
+  if (!response.ok) throw error('SOCIAL_DRAFT_STORAGE_ERROR', payload?.message || 'FloStudio could not save the generated post draft.', response.status === 401 || response.status === 403 ? response.status : 500)
   return payload
 }
 
-async function ownProduct(userId, productId) {
+async function ownProduct(userId, productId, accessToken) {
   if (!productId) throw error('PRODUCT_REQUIRED', 'Choose a portfolio app before generating social content.')
   const params = new URLSearchParams({ select:'id,workspace_id,user_id,brand_id,name,product_url,description,offer_text,audience,source_facts,brands:brand_id(name,brand_dna)', id:`eq.${productId}`, user_id:`eq.${userId}`, limit:'1' })
-  const rows = await serviceDb(`products?${params.toString()}`)
+  const rows = await serviceDb(accessToken, `products?${params.toString()}`)
   if (!rows?.[0]) throw error('PRODUCT_NOT_FOUND', 'FloStudio could not find that app in your workspace.', 404)
   return rows[0]
 }
@@ -129,14 +128,14 @@ export default async function handler(req, res) {
     const { user, accessToken } = await authenticatedProviderUser(req)
     const workspaceId = String(body.workspaceId || '').trim()
     if (!workspaceId) throw error('WORKSPACE_REQUIRED', 'Select a FloStudio workspace before generating content.')
-    const product = await ownProduct(user.id, body.productId)
+    const product = await ownProduct(user.id, body.productId, accessToken)
     const platform = String(body.platform || '').toLowerCase()
     const rule = PLATFORM_RULES[platform]
     if (!rule) throw error('PLATFORM_REQUIRED', 'Choose a supported social channel for this draft.')
     const mediaKind = ['image','video','text'].includes(body.mediaKind) ? body.mediaKind : 'image'
     const [agents, channels] = await Promise.all([
-      serviceDb(`app_brand_agents?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&limit=1`),
-      serviceDb(`app_channel_profiles?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&platform=eq.${encodeURIComponent(platform)}&limit=1`),
+      serviceDb(accessToken, `app_brand_agents?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&limit=1`),
+      serviceDb(accessToken, `app_channel_profiles?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&platform=eq.${encodeURIComponent(platform)}&limit=1`),
     ])
     const agent = derivedAgent(product, agents?.[0])
     const channel = channels?.[0] || {}
@@ -166,7 +165,7 @@ export default async function handler(req, res) {
       prompt_snapshot:{ product:agent.sourceFacts, agent:{ name:agent.name, voice:agent.voice, audience:agent.audience, proofPoints:agent.proofPoints, prohibitedClaims:agent.prohibitedClaims }, channel:{ platform, tone:channel.tone || body.tone || '', approvalMode:channel.approval_mode || 'review' }, media:{ kind:mediaKind, url:body.mediaUrl || null, description:mediaDescription } },
       status:'ready_for_review',
     }
-    const rows = await serviceDb('ai_social_drafts', { method:'POST', body:payload })
+    const rows = await serviceDb(accessToken, 'ai_social_drafts', { method:'POST', body:payload })
     return res.status(200).json({ draft:rows?.[0], generated, product:{ id:product.id, name:product.name }, platform, provider:'openai' })
   } catch (caught) {
     return res.status(caught?.status || 500).json({ error:caught?.message || 'FloStudio could not generate this social post.', code:caught?.code || 'SOCIAL_AGENT_ERROR' })
