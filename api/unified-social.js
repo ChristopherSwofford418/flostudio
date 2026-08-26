@@ -63,14 +63,17 @@ function providerSetup() {
   const domain = process.env.AYRSHARE_DOMAIN
   const privateKey = process.env.AYRSHARE_PRIVATE_KEY
   const secureStorage = Boolean(process.env.UNIFIED_SOCIAL_VAULT_KEY || process.env.SOCIAL_CREDENTIALS_ENCRYPTION_KEY || process.env.OPENAI_PROVIDER_VAULT_KEY)
+  const configured = Boolean(apiKey && secureStorage)
+  const connectionConfigured = Boolean(configured && domain && privateKey)
   return {
-    configured: Boolean(apiKey && secureStorage),
-    connectionConfigured: Boolean(apiKey && domain && privateKey && secureStorage),
+    configured,
+    connectionConfigured,
+    ownerMode: Boolean(configured && !connectionConfigured),
     apiKey,
     domain,
     privateKey,
     secureStorage,
-    requirement: 'Add AYRSHARE_API_KEY and UNIFIED_SOCIAL_VAULT_KEY in FloStudio production. Add AYRSHARE_DOMAIN and AYRSHARE_PRIVATE_KEY to activate embedded account linking.',
+    requirement: 'Add AYRSHARE_API_KEY and UNIFIED_SOCIAL_VAULT_KEY in FloStudio production. Add AYRSHARE_DOMAIN and AYRSHARE_PRIVATE_KEY later to activate member-managed embedded account linking.',
   }
 }
 
@@ -145,9 +148,13 @@ async function providerRequest(path, setup, { method='GET', body, profileKey } =
 async function ensureProfile(user, workspaceId, setup, accessToken) {
   const existing = await profileFor(user.id, accessToken)
   if (existing) return existing
-  if (!setup.connectionConfigured) throw apiError('UNIFIED_SOCIAL_SETUP_REQUIRED', setup.requirement, 503)
+  if (!setup.configured) throw apiError('UNIFIED_SOCIAL_SETUP_REQUIRED', setup.requirement, 503)
   const suffix = crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 10)
   const title = `FloStudio ${String(user.email || 'user').split('@')[0].replace(/[^a-z0-9]/gi, '-').slice(0, 38)}-${suffix}`
+  if (setup.ownerMode) {
+    const rows = await db(accessToken, 'unified_social_profiles', { method:'POST', body:{ user_id:user.id, workspace_id:workspaceId || null, provider:'ayrshare', provider_profile_id:'owner_primary', provider_ref_id:null, encrypted_profile_key:encrypt('owner_primary'), profile_title:`${title} / Owner test`, status:'connection_pending' } })
+    return rows?.[0]
+  }
   const created = await providerRequest('/profiles', setup, { method:'POST', body:{ title, subHeader:'Connect the social accounts you want FloStudio to manage.', hideTopHeader:true } })
   if (!created?.profileKey) throw apiError('UNIFIED_SOCIAL_PROFILE_CREATE_FAILED', 'The social provider did not return a protected profile key.', 422)
   const rows = await db(accessToken, 'unified_social_profiles', { method:'POST', body:{ user_id:user.id, workspace_id:workspaceId || null, provider:'ayrshare', provider_profile_id:created.profileKey ? `profile:${suffix}` : null, provider_ref_id:created.refId || null, encrypted_profile_key:encrypt(created.profileKey), profile_title:title, status:'created' } })
@@ -171,7 +178,8 @@ async function syncProfile(user, setup, accessToken) {
   const profile = await profileFor(user.id, accessToken)
   if (!profile) throw apiError('UNIFIED_SOCIAL_PROFILE_REQUIRED', 'Create your FloStudio social profile before syncing connected channels.', 409)
   if (!setup.configured) return { profile, accounts:accountList(profile.account_snapshot), configured:false, requirement:setup.requirement }
-  const snapshot = await providerRequest('/user', setup, { profileKey:decrypt(profile.encrypted_profile_key) })
+  const profileKey = profile.provider_profile_id === 'owner_primary' ? null : decrypt(profile.encrypted_profile_key)
+  const snapshot = await providerRequest('/user', setup, profileKey ? { profileKey } : {})
   const accounts = accountList(snapshot)
   const rows = await db(accessToken, `unified_social_profiles?id=eq.${encodeURIComponent(profile.id)}`, { method:'PATCH', body:{ status:accounts.length ? 'connected':'connection_pending', connected_platforms:Array.from(new Set(accounts.map(account => account.platform))), account_snapshot:snapshot, last_synced_at:new Date().toISOString(), last_error_code:null, last_error_message:null, updated_at:new Date().toISOString() } })
   return { profile:rows?.[0] || profile, accounts, configured:true }
@@ -254,15 +262,18 @@ export default async function handler(req, res) {
     const setup = providerSetup()
     if (body.action === 'status') {
       const profile = await profileFor(user.id, accessToken)
-      return res.status(200).json({ configured:setup.configured, requirement:setup.requirement, profile:profile ? { id:profile.id, title:profile.profile_title, status:profile.status, connectedPlatforms:profile.connected_platforms || [], lastSyncedAt:profile.last_synced_at } : null, accounts:profile ? accountList(profile.account_snapshot) : [] })
+      return res.status(200).json({ configured:setup.configured, connectionConfigured:setup.connectionConfigured, ownerMode:setup.ownerMode, requirement:setup.requirement, profile:profile ? { id:profile.id, title:profile.profile_title, status:profile.status, connectedPlatforms:profile.connected_platforms || [], lastSyncedAt:profile.last_synced_at } : null, accounts:profile ? accountList(profile.account_snapshot) : [] })
     }
     if (body.action === 'begin_connect') {
       const profile = await ensureProfile(user, body.workspaceId, setup, accessToken)
       if (!setup.configured) throw apiError('UNIFIED_SOCIAL_SETUP_REQUIRED', setup.requirement, 503)
+      await db(accessToken, `unified_social_profiles?id=eq.${encodeURIComponent(profile.id)}`, { method:'PATCH', body:{ status:'connection_pending', updated_at:new Date().toISOString() } })
+      if (setup.ownerMode) {
+        return res.status(200).json({ authorizationUrl:'https://app.ayrshare.com/social-accounts', ownerManaged:true, profile:{ id:profile.id, title:profile.profile_title } })
+      }
       const requested = cleanPlatforms(body.allowedSocial)
       const payload = { domain:setup.domain, privateKey:setup.privateKey, profileKey:decrypt(profile.encrypted_profile_key), allowedSocial:requested.length ? requested : PLATFORMS, redirect:`${String(process.env.PUBLIC_APP_URL || 'https://www.flostudio.io').replace(/\/$/, '')}/accounts?unifiedConnected=1`, expiresIn:10 }
       const linked = await providerRequest('/profiles/generateJWT', setup, { method:'POST', body:payload })
-      await db(accessToken, `unified_social_profiles?id=eq.${encodeURIComponent(profile.id)}`, { method:'PATCH', body:{ status:'connection_pending', updated_at:new Date().toISOString() } })
       return res.status(200).json({ authorizationUrl:linked.url, expiresIn:linked.expiresIn || '10m', profile:{ id:profile.id, title:profile.profile_title } })
     }
     if (body.action === 'sync') return res.status(200).json(await syncProfile(user, setup, accessToken))
