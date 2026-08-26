@@ -259,6 +259,20 @@ export default function Pipeline() {
     const next = apps.find(app => app.id === productId)
     if (next) setActiveApp(next)
     setScopeMode('app')
+    setActiveTab('pending')
+    setSelectedPost(null)
+  }
+
+  const toggleScope = () => {
+    const nextScope = scopeMode === 'app' ? 'all' : 'app'
+    setScopeMode(nextScope)
+    setActiveTab(nextScope === 'all' ? 'all' : 'pending')
+    setSelectedPost(null)
+  }
+
+  const viewLegacyPosts = () => {
+    setScopeMode('all')
+    setActiveTab('all')
     setSelectedPost(null)
   }
 
@@ -291,7 +305,7 @@ export default function Pipeline() {
         </div>
         <div className="pipeline-context">
           <div><div className="pipeline-kicker">PIPELINE CONTEXT</div><p style={{ color:'rgba(243,244,255,.65)', fontSize:10.5, marginTop:5 }}>Switch apps to scope review posts and available Creative Lab media together. Existing unassigned history remains available from All Portfolio.</p></div>
-          <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1fr) auto', gap:8, alignItems:'end' }}><label style={{ display:'grid', gap:5, color:'#c7c4f4', fontSize:9, fontWeight:850, letterSpacing:'.09em', textTransform:'uppercase' }}>Portfolio app<select value={activeApp?.id || ''} onChange={event => changeApp(event.target.value)} style={{ padding:'10px 11px', borderRadius:10, border:'1px solid rgba(255,255,255,.22)', background:'#fff', color:'#20243d', fontWeight:800, textTransform:'none', letterSpacing:0 }}>{apps.map(app => <option key={app.id} value={app.id}>{app.name}{app.category ? ` · ${app.category}` : ''}</option>)}</select></label><button type="button" onClick={() => setScopeMode(mode => mode === 'app' ? 'all' : 'app')} className="pipeline-action" style={{ height:38, color:'#fff', borderColor:'rgba(255,255,255,.25)', background:scopeMode === 'all' ? '#786ff1' : 'rgba(255,255,255,.08)' }}>{scopeMode === 'all' ? 'App view' : 'All portfolio'}</button></div>
+          <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1fr) auto', gap:8, alignItems:'end' }}><label style={{ display:'grid', gap:5, color:'#c7c4f4', fontSize:9, fontWeight:850, letterSpacing:'.09em', textTransform:'uppercase' }}>Portfolio app<select value={activeApp?.id || ''} onChange={event => changeApp(event.target.value)} style={{ padding:'10px 11px', borderRadius:10, border:'1px solid rgba(255,255,255,.22)', background:'#fff', color:'#20243d', fontWeight:800, textTransform:'none', letterSpacing:0 }}>{apps.map(app => <option key={app.id} value={app.id}>{app.name}{app.category ? ` · ${app.category}` : ''}</option>)}</select></label><button type="button" onClick={toggleScope} className="pipeline-action" style={{ height:38, color:'#fff', borderColor:'rgba(255,255,255,.25)', background:scopeMode === 'all' ? '#786ff1' : 'rgba(255,255,255,.08)' }}>{scopeMode === 'all' ? 'App view' : 'All portfolio'}</button></div>
         </div>
       </section>
 
@@ -310,7 +324,7 @@ export default function Pipeline() {
         </div>
       </section>
 
-      {loading ? <div className="pipeline-empty"><span style={{ width:28, height:28, border:'3px solid #dde2f0', borderTopColor:'#6159e7', borderRadius:'50%', display:'inline-block', animation:'pipelineSpin .75s linear infinite' }}/></div> : posts.length === 0 ? <div className="pipeline-empty"><div className="pipeline-kicker" style={{ color:'#756fca' }}>CLEAR PIPELINE</div><h2 style={{ color:'#29324b', fontSize:22, letterSpacing:'-.04em', marginTop:7 }}>No {activeTab === 'all' ? '' : statusLabel(activeTab)} posts for {scopeMode === 'all' ? 'this portfolio view' : (activeApp?.name || 'this app')}.</h2><p style={{ maxWidth:490, margin:'8px auto 0', fontSize:11.5, lineHeight:1.6 }}>Create campaigns and visual assets for the selected app, or change the context above to review another part of the portfolio.</p>{scopeMode === 'app' && legacyCount > 0 && <button type="button" onClick={() => setScopeMode('all')} className="pipeline-action" style={{ marginTop:14 }}>View {legacyCount} preserved legacy posts</button>}</div> : <div style={{ display:'grid', gap:11 }}>{posts.map(post => {
+      {loading ? <div className="pipeline-empty"><span style={{ width:28, height:28, border:'3px solid #dde2f0', borderTopColor:'#6159e7', borderRadius:'50%', display:'inline-block', animation:'pipelineSpin .75s linear infinite' }}/></div> : posts.length === 0 ? <div className="pipeline-empty"><div className="pipeline-kicker" style={{ color:'#756fca' }}>CLEAR PIPELINE</div><h2 style={{ color:'#29324b', fontSize:22, letterSpacing:'-.04em', marginTop:7 }}>No {activeTab === 'all' ? '' : statusLabel(activeTab)} posts for {scopeMode === 'all' ? 'this portfolio view' : (activeApp?.name || 'this app')}.</h2><p style={{ maxWidth:490, margin:'8px auto 0', fontSize:11.5, lineHeight:1.6 }}>Create campaigns and visual assets for the selected app, or change the context above to review another part of the portfolio.</p>{scopeMode === 'app' && legacyCount > 0 && <button type="button" onClick={viewLegacyPosts} className="pipeline-action" style={{ marginTop:14 }}>View {legacyCount} preserved legacy posts</button>}</div> : <div style={{ display:'grid', gap:11 }}>{posts.map(post => {
         const meta = platformMeta(post.platform)
         const score = aiScoring[post.id]
         const postAssets = attachedAssets(post.id)
