@@ -63,8 +63,10 @@ function providerSetup() {
   const domain = process.env.AYRSHARE_DOMAIN
   const privateKey = process.env.AYRSHARE_PRIVATE_KEY
   const secureStorage = Boolean(process.env.UNIFIED_SOCIAL_VAULT_KEY || process.env.SOCIAL_CREDENTIALS_ENCRYPTION_KEY || process.env.OPENAI_PROVIDER_VAULT_KEY)
-  const configured = Boolean(apiKey && secureStorage)
-  const connectionConfigured = Boolean(configured && domain && privateKey)
+  // An owner-primary test never stores a provider profile key or OAuth credential in FloStudio.
+  // It only stores a non-secret sentinel and lets Ayrshare retain the account connections.
+  const configured = Boolean(apiKey)
+  const connectionConfigured = Boolean(configured && secureStorage && domain && privateKey)
   return {
     configured,
     connectionConfigured,
@@ -73,7 +75,7 @@ function providerSetup() {
     domain,
     privateKey,
     secureStorage,
-    requirement: 'Add AYRSHARE_API_KEY and UNIFIED_SOCIAL_VAULT_KEY in FloStudio production. Add AYRSHARE_DOMAIN and AYRSHARE_PRIVATE_KEY later to activate member-managed embedded account linking.',
+    requirement: 'Add AYRSHARE_API_KEY in FloStudio production to test the owner account. Add UNIFIED_SOCIAL_VAULT_KEY, AYRSHARE_DOMAIN, and AYRSHARE_PRIVATE_KEY later to activate member-managed embedded account linking.',
   }
 }
 
@@ -152,7 +154,7 @@ async function ensureProfile(user, workspaceId, setup, accessToken) {
   const suffix = crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 10)
   const title = `FloStudio ${String(user.email || 'user').split('@')[0].replace(/[^a-z0-9]/gi, '-').slice(0, 38)}-${suffix}`
   if (setup.ownerMode) {
-    const rows = await db(accessToken, 'unified_social_profiles', { method:'POST', body:{ user_id:user.id, workspace_id:workspaceId || null, provider:'ayrshare', provider_profile_id:'owner_primary', provider_ref_id:null, encrypted_profile_key:encrypt('owner_primary'), profile_title:`${title} / Owner test`, status:'connection_pending' } })
+    const rows = await db(accessToken, 'unified_social_profiles', { method:'POST', body:{ user_id:user.id, workspace_id:workspaceId || null, provider:'ayrshare', provider_profile_id:'owner_primary', provider_ref_id:null, encrypted_profile_key:'owner_primary', profile_title:`${title} / Owner test`, status:'connection_pending' } })
     return rows?.[0]
   }
   const created = await providerRequest('/profiles', setup, { method:'POST', body:{ title, subHeader:'Connect the social accounts you want FloStudio to manage.', hideTopHeader:true } })
