@@ -36,12 +36,17 @@ function userFacingStatus(status, platform) {
 }
 
 export default function Accounts() {
-  const { apps, workspaceId } = useWorkspace()
+  const { apps, workspaceId, activeApp, setActiveApp } = useWorkspace()
   const [statuses, setStatuses] = useState({})
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState('')
   const [notice, setNotice] = useState('')
   const [destinationSelection, setDestinationSelection] = useState(null)
+  const socialApp = activeApp || apps[0] || null
+  const selectSocialApp = appId => {
+    const next = apps.find(app => app.id === appId) || null
+    if (next) setActiveApp(next)
+  }
 
   const api = async (body) => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -138,6 +143,8 @@ export default function Accounts() {
         <div className="abundance-orb abundance-orb--one"/><div className="abundance-orb abundance-orb--two"/>
       </section>
 
+      <section className="studio-panel" style={{ marginTop:16, padding:'14px 17px', display:'flex', gap:14, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', background:'linear-gradient(135deg,rgba(255,255,255,.98),rgba(243,246,255,.95))', borderColor:'rgba(95,89,232,.2)' }}><div><div className="studio-kicker">SOCIAL WORKSPACE CONTEXT</div><p style={{ color:'#596079', fontSize:11.5, lineHeight:1.5, marginTop:5 }}>Switch apps here to update channel mapping, brand rules, review drafts, and the Creative Lab image-and-video library together.</p></div><label style={{ display:'grid', gap:5, minWidth:'min(100%,330px)', color:'#525a76', fontSize:9.5, fontWeight:850, letterSpacing:'.08em', textTransform:'uppercase' }}>Active portfolio app<select value={socialApp?.id || ''} onChange={event => selectSocialApp(event.target.value)} style={{ padding:'10px 12px', borderRadius:10, background:'#fff', color:'#20243d', border:'1px solid #dce1ee', fontWeight:800, textTransform:'none', letterSpacing:0 }}>{apps.map(app => <option key={app.id} value={app.id}>{app.name}{app.category ? ` · ${app.category}` : ''}</option>)}</select></label></section>
+
       <section style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginTop:16 }}>
         <div className="studio-panel" style={{ padding:17 }}><div className="studio-kicker" style={{ color:'#c9c9c9' }}>01 / AUTHORIZE</div><p style={{ color:'rgba(242,242,242,.68)', fontSize:11.5, lineHeight:1.55, marginTop:8 }}>FloStudio opens the provider’s real consent screen, then completes the code exchange only on the server.</p></div>
         <div className="studio-panel" style={{ padding:17 }}><div className="studio-kicker" style={{ color:'#c0c0c0' }}>02 / MAP</div><p style={{ color:'rgba(242,242,242,.68)', fontSize:11.5, lineHeight:1.55, marginTop:8 }}>When a provider returns several destinations, choose the specific Page or Professional account FloStudio may use.</p></div>
@@ -155,9 +162,9 @@ export default function Accounts() {
         })}</div>
       </section>
 
-      <AppSocialStudio apps={apps} workspaceId={workspaceId} />
+      <AppSocialStudio apps={apps} workspaceId={workspaceId} activeAppId={socialApp?.id || ''} onAppChange={selectSocialApp} />
 
-      <AppAwarePostStudio apps={apps} workspaceId={workspaceId} />
+      <AppAwarePostStudio apps={apps} workspaceId={workspaceId} activeAppId={socialApp?.id || ''} onAppChange={selectSocialApp} />
 
       <PerformanceConnectionDesk workspaceId={workspaceId} />
 
