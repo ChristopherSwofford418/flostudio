@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 import { listMediaAssets, updateMediaAsset } from '../lib/mediaAssets'
@@ -6,27 +6,58 @@ import { generateVisualForPost } from '../lib/postVisuals'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { recordMemoryEvent } from '../lib/creativeMemory'
 
-const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIicgLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NjIwMjU0OCwiZXhwIjoyMDkxNzc4NTQ4f5.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODQwOH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
+
+const PLATFORM_META = {
+  instagram:{ label:'Instagram', accent:'#b462d8', icon:'IG' },
+  twitter:{ label:'X', accent:'#1c1f2b', icon:'X' },
+  linkedin:{ label:'LinkedIn', accent:'#1677b9', icon:'in' },
+  facebook:{ label:'Facebook', accent:'#2372dc', icon:'f' },
+  tiktok:{ label:'TikTok', accent:'#111827', icon:'TT' },
+}
+const STATUS_TABS = ['pending', 'approved', 'published', 'all']
 
 async function callAI(messages, maxTokens = 800) {
   const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/ai-proxy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON },
-    body: JSON.stringify({ model: 'gpt-4o', messages, max_tokens: maxTokens }),
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${ANON}`, apikey:ANON },
+    body:JSON.stringify({ model:'gpt-4o', messages, max_tokens:maxTokens }),
   })
-  const d = await res.json()
-  return d?.content || d?.choices?.[0]?.message?.content || ''
+  const data = await res.json()
+  return data?.content || data?.choices?.[0]?.message?.content || ''
 }
 
-const PLATFORM_COLORS = { instagram: '#7c7c7c', twitter: '#aaaaaa', linkedin: '#aaaaaa', facebook: '#aaaaaa', tiktok: '#c5c5c5' }
-const STATUS_TABS = ['pending', 'approved', 'published', 'all']
+function platformMeta(platform) {
+  return PLATFORM_META[platform] || { label:platform || 'Channel', accent:'#667085', icon:String(platform || 'P').slice(0, 2).toUpperCase() }
+}
+
+function statusLabel(status) {
+  return String(status || 'pending').replaceAll('_', ' ')
+}
+
+function dateLabel(value) {
+  if (!value) return 'Unscheduled'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Unscheduled'
+  return date.toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })
+}
+
+function AssetThumb({ asset, alt = 'Campaign creative' }) {
+  if (!asset) return null
+  return asset.kind === 'video'
+    ? <video src={asset.asset_url} poster={asset.thumbnail_url || undefined} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+    : <img src={asset.asset_url} alt={alt} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+}
 
 export default function Pipeline() {
-  const { useTokens } = useWorkspace()
+  const { useTokens, apps, activeApp, setActiveApp } = useWorkspace()
   const [posts, setPosts] = useState([])
   const [allPosts, setAllPosts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [activeTab, setActiveTab] = useState('pending')
+  const [scopeMode, setScopeMode] = useState('app')
+  const [legacyCount, setLegacyCount] = useState(0)
   const [selectedPost, setSelectedPost] = useState(null)
   const [editContent, setEditContent] = useState('')
   const [aiRewriting, setAiRewriting] = useState(false)
@@ -40,47 +71,64 @@ export default function Pipeline() {
   const [publishing, setPublishing] = useState({})
   const [publishErrors, setPublishErrors] = useState({})
 
-  useEffect(() => { loadPosts() }, [activeTab])
+  const activeProductId = activeApp?.id || ''
 
   const loadPosts = async () => {
     setLoading(true)
-    const [{ data: allData, error }, mediaResult] = await Promise.all([
-      supabase.from('campaign_posts').select('*').order('scheduled_at', { ascending: true }),
-      listMediaAssets().catch(() => []),
-    ])
-    setMediaAssets(mediaResult.filter(asset => asset.render_status === 'ready' || asset.render_status === 'completed'))
-    if (!error && allData) {
-      setAllPosts(allData)
-      if (activeTab === 'all') {
-        setPosts(allData)
-      } else {
-        setPosts(allData.filter(p => p.status === activeTab))
-      }
-    } else {
+    setLoadError('')
+    try {
+      const [postResult, campaignResult, mediaResult] = await Promise.all([
+        supabase.from('campaign_posts').select('*').order('scheduled_at', { ascending:true }),
+        supabase.from('campaigns').select('id,product_id,name'),
+        listMediaAssets(activeProductId).catch(() => []),
+      ])
+      if (postResult.error) throw postResult.error
+      if (campaignResult.error) throw campaignResult.error
+      const campaignById = Object.fromEntries((campaignResult.data || []).map(campaign => [campaign.id, campaign]))
+      const enriched = (postResult.data || []).map(post => ({ ...post, campaign:campaignById[post.campaign_id] || null }))
+      const assigned = enriched.filter(post => post.campaign?.product_id)
+      const unassigned = enriched.length - assigned.length
+      const scoped = scopeMode === 'app' && activeProductId
+        ? enriched.filter(post => post.campaign?.product_id === activeProductId)
+        : enriched
+      const readyMedia = (mediaResult || []).filter(asset => ['ready', 'completed'].includes(asset.render_status))
+      setLegacyCount(unassigned)
+      setMediaAssets(readyMedia)
+      setAllPosts(scoped)
+      setPosts(activeTab === 'all' ? scoped : scoped.filter(post => post.status === activeTab))
+    } catch (error) {
+      setLoadError(error.message || 'FloStudio could not load this pipeline view.')
       setPosts([])
       setAllPosts([])
-    }
-    setLoading(false)
+      setMediaAssets([])
+    } finally { setLoading(false) }
   }
 
-  const openPost = (post) => {
-    setSelectedPost(post)
-    setEditContent(post.content)
-    setAiSuggestion('')
-    setShowAssetPicker(false)
-  }
+  useEffect(() => { loadPosts() }, [activeTab, activeProductId, scopeMode])
+
+  const counts = useMemo(() => ({
+    pending:allPosts.filter(post => post.status === 'pending').length,
+    approved:allPosts.filter(post => post.status === 'approved').length,
+    published:allPosts.filter(post => post.status === 'published').length,
+  }), [allPosts])
 
   const attachedAssets = postId => mediaAssets.filter(asset => asset.campaign_post_id === postId)
   const availableAssets = mediaAssets.filter(asset => !asset.campaign_post_id)
+
+  const openPost = post => {
+    setSelectedPost(post)
+    setEditContent(post.content || '')
+    setAiSuggestion('')
+    setShowAssetPicker(false)
+  }
 
   const attachAsset = async asset => {
     if (!selectedPost) return
     await updateMediaAsset(asset.id, { campaign_post_id:selectedPost.id })
     const { data:{ user } } = await supabase.auth.getUser()
-    if (user && selectedPost.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:selectedPost.campaign_id, mediaAssetId:asset.id, eventType:'asset_attached', attributes:{ platform:selectedPost.platform, method:'review_queue' } })
+    if (user && selectedPost.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:selectedPost.campaign_id, mediaAssetId:asset.id, eventType:'asset_attached', attributes:{ platform:selectedPost.platform, method:'pipeline_review' } })
     setShowAssetPicker(false)
     await loadPosts()
-    setSelectedPost(previous => previous ? { ...previous } : previous)
   }
 
   const detachAsset = async asset => {
@@ -93,12 +141,12 @@ export default function Pipeline() {
     setVisualGenerating(previous => ({ ...previous, [post.id]:'working' }))
     try {
       const authorized = await useTokens(10, 'Campaign visual')
-      if (!authorized) { setVisualGenerating(previous => ({ ...previous, [post.id]:null })); return }
+      if (!authorized) return
       await generateVisualForPost(post)
       setVisualGenerating(previous => ({ ...previous, [post.id]:'done' }))
       await loadPosts()
-    } catch (visualError) {
-      setVisualGenerating(previous => ({ ...previous, [post.id]:`error:${visualError.message || 'Generation failed'}` }))
+    } catch (error) {
+      setVisualGenerating(previous => ({ ...previous, [post.id]:`error:${error.message || 'Generation failed'}` }))
     }
   }
 
@@ -116,9 +164,9 @@ export default function Pipeline() {
         await generateVisualForPost(post)
         complete += 1
         setVisualGenerating(previous => ({ ...previous, [post.id]:'done' }))
-      } catch (visualError) {
+      } catch (error) {
         failed += 1
-        setVisualGenerating(previous => ({ ...previous, [post.id]:`error:${visualError.message || 'Generation failed'}` }))
+        setVisualGenerating(previous => ({ ...previous, [post.id]:`error:${error.message || 'Generation failed'}` }))
       }
       setBatchVisualProgress({ complete, total:targets.length, failed })
     }
@@ -127,7 +175,7 @@ export default function Pipeline() {
 
   const saveEdit = async () => {
     if (!selectedPost) return
-    await supabase.from('campaign_posts').update({ content: editContent }).eq('id', selectedPost.id)
+    await supabase.from('campaign_posts').update({ content:editContent }).eq('id', selectedPost.id)
     const { data:{ user } } = await supabase.auth.getUser()
     if (user && selectedPost.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:selectedPost.campaign_id, eventType:'post_rewritten', attributes:{ platform:selectedPost.platform, changed:Boolean(editContent !== selectedPost.content) } })
     setSelectedPost(null)
@@ -162,7 +210,7 @@ export default function Pipeline() {
     } finally { setPublishing(previous => ({ ...previous, [post.id]:false })) }
   }
 
-  const deletePost = async (id) => {
+  const deletePost = async id => {
     await supabase.from('campaign_posts').delete().eq('id', id)
     if (selectedPost?.id === id) setSelectedPost(null)
     await loadPosts()
@@ -170,11 +218,11 @@ export default function Pipeline() {
 
   const bulkApproveAll = async () => {
     setBulkApproving(true)
-    const pendingIds = allPosts.filter(p => p.status === 'pending').map(p => p.id)
-    if (pendingIds.length > 0) {
-      await supabase.from('campaign_posts').update({ status: 'approved' }).in('id', pendingIds)
+    const pendingIds = allPosts.filter(post => post.status === 'pending').map(post => post.id)
+    if (pendingIds.length) {
+      await supabase.from('campaign_posts').update({ status:'approved' }).in('id', pendingIds)
       const { data:{ user } } = await supabase.auth.getUser()
-      if (user) await Promise.all(allPosts.filter(post => pendingIds.includes(post.id) && post.campaign_id).map(post => recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:'post_approved', attributes:{ platform:post.platform, postId:post.id, method:'bulk_review' } })))
+      if (user) await Promise.all(allPosts.filter(post => pendingIds.includes(post.id) && post.campaign_id).map(post => recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:'post_approved', attributes:{ platform:post.platform, postId:post.id, method:'bulk_pipeline_review' } })))
     }
     await loadPosts()
     setBulkApproving(false)
@@ -184,152 +232,92 @@ export default function Pipeline() {
     setAiRewriting(true)
     setAiSuggestion('')
     const text = await callAI([
-      { role: 'system', content: 'You are a social media expert. Rewrite the given post to be more engaging, clear, and platform-appropriate. Keep it concise. Return only the rewritten post text, no explanation.' },
-      { role: 'user', content: `Platform: ${selectedPost?.platform}\nOriginal post:\n${editContent}` }
+      { role:'system', content:'You are a social media editor. Rewrite the given post to be more engaging, clear, and platform-appropriate. Keep it concise. Return only the rewritten post text, with no explanation.' },
+      { role:'user', content:`Platform: ${selectedPost?.platform}\nOriginal post:\n${editContent}` },
     ])
     setAiSuggestion(text.trim())
     setAiRewriting(false)
   }
 
-  const scorePost = async (post) => {
+  const scorePost = async post => {
     if (aiScoring[post.id]) return
-    setAiScoring(prev => ({ ...prev, [post.id]: 'loading' }))
+    setAiScoring(previous => ({ ...previous, [post.id]:'loading' }))
     const text = await callAI([
-      { role: 'system', content: 'Rate this social media post on a scale of 1-10 for engagement potential. Return JSON: {"score":7,"reason":"..."}' },
-      { role: 'user', content: `Platform: ${post.platform}\nPost: ${post.content.substring(0, 300)}` }
+      { role:'system', content:'Rate this social media post on a scale of 1-10 for engagement potential. Return JSON only: {"score":7,"reason":"..."}' },
+      { role:'user', content:`Platform: ${post.platform}\nPost: ${String(post.content || '').slice(0, 300)}` },
     ], 200)
-    let result = { score: 7, reason: '' }
-    try { const m = text.match(/\{[\s\S]*\}/); result = m ? JSON.parse(m[0]) : result } catch {}
-    setAiScoring(prev => ({ ...prev, [post.id]: result }))
+    let result = { score:7, reason:'' }
+    try { const match = text.match(/\{[\s\S]*\}/); result = match ? JSON.parse(match[0]) : result } catch {}
+    setAiScoring(previous => ({ ...previous, [post.id]:result }))
   }
 
-  const counts = {
-    pending: allPosts.filter(p => p.status === 'pending').length,
-    approved: allPosts.filter(p => p.status === 'approved').length,
-    published: allPosts.filter(p => p.status === 'published').length,
+  const changeApp = productId => {
+    const next = apps.find(app => app.id === productId)
+    if (next) setActiveApp(next)
+    setScopeMode('app')
+    setSelectedPost(null)
   }
 
-  return (
-    <Layout title="Content Pipeline">
-      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
-
-      <div className="flo-page" style={{ maxWidth: 1100, margin: '0 auto', animation: 'fadeIn 0.25s ease' }}>
-
-        {/* Decision desk */}
-        <section className="abundance-shell" style={{ display:'grid', gridTemplateColumns:'1.18fr .82fr', minHeight:230, marginBottom:24 }}>
-          <div style={{ padding:'27px 30px', position:'relative', zIndex:1, display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
-            <div><div className="abundance-eyebrow">Review queue / Decision desk</div><h1 className="abundance-title" style={{ fontSize:'clamp(32px,4vw,48px)', maxWidth:500, marginTop:10 }}>Strong ideas need a <em>final call.</em></h1><p className="abundance-copy" style={{ marginTop:14, maxWidth:490 }}>Score what is worth shipping, revise what needs a sharper edge, and keep your brand’s creative quality high.</p></div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center' }}>{counts.pending > 0 && <button onClick={bulkApproveAll} disabled={bulkApproving} className="studio-button" style={{ alignSelf:'flex-start' }}>{bulkApproving ? 'Approving drafts…' : `Approve all pending (${counts.pending}) →`}</button>}<button onClick={generateQueueVisuals} disabled={Boolean(batchVisualProgress && batchVisualProgress.complete < batchVisualProgress.total)} className="studio-chip" style={{ background:'rgba(255,255,255,.12)', color:'#ffffff', borderColor:'rgba(255,255,255,.25)', padding:'10px 13px' }}>{batchVisualProgress ? `Creating visuals ${batchVisualProgress.complete}/${batchVisualProgress.total}` : 'Create visuals for next 5'}</button></div>
-          </div>
-          <div style={{ position:'relative', minHeight:230, overflow:'hidden' }}><img src="/visuals/flo-preview-editorial.jpg" alt="Creative review moodboard" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', opacity:.9 }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#272727 0%,rgba(39,39,39,.18) 55%,rgba(8,8,8,.1))' }} /><div className="abundance-glass" style={{ position:'absolute', right:18, bottom:18, color:'#ffffff', padding:'10px 12px', borderRadius:12 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, letterSpacing:'.08em', color:'#c5c5c5' }}>IN REVIEW</div><b style={{ display:'block', marginTop:2, fontSize:12 }}>{counts.pending} decision{counts.pending === 1 ? '' : 's'} waiting</b></div></div>
-        </section>
-
-        {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 22 }}>
-          {[['pending','Pending Review','#c5c5c5'],['approved','Approved','#939393'],['published','Published','#aaaaaa']].map(([s,label,c]) => (
-            <div key={s} onClick={() => setActiveTab(s)} className="abundance-card" style={{ border: `1px solid ${activeTab === s ? c : 'rgba(255,255,255,.13)'}`, padding: '20px 24px', cursor: 'pointer', transition: 'all 0.15s ease', boxShadow: activeTab === s ? `0 8px 28px ${c}28` : undefined }}>
-              <div style={{ fontSize: 26, fontWeight: 800, color: activeTab === s ? c : '#ffffff', letterSpacing: '-0.5px' }}>{counts[s] || 0}</div>
-              <div style={{ fontSize: 12.5, color: 'rgba(232,232,232,.64)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 4 }}>{label}</div>
-            </div>
-          ))}
+  return <Layout title="Pipeline">
+    <style>{`
+      @keyframes pipelineIn{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes pipelineSpin{to{transform:rotate(360deg)}}
+      .pipeline-wrap{max-width:1200px;margin:0 auto;padding:0 4px 52px;animation:pipelineIn .28s ease-out}
+      .pipeline-hero{position:relative;overflow:hidden;padding:30px;border:1px solid #d9e0eb;border-radius:22px;background:linear-gradient(135deg,#111a33 0%,#1b2450 56%,#513fc2 160%);box-shadow:0 20px 52px rgba(18,29,63,.14)}
+      .pipeline-hero:before{content:'';position:absolute;width:460px;height:460px;right:-190px;top:-275px;border-radius:50%;background:radial-gradient(circle,rgba(167,161,255,.4),transparent 67%)}
+      .pipeline-hero:after{content:'';position:absolute;inset:auto 0 0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent)}
+      .pipeline-context{display:grid;grid-template-columns:minmax(0,1fr) minmax(270px,.55fr);gap:16px;align-items:end;position:relative;z-index:1;margin-top:26px;padding-top:17px;border-top:1px solid rgba(255,255,255,.14)}
+      .pipeline-kicker{font:800 9px 'DM Mono',monospace;letter-spacing:.13em;text-transform:uppercase;color:#bdb9ff}
+      .pipeline-stat{padding:15px 16px;border:1px solid #dfe6f0;border-radius:16px;background:#fff;box-shadow:0 9px 22px rgba(20,30,55,.045);cursor:pointer;transition:.18s ease}
+      .pipeline-stat:hover{transform:translateY(-2px);border-color:#bcb7ff}.pipeline-stat.active{border-color:#7068ee;box-shadow:0 12px 26px rgba(91,82,226,.13)}
+      .pipeline-filter{border:1px solid #e0e6ef;border-radius:14px;background:#fff;padding:5px;display:flex;gap:4px;flex-wrap:wrap}.pipeline-filter button{border:0;background:transparent;color:#65708a;border-radius:10px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer}.pipeline-filter button.active{background:#28245a;color:#fff;box-shadow:0 5px 11px rgba(40,36,90,.18)}
+      .pipeline-card{display:grid;grid-template-columns:50px 134px minmax(0,1fr) auto;gap:15px;align-items:stretch;padding:16px;border:1px solid #dfe6ef;border-radius:18px;background:#fff;box-shadow:0 7px 20px rgba(16,24,40,.035)}
+      .pipeline-card:hover{border-color:#c9c6ff;box-shadow:0 12px 28px rgba(56,50,124,.075)}
+      .pipeline-action{border:1px solid #dbe1eb;background:#fff;color:#34405c;border-radius:10px;padding:8px 10px;cursor:pointer;font-size:10.5px;font-weight:800;white-space:nowrap}.pipeline-action:hover{border-color:#9d97f2;background:#f5f4ff;color:#4f48c7}.pipeline-action.primary{background:#5f59e8;color:#fff;border-color:#5f59e8}.pipeline-action.primary:hover{background:#5049d2}.pipeline-action.danger{color:#b64959}.pipeline-action:disabled{opacity:.58;cursor:wait}
+      .pipeline-empty{padding:54px 24px;text-align:center;border:1px dashed #cfd8e6;border-radius:18px;background:#fbfcfe;color:#65708a}
+      @media(max-width:860px){.pipeline-context{grid-template-columns:1fr}.pipeline-card{grid-template-columns:44px 102px minmax(0,1fr)}.pipeline-actions{grid-column:1/-1;justify-content:flex-start!important}.pipeline-card .pipeline-preview{width:102px!important;min-height:102px!important}}
+      @media(max-width:620px){.pipeline-hero{padding:22px 18px}.pipeline-card{grid-template-columns:40px minmax(0,1fr)}.pipeline-preview{display:none}.pipeline-wrap{padding:0 0 36px}}
+    `}</style>
+    <div className="flo-page pipeline-wrap">
+      <section className="pipeline-hero">
+        <div style={{ position:'relative', zIndex:1, display:'flex', justifyContent:'space-between', gap:18, alignItems:'flex-start', flexWrap:'wrap' }}>
+          <div><div className="pipeline-kicker">FLOSTUDIO / CONTENT PIPELINE</div><h1 style={{ color:'#fff', fontSize:'clamp(34px,4.2vw,56px)', lineHeight:.95, letterSpacing:'-.065em', maxWidth:680, marginTop:10 }}>Turn creative into <span className="studio-serif" style={{ color:'#c7c3ff' }}>confident decisions.</span></h1><p style={{ color:'rgba(243,244,255,.74)', fontSize:12.5, lineHeight:1.7, maxWidth:620, marginTop:13 }}>Review the right work for one app at a time. Attach the app’s real Creative Lab media, tune the copy, and move only approved work forward.</p></div>
+          <div style={{ display:'grid', gap:7, minWidth:170, padding:'10px 12px', border:'1px solid rgba(255,255,255,.16)', borderRadius:13, background:'rgba(7,10,29,.25)' }}><span className="pipeline-kicker" style={{ color:'#aaa6ef' }}>IN CURRENT VIEW</span><b style={{ color:'#fff', fontSize:23 }}>{allPosts.length}</b><span style={{ color:'rgba(243,244,255,.66)', fontSize:10.5 }}>post{allPosts.length === 1 ? '' : 's'} in this pipeline</span></div>
         </div>
-
-        {/* Tabs */}
-        <div className="abundance-glass" style={{ display: 'flex', gap: 6, marginBottom: 20, borderRadius: 12, padding: 6, width: 'fit-content' }}>
-          {STATUS_TABS.map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '8px 18px', borderRadius: 8, background: activeTab === tab ? 'linear-gradient(135deg,#7c7c7c,#c5c5c5)' : 'transparent', border: 'none', color: activeTab === tab ? '#111111' : 'rgba(247,247,247,.68)', fontSize: 13, fontWeight: activeTab === tab ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize', transition: 'all 0.15s' }}>{tab}</button>
-          ))}
+        <div className="pipeline-context">
+          <div><div className="pipeline-kicker">PIPELINE CONTEXT</div><p style={{ color:'rgba(243,244,255,.65)', fontSize:10.5, marginTop:5 }}>Switch apps to scope review posts and available Creative Lab media together. Existing unassigned history remains available from All Portfolio.</p></div>
+          <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1fr) auto', gap:8, alignItems:'end' }}><label style={{ display:'grid', gap:5, color:'#c7c4f4', fontSize:9, fontWeight:850, letterSpacing:'.09em', textTransform:'uppercase' }}>Portfolio app<select value={activeApp?.id || ''} onChange={event => changeApp(event.target.value)} style={{ padding:'10px 11px', borderRadius:10, border:'1px solid rgba(255,255,255,.22)', background:'#fff', color:'#20243d', fontWeight:800, textTransform:'none', letterSpacing:0 }}>{apps.map(app => <option key={app.id} value={app.id}>{app.name}{app.category ? ` · ${app.category}` : ''}</option>)}</select></label><button type="button" onClick={() => setScopeMode(mode => mode === 'app' ? 'all' : 'app')} className="pipeline-action" style={{ height:38, color:'#fff', borderColor:'rgba(255,255,255,.25)', background:scopeMode === 'all' ? '#786ff1' : 'rgba(255,255,255,.08)' }}>{scopeMode === 'all' ? 'App view' : 'All portfolio'}</button></div>
         </div>
+      </section>
 
-        {/* Post list */}
-        {loading ? (
-          <div className="abundance-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220 }}>
-            <span style={{ width: 30, height: 30, border: '3px solid #e7e7e7', borderTopColor: '#535353', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-          </div>
-        ) : posts.length === 0 ? (
-          <div className="abundance-card" style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#ffffff', marginBottom: 6 }}>No {activeTab} posts found</div>
-            <div style={{ fontSize: 13, color: 'rgba(232,232,232,.64)' }}>Use Ask Flo or Agent HQ to generate campaign content</div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {posts.map(post => {
-              const score = aiScoring[post.id]
-              const postAssets = attachedAssets(post.id)
-              return (
-                <div key={post.id} className="abundance-card" style={{ padding: '16px 18px', display: 'flex', gap: 16, alignItems: 'stretch', transition: 'all 0.15s' }}>
-                  
-                  {/* Platform badge */}
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: `${PLATFORM_COLORS[post.platform] || '#535353'}12`, border: `1px solid ${PLATFORM_COLORS[post.platform] || '#535353'}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: PLATFORM_COLORS[post.platform] || '#535353', textTransform: 'uppercase' }}>{post.platform?.substring(0,2)}</span>
-                  </div>
+      {legacyCount > 0 && scopeMode === 'app' && <div style={{ marginTop:14, padding:'10px 13px', borderRadius:12, border:'1px solid #e7defd', background:'#faf8ff', color:'#625c7d', fontSize:11, lineHeight:1.55 }}><b style={{ color:'#4e47b8' }}>{legacyCount} legacy pipeline record{legacyCount === 1 ? '' : 's'}</b> cannot yet be matched to a portfolio app and remain preserved in <b>All Portfolio</b>. No records have been removed or changed.</div>}
+      {loadError && <div style={{ marginTop:14, padding:'10px 13px', borderRadius:12, border:'1px solid #f0c6cd', background:'#fff7f7', color:'#9b3545', fontSize:11.5 }}>{loadError}</div>}
 
-                  <div style={{ width:126, minHeight:126, borderRadius:12, overflow:'hidden', flexShrink:0, background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.14)', position:'relative' }}>{postAssets.length > 0 ? (postAssets[0].kind === 'video' ? <video src={postAssets[0].asset_url} controls playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={postAssets[0].asset_url} alt="Campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />) : <div style={{ height:'100%', padding:12, display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(145deg,rgba(170,170,170,.30),rgba(124,124,124,.18))' }}><div style={{ font:'700 9px DM Mono,monospace', letterSpacing:'.08em', color:'#c5c5c5' }}>VISUAL NEEDED</div><button onClick={() => generateVisual(post)} disabled={visualGenerating[post.id] === 'working'} style={{ border:'1px solid rgba(255,255,255,.22)', background:'rgba(17,17,17,.62)', color:'#ffffff', borderRadius:7, padding:'7px 5px', fontSize:10, fontWeight:800, cursor:'pointer' }}>{visualGenerating[post.id] === 'working' ? 'CREATING…' : 'GENERATE · 10'}</button></div>}</div>
+      <section style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:12, marginTop:18 }}>
+        {[['pending','Needs review','#6f63d8'],['approved','Approved to ship','#16836b'],['published','Published','#2673c9']].map(([status,label,accent]) => <button key={status} type="button" onClick={() => setActiveTab(status)} className={`pipeline-stat ${activeTab === status ? 'active' : ''}`} style={{ textAlign:'left' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center' }}><span style={{ color:'#68738a', fontSize:9, letterSpacing:'.1em', fontWeight:850, textTransform:'uppercase' }}>{label}</span><span style={{ width:8, height:8, borderRadius:'50%', background:accent }}/></div><b style={{ display:'block', color:'#20273d', fontSize:28, letterSpacing:'-.06em', marginTop:7 }}>{counts[status]}</b><span style={{ color:'#7a8498', fontSize:10.5 }}>in {scopeMode === 'all' ? 'all portfolio' : (activeApp?.name || 'selected app')}</span></button>)}
+      </section>
 
-                  {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, color: '#ffffff', lineHeight: 1.6, marginBottom: 10, fontWeight: 500 }}>{post.content}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                      {post.scheduled_at && <span style={{ fontSize: 12, color: 'rgba(232,232,232,.64)', fontWeight: 500 }}>{new Date(post.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
-                      <span style={{ fontSize: 11.5, padding: '3px 10px', borderRadius: 20, background: post.status === 'approved' ? '#f0f0f0' : post.status === 'published' ? '#ededed' : '#f3f3f3', color: post.status === 'approved' ? '#6e6e6e' : post.status === 'published' ? '#6b6b6b' : '#6a6a6a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{post.status}</span>
-                      {score && score !== 'loading' && <span style={{ fontSize: 12, fontWeight: 700, color: score.score >= 8 ? '#6e6e6e' : score.score >= 6 ? '#6a6a6a' : '#4d4d4d' }}>AI Score: {score.score}/10</span>}
-                    </div>
-                    {publishErrors[post.id] && <div style={{ marginTop:9, color:'#c6c6c6', fontSize:11, lineHeight:1.5 }}>Publish stopped: {publishErrors[post.id]} <a href="/accounts" style={{ color:'#ededed', fontWeight:800 }}>Open Channels</a></div>}
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button onClick={() => scorePost(post)} title="AI Score" style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e7e7e7', cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {score === 'loading' ? <span style={{ width: 12, height: 12, border: '2px solid #d4d4d4', borderTopColor: '#838383', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : 'Score'}
-                    </button>
-                    <button onClick={() => openPost(post)} title="Attach or change campaign creative" style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.13)', color: '#e7e7e7', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{postAssets.length ? `Creative ${postAssets.length}` : 'Choose Creative'}</button>
-                    {post.status === 'pending' && <button onClick={() => updateStatus(post.id, 'approved')} title="Approve" style={{ padding: '8px 16px', borderRadius: 8, background: '#f0f0f0', border: '1px solid #c5c5c5', color: '#585858', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Approve</button>}
-                    {post.status === 'approved' && <button onClick={() => publishPost(post)} disabled={publishing[post.id]} title="Publish through connected channel" style={{ padding: '8px 16px', borderRadius: 8, background: '#e7e7e7', border: '1px solid #d3d3d3', color: '#535353', cursor: publishing[post.id] ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, opacity:publishing[post.id] ? .7 : 1 }}>{publishing[post.id] ? 'Sending…' : 'Publish to channel'}</button>}
-                    <button onClick={() => deletePost(post.id)} title="Delete" style={{ padding: '8px 12px', borderRadius: 8, background: '#f5f5f5', border: '1px solid #d5d5d5', color: '#4d4d4d', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Delete</button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Edit modal */}
-      {selectedPost && (
-        <div onClick={() => setSelectedPost(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(23,23,23,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(6px)' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', border: '1px solid #e7e7e7', borderRadius: 20, padding: 32, maxWidth: 560, width: '90%', animation: 'fadeIn 0.2s ease', boxShadow: '0 20px 50px rgba(0,0,0,0.15)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ padding: '4px 12px', borderRadius: 20, background: `${PLATFORM_COLORS[selectedPost.platform] || '#535353'}15`, color: PLATFORM_COLORS[selectedPost.platform] || '#535353', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>{selectedPost.platform}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#171717' }}>Edit Post Content</span>
-              </div>
-              <button onClick={() => setSelectedPost(null)} style={{ background: 'none', border: 'none', color: '#727272', cursor: 'pointer', fontSize: 22 }}>×</button>
-            </div>
-            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={6} style={{ width: '100%', background: '#fafafa', border: '1px solid #d4d4d4', borderRadius: 12, padding: '14px 16px', color: '#171717', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.7 }} />
-            <div style={{ marginTop:14, borderTop:'1px solid #e7e7e7', paddingTop:14 }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}><div><div style={{ fontSize:11, fontWeight:800, color:'#535353', letterSpacing:'.06em' }}>CAMPAIGN MEDIA</div><div style={{ fontSize:12, color:'#727272', marginTop:3 }}>Attach an image or video from your durable Creative Lab library.</div></div><button onClick={() => setShowAssetPicker(value => !value)} style={{ padding:'8px 11px', border:'1px solid #d3d3d3', background:'#f2f2f2', color:'#535353', borderRadius:8, fontSize:12, fontWeight:800 }}>{showAssetPicker ? 'Close media' : 'Add from Creative Lab'}</button></div>
-              {attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:10, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:74, height:74, flexShrink:0, borderRadius:9, overflow:'hidden', background:'#f4f4f4' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Attached creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}<button onClick={() => detachAsset(asset)} style={{ position:'absolute', top:4, right:4, border:'none', borderRadius:6, background:'rgba(23,23,23,.76)', color:'#ffffff', fontSize:10, padding:'3px 5px' }}>Remove</button></div>)}</div>}
-              {showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button key={asset.id} onClick={() => attachAsset(asset)} style={{ padding:0, height:88, overflow:'hidden', border:'1px solid #d4d4d4', borderRadius:9, background:'#fafafa', cursor:'pointer' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Available campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</button>) : <div style={{ gridColumn:'1 / -1', color:'#727272', fontSize:12, padding:'10px 0' }}>No unattached media yet. Generate or upload it in Creative Lab first.</div>}</div>}
-            </div>
-            {aiSuggestion && (
-              <div style={{ marginTop: 14, padding: '14px 16px', background: '#e7e7e7', border: '1px solid #d3d3d3', borderRadius: 12 }}>
-                <div style={{ fontSize: 11.5, color: '#b2b2b2', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase' }}>AI Rewritten Suggestion</div>
-                <div style={{ fontSize: 13.5, color: '#353535', lineHeight: 1.6, marginBottom: 10, whiteSpace: 'pre-wrap' }}>{aiSuggestion}</div>
-                <button onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} style={{ padding: '6px 14px', background: '#535353', border: 'none', borderRadius: 8, color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Apply Suggestion</button>
-              </div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24 }}>
-              <button onClick={aiRewrite} disabled={aiRewriting} style={{ padding: '10px 18px', background: '#f5f5f5', border: '1px solid rgba(83,83,83,0.3)', borderRadius: 10, color: '#535353', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
-                {aiRewriting ? <span style={{ width: 14, height: 14, border: '2px solid rgba(83,83,83,0.2)', borderTopColor: '#535353', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> : 'AI Rewrite'}
-              </button>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setSelectedPost(null)} style={{ padding: '10px 18px', background: '#f4f4f4', border: 'none', borderRadius: 10, color: '#727272', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-                <button onClick={saveEdit} style={{ padding: '10px 22px', background: 'linear-gradient(135deg,#535353,#555555,#535353)', border: 'none', borderRadius: 10, color: '#ffffff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(83,83,83,0.3)' }}>Save Changes</button>
-              </div>
-            </div>
-          </div>
+      <section style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:14, flexWrap:'wrap', margin:'19px 0 13px' }}>
+        <div className="pipeline-filter">{STATUS_TABS.map(tab => <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>{tab === 'all' ? `All (${allPosts.length})` : `${statusLabel(tab)} (${counts[tab]})`}</button>)}</div>
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          {counts.pending > 0 && <button type="button" onClick={bulkApproveAll} disabled={bulkApproving} className="pipeline-action primary">{bulkApproving ? 'Approving…' : `Approve ${counts.pending} pending`}</button>}
+          <button type="button" onClick={generateQueueVisuals} disabled={Boolean(batchVisualProgress && batchVisualProgress.complete < batchVisualProgress.total)} className="pipeline-action">{batchVisualProgress ? `Creating ${batchVisualProgress.complete}/${batchVisualProgress.total}` : 'Create visuals for next 5'}</button>
         </div>
-      )}
-    </Layout>
-  )
+      </section>
+
+      {loading ? <div className="pipeline-empty"><span style={{ width:28, height:28, border:'3px solid #dde2f0', borderTopColor:'#6159e7', borderRadius:'50%', display:'inline-block', animation:'pipelineSpin .75s linear infinite' }}/></div> : posts.length === 0 ? <div className="pipeline-empty"><div className="pipeline-kicker" style={{ color:'#756fca' }}>CLEAR PIPELINE</div><h2 style={{ color:'#29324b', fontSize:22, letterSpacing:'-.04em', marginTop:7 }}>No {activeTab === 'all' ? '' : statusLabel(activeTab)} posts for {scopeMode === 'all' ? 'this portfolio view' : (activeApp?.name || 'this app')}.</h2><p style={{ maxWidth:490, margin:'8px auto 0', fontSize:11.5, lineHeight:1.6 }}>Create campaigns and visual assets for the selected app, or change the context above to review another part of the portfolio.</p></div> : <div style={{ display:'grid', gap:11 }}>{posts.map(post => {
+        const meta = platformMeta(post.platform)
+        const score = aiScoring[post.id]
+        const postAssets = attachedAssets(post.id)
+        return <article key={post.id} className="pipeline-card">
+          <div style={{ width:46, height:46, marginTop:1, borderRadius:13, display:'grid', placeItems:'center', background:`${meta.accent}13`, border:`1px solid ${meta.accent}28`, color:meta.accent, fontSize:10, fontWeight:900 }}>{meta.icon}</div>
+          <div className="pipeline-preview" style={{ width:134, minHeight:126, borderRadius:13, overflow:'hidden', background:'#f3f5fa', border:'1px solid #e0e6ef', position:'relative' }}>{postAssets[0] ? <AssetThumb asset={postAssets[0]} /> : <div style={{ height:'100%', padding:12, display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(145deg,#f2f0ff,#f8fbff)' }}><span className="pipeline-kicker" style={{ color:'#7068d8' }}>CREATIVE NEEDED</span><button type="button" onClick={() => generateVisual(post)} disabled={visualGenerating[post.id] === 'working'} className="pipeline-action" style={{ padding:'7px 6px', fontSize:9 }}>{visualGenerating[post.id] === 'working' ? 'CREATING…' : 'Generate visual · 10'}</button></div>}</div>
+          <div style={{ minWidth:0 }}><div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}><span style={{ color:meta.accent, fontSize:10, fontWeight:850 }}>{meta.label}</span><span style={{ color:'#7c869a', fontSize:10 }}>{dateLabel(post.scheduled_at)}</span>{post.campaign?.name && <span style={{ maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', padding:'3px 7px', borderRadius:6, color:'#626b82', background:'#f2f4f8', fontSize:9.5 }}>{post.campaign.name}</span>}</div><p style={{ color:'#273149', fontSize:12.5, lineHeight:1.65, fontWeight:600, marginTop:8, whiteSpace:'pre-wrap' }}>{post.content}</p><div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginTop:9 }}><span style={{ padding:'4px 8px', borderRadius:20, background:post.status === 'published' ? '#eaf7f2' : post.status === 'approved' ? '#eef5ff' : '#f3f0ff', color:post.status === 'published' ? '#197d61' : post.status === 'approved' ? '#2870b8' : '#6259c8', fontSize:9.5, fontWeight:850, textTransform:'uppercase' }}>{statusLabel(post.status)}</span>{score && score !== 'loading' && <span title={score.reason || ''} style={{ color:'#515d75', fontSize:10.5, fontWeight:800 }}>AI score · {score.score}/10</span>}{publishErrors[post.id] && <span style={{ color:'#b84355', fontSize:10.5 }}>Publish stopped · {publishErrors[post.id]}</span>}</div></div>
+          <div className="pipeline-actions" style={{ display:'flex', flexDirection:'column', gap:7, alignItems:'stretch', justifyContent:'center' }}><button type="button" onClick={() => scorePost(post)} disabled={score === 'loading'} className="pipeline-action">{score === 'loading' ? 'Scoring…' : 'Score'}</button><button type="button" onClick={() => openPost(post)} className="pipeline-action">{postAssets.length ? `Creative ${postAssets.length}` : 'Choose creative'}</button>{post.status === 'pending' && <button type="button" onClick={() => updateStatus(post.id, 'approved')} className="pipeline-action primary">Approve</button>}{post.status === 'approved' && <button type="button" onClick={() => publishPost(post)} disabled={publishing[post.id]} className="pipeline-action primary">{publishing[post.id] ? 'Sending…' : 'Publish'}</button>}<button type="button" onClick={() => deletePost(post.id)} className="pipeline-action danger">Delete</button></div>
+        </article>
+      })}</div>}
+    </div>
+
+    {selectedPost && <div onClick={() => setSelectedPost(null)} style={{ position:'fixed', inset:0, zIndex:1000, display:'grid', placeItems:'center', padding:20, background:'rgba(17,24,39,.54)', backdropFilter:'blur(8px)' }}><section onClick={event => event.stopPropagation()} style={{ width:'min(690px,100%)', maxHeight:'88vh', overflowY:'auto', padding:24, borderRadius:20, background:'#fff', boxShadow:'0 28px 80px rgba(10,15,34,.28)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>REVIEW & REFINEMENT</div><h2 style={{ color:'#273149', fontSize:23, letterSpacing:'-.05em', marginTop:6 }}>Shape this {platformMeta(selectedPost.platform).label} post.</h2></div><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action" style={{ padding:'6px 10px', fontSize:16 }}>×</button></div><textarea value={editContent} onChange={event => setEditContent(event.target.value)} rows={7} style={{ width:'100%', boxSizing:'border-box', marginTop:17, padding:'12px 13px', borderRadius:12, border:'1px solid #dce3ed', background:'#fbfcfe', color:'#273149', font: '500 13px/1.65 inherit', resize:'vertical' }}/><div style={{ marginTop:16, paddingTop:15, borderTop:'1px solid #e6eaf1' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>APP CREATIVE LIBRARY</div><p style={{ color:'#65708a', fontSize:10.5, marginTop:4 }}>Only completed images and videos for <b>{activeApp?.name || 'the selected app'}</b> are available here.</p></div><button type="button" onClick={() => setShowAssetPicker(value => !value)} className="pipeline-action">{showAssetPicker ? 'Close library' : 'Choose Creative Lab asset'}</button></div>{attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:11, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:82, height:82, flex:'0 0 auto', overflow:'hidden', borderRadius:10, background:'#eff2f7' }}><AssetThumb asset={asset} /><button type="button" onClick={() => detachAsset(asset)} style={{ position:'absolute', top:5, right:5, border:0, borderRadius:6, background:'rgba(17,24,39,.78)', color:'#fff', padding:'4px 6px', fontSize:9 }}>Remove</button></div>)}</div>}{showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(105px,1fr))', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button type="button" key={asset.id} onClick={() => attachAsset(asset)} title="Attach this asset" style={{ padding:0, height:100, overflow:'hidden', border:'1px solid #d8dfe9', borderRadius:10, background:'#f7f9fc', cursor:'pointer', position:'relative' }}><AssetThumb asset={asset} />{asset.kind === 'video' && <span style={{ position:'absolute', left:5, bottom:5, padding:'3px 5px', borderRadius:5, background:'rgba(16,24,42,.8)', color:'#fff', fontSize:8, fontWeight:850 }}>VIDEO</span>}</button>) : <p style={{ gridColumn:'1/-1', color:'#758096', fontSize:11 }}>No unassigned media for this app. Generate or upload it in Creative Lab first.</p>}</div>}</div>{aiSuggestion && <div style={{ marginTop:15, padding:13, borderRadius:12, background:'#f4f2ff', border:'1px solid #ddd9ff' }}><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>AI REWRITE SUGGESTION</div><p style={{ color:'#3f4960', whiteSpace:'pre-wrap', fontSize:12, lineHeight:1.6, marginTop:7 }}>{aiSuggestion}</p><button type="button" onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} className="pipeline-action primary" style={{ marginTop:9 }}>Use suggestion</button></div>}<div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:19 }}><button type="button" onClick={aiRewrite} disabled={aiRewriting} className="pipeline-action">{aiRewriting ? 'Writing…' : 'AI rewrite'}</button><div style={{ display:'flex', gap:8 }}><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action">Cancel</button><button type="button" onClick={saveEdit} className="pipeline-action primary">Save changes</button></div></div></section></div>}
+  </Layout>
 }
