@@ -6,8 +6,6 @@ import { generateVisualForPost } from '../lib/postVisuals'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { recordMemoryEvent } from '../lib/creativeMemory'
 
-const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODQwOH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
-
 const PLATFORM_META = {
   instagram:{ label:'Instagram', accent:'#b462d8', icon:'IG' },
   twitter:{ label:'X', accent:'#1c1f2b', icon:'X' },
@@ -17,14 +15,17 @@ const PLATFORM_META = {
 }
 const STATUS_TABS = ['pending', 'approved', 'published', 'all']
 
-async function callAI(messages, maxTokens = 800) {
-  const res = await fetch('https://xxkpvnokhqbpbqefegxa.supabase.co/functions/v1/ai-proxy', {
+async function callAI({ workspaceId, action, platform, content }) {
+  const { data:{ session } } = await supabase.auth.getSession()
+  if (!session?.access_token) throw new Error('Your session expired. Sign in again before requesting AI review.')
+  const response = await fetch('/api/review-copy', {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${ANON}`, apikey:ANON },
-    body:JSON.stringify({ model:'gpt-4o', messages, max_tokens:maxTokens }),
+    headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
+    body:JSON.stringify({ workspaceId, action, platform, content }),
   })
-  const data = await res.json()
-  return data?.content || data?.choices?.[0]?.message?.content || ''
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.error || 'FloStudio could not complete this AI review request.')
+  return data
 }
 
 function platformMeta(platform) {
@@ -50,7 +51,7 @@ function AssetThumb({ asset, alt = 'Campaign creative' }) {
 }
 
 export default function Pipeline() {
-  const { useTokens, apps, activeApp, setActiveApp } = useWorkspace()
+  const { useTokens, apps, activeApp, setActiveApp, workspaceId } = useWorkspace()
   const [posts, setPosts] = useState([])
   const [allPosts, setAllPosts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -62,6 +63,7 @@ export default function Pipeline() {
   const [editContent, setEditContent] = useState('')
   const [aiRewriting, setAiRewriting] = useState(false)
   const [aiSuggestion, setAiSuggestion] = useState('')
+  const [aiError, setAiError] = useState('')
   const [bulkApproving, setBulkApproving] = useState(false)
   const [aiScoring, setAiScoring] = useState({})
   const [mediaAssets, setMediaAssets] = useState([])
@@ -119,6 +121,7 @@ export default function Pipeline() {
     setSelectedPost(post)
     setEditContent(post.content || '')
     setAiSuggestion('')
+    setAiError('')
     setShowAssetPicker(false)
   }
 
@@ -229,26 +232,27 @@ export default function Pipeline() {
   }
 
   const aiRewrite = async () => {
+    if (!selectedPost || aiRewriting) return
     setAiRewriting(true)
     setAiSuggestion('')
-    const text = await callAI([
-      { role:'system', content:'You are a social media editor. Rewrite the given post to be more engaging, clear, and platform-appropriate. Keep it concise. Return only the rewritten post text, with no explanation.' },
-      { role:'user', content:`Platform: ${selectedPost?.platform}\nOriginal post:\n${editContent}` },
-    ])
-    setAiSuggestion(text.trim())
-    setAiRewriting(false)
+    setAiError('')
+    try {
+      const result = await callAI({ workspaceId, action:'rewrite', platform:selectedPost.platform, content:editContent })
+      setAiSuggestion(String(result.content || '').trim())
+    } catch (error) {
+      setAiError(error?.message || 'FloStudio could not create a rewrite suggestion.')
+    } finally { setAiRewriting(false) }
   }
 
   const scorePost = async post => {
-    if (aiScoring[post.id]) return
+    if (aiScoring[post.id] === 'loading') return
     setAiScoring(previous => ({ ...previous, [post.id]:'loading' }))
-    const text = await callAI([
-      { role:'system', content:'Rate this social media post on a scale of 1-10 for engagement potential. Return JSON only: {"score":7,"reason":"..."}' },
-      { role:'user', content:`Platform: ${post.platform}\nPost: ${String(post.content || '').slice(0, 300)}` },
-    ], 200)
-    let result = { score:7, reason:'' }
-    try { const match = text.match(/\{[\s\S]*\}/); result = match ? JSON.parse(match[0]) : result } catch {}
-    setAiScoring(previous => ({ ...previous, [post.id]:result }))
+    try {
+      const result = await callAI({ workspaceId, action:'score', platform:post.platform, content:String(post.content || '').slice(0, 2400) })
+      setAiScoring(previous => ({ ...previous, [post.id]:{ score:result.score, reason:result.reason || '' } }))
+    } catch (error) {
+      setAiScoring(previous => ({ ...previous, [post.id]:{ error:error?.message || 'FloStudio could not score this post.' } }))
+    }
   }
 
   const changeApp = productId => {
@@ -306,19 +310,19 @@ export default function Pipeline() {
         </div>
       </section>
 
-      {loading ? <div className="pipeline-empty"><span style={{ width:28, height:28, border:'3px solid #dde2f0', borderTopColor:'#6159e7', borderRadius:'50%', display:'inline-block', animation:'pipelineSpin .75s linear infinite' }}/></div> : posts.length === 0 ? <div className="pipeline-empty"><div className="pipeline-kicker" style={{ color:'#756fca' }}>CLEAR PIPELINE</div><h2 style={{ color:'#29324b', fontSize:22, letterSpacing:'-.04em', marginTop:7 }}>No {activeTab === 'all' ? '' : statusLabel(activeTab)} posts for {scopeMode === 'all' ? 'this portfolio view' : (activeApp?.name || 'this app')}.</h2><p style={{ maxWidth:490, margin:'8px auto 0', fontSize:11.5, lineHeight:1.6 }}>Create campaigns and visual assets for the selected app, or change the context above to review another part of the portfolio.</p></div> : <div style={{ display:'grid', gap:11 }}>{posts.map(post => {
+      {loading ? <div className="pipeline-empty"><span style={{ width:28, height:28, border:'3px solid #dde2f0', borderTopColor:'#6159e7', borderRadius:'50%', display:'inline-block', animation:'pipelineSpin .75s linear infinite' }}/></div> : posts.length === 0 ? <div className="pipeline-empty"><div className="pipeline-kicker" style={{ color:'#756fca' }}>CLEAR PIPELINE</div><h2 style={{ color:'#29324b', fontSize:22, letterSpacing:'-.04em', marginTop:7 }}>No {activeTab === 'all' ? '' : statusLabel(activeTab)} posts for {scopeMode === 'all' ? 'this portfolio view' : (activeApp?.name || 'this app')}.</h2><p style={{ maxWidth:490, margin:'8px auto 0', fontSize:11.5, lineHeight:1.6 }}>Create campaigns and visual assets for the selected app, or change the context above to review another part of the portfolio.</p>{scopeMode === 'app' && legacyCount > 0 && <button type="button" onClick={() => setScopeMode('all')} className="pipeline-action" style={{ marginTop:14 }}>View {legacyCount} preserved legacy posts</button>}</div> : <div style={{ display:'grid', gap:11 }}>{posts.map(post => {
         const meta = platformMeta(post.platform)
         const score = aiScoring[post.id]
         const postAssets = attachedAssets(post.id)
         return <article key={post.id} className="pipeline-card">
           <div style={{ width:46, height:46, marginTop:1, borderRadius:13, display:'grid', placeItems:'center', background:`${meta.accent}13`, border:`1px solid ${meta.accent}28`, color:meta.accent, fontSize:10, fontWeight:900 }}>{meta.icon}</div>
           <div className="pipeline-preview" style={{ width:134, minHeight:126, borderRadius:13, overflow:'hidden', background:'#f3f5fa', border:'1px solid #e0e6ef', position:'relative' }}>{postAssets[0] ? <AssetThumb asset={postAssets[0]} /> : <div style={{ height:'100%', padding:12, display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(145deg,#f2f0ff,#f8fbff)' }}><span className="pipeline-kicker" style={{ color:'#7068d8' }}>CREATIVE NEEDED</span><button type="button" onClick={() => generateVisual(post)} disabled={visualGenerating[post.id] === 'working'} className="pipeline-action" style={{ padding:'7px 6px', fontSize:9 }}>{visualGenerating[post.id] === 'working' ? 'CREATING…' : 'Generate visual · 10'}</button></div>}</div>
-          <div style={{ minWidth:0 }}><div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}><span style={{ color:meta.accent, fontSize:10, fontWeight:850 }}>{meta.label}</span><span style={{ color:'#7c869a', fontSize:10 }}>{dateLabel(post.scheduled_at)}</span>{post.campaign?.name && <span style={{ maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', padding:'3px 7px', borderRadius:6, color:'#626b82', background:'#f2f4f8', fontSize:9.5 }}>{post.campaign.name}</span>}</div><p style={{ color:'#273149', fontSize:12.5, lineHeight:1.65, fontWeight:600, marginTop:8, whiteSpace:'pre-wrap' }}>{post.content}</p><div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginTop:9 }}><span style={{ padding:'4px 8px', borderRadius:20, background:post.status === 'published' ? '#eaf7f2' : post.status === 'approved' ? '#eef5ff' : '#f3f0ff', color:post.status === 'published' ? '#197d61' : post.status === 'approved' ? '#2870b8' : '#6259c8', fontSize:9.5, fontWeight:850, textTransform:'uppercase' }}>{statusLabel(post.status)}</span>{score && score !== 'loading' && <span title={score.reason || ''} style={{ color:'#515d75', fontSize:10.5, fontWeight:800 }}>AI score · {score.score}/10</span>}{publishErrors[post.id] && <span style={{ color:'#b84355', fontSize:10.5 }}>Publish stopped · {publishErrors[post.id]}</span>}</div></div>
+          <div style={{ minWidth:0 }}><div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}><span style={{ color:meta.accent, fontSize:10, fontWeight:850 }}>{meta.label}</span><span style={{ color:'#7c869a', fontSize:10 }}>{dateLabel(post.scheduled_at)}</span>{post.campaign?.name && <span style={{ maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', padding:'3px 7px', borderRadius:6, color:'#626b82', background:'#f2f4f8', fontSize:9.5 }}>{post.campaign.name}</span>}</div><p style={{ color:'#273149', fontSize:12.5, lineHeight:1.65, fontWeight:600, marginTop:8, whiteSpace:'pre-wrap' }}>{post.content}</p><div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginTop:9 }}><span style={{ padding:'4px 8px', borderRadius:20, background:post.status === 'published' ? '#eaf7f2' : post.status === 'approved' ? '#eef5ff' : '#f3f0ff', color:post.status === 'published' ? '#197d61' : post.status === 'approved' ? '#2870b8' : '#6259c8', fontSize:9.5, fontWeight:850, textTransform:'uppercase' }}>{statusLabel(post.status)}</span>{score && score !== 'loading' && !score.error && <span title={score.reason || ''} style={{ color:'#515d75', fontSize:10.5, fontWeight:800 }}>AI score · {score.score}/10</span>}{score?.error && <span title={score.error} style={{ color:'#b84355', fontSize:10.5 }}>AI review unavailable</span>}{publishErrors[post.id] && <span style={{ color:'#b84355', fontSize:10.5 }}>Publish stopped · {publishErrors[post.id]}</span>}</div></div>
           <div className="pipeline-actions" style={{ display:'flex', flexDirection:'column', gap:7, alignItems:'stretch', justifyContent:'center' }}><button type="button" onClick={() => scorePost(post)} disabled={score === 'loading'} className="pipeline-action">{score === 'loading' ? 'Scoring…' : 'Score'}</button><button type="button" onClick={() => openPost(post)} className="pipeline-action">{postAssets.length ? `Creative ${postAssets.length}` : 'Choose creative'}</button>{post.status === 'pending' && <button type="button" onClick={() => updateStatus(post.id, 'approved')} className="pipeline-action primary">Approve</button>}{post.status === 'approved' && <button type="button" onClick={() => publishPost(post)} disabled={publishing[post.id]} className="pipeline-action primary">{publishing[post.id] ? 'Sending…' : 'Publish'}</button>}<button type="button" onClick={() => deletePost(post.id)} className="pipeline-action danger">Delete</button></div>
         </article>
       })}</div>}
     </div>
 
-    {selectedPost && <div onClick={() => setSelectedPost(null)} style={{ position:'fixed', inset:0, zIndex:1000, display:'grid', placeItems:'center', padding:20, background:'rgba(17,24,39,.54)', backdropFilter:'blur(8px)' }}><section onClick={event => event.stopPropagation()} style={{ width:'min(690px,100%)', maxHeight:'88vh', overflowY:'auto', padding:24, borderRadius:20, background:'#fff', boxShadow:'0 28px 80px rgba(10,15,34,.28)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>REVIEW & REFINEMENT</div><h2 style={{ color:'#273149', fontSize:23, letterSpacing:'-.05em', marginTop:6 }}>Shape this {platformMeta(selectedPost.platform).label} post.</h2></div><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action" style={{ padding:'6px 10px', fontSize:16 }}>×</button></div><textarea value={editContent} onChange={event => setEditContent(event.target.value)} rows={7} style={{ width:'100%', boxSizing:'border-box', marginTop:17, padding:'12px 13px', borderRadius:12, border:'1px solid #dce3ed', background:'#fbfcfe', color:'#273149', font: '500 13px/1.65 inherit', resize:'vertical' }}/><div style={{ marginTop:16, paddingTop:15, borderTop:'1px solid #e6eaf1' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>APP CREATIVE LIBRARY</div><p style={{ color:'#65708a', fontSize:10.5, marginTop:4 }}>Only completed images and videos for <b>{activeApp?.name || 'the selected app'}</b> are available here.</p></div><button type="button" onClick={() => setShowAssetPicker(value => !value)} className="pipeline-action">{showAssetPicker ? 'Close library' : 'Choose Creative Lab asset'}</button></div>{attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:11, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:82, height:82, flex:'0 0 auto', overflow:'hidden', borderRadius:10, background:'#eff2f7' }}><AssetThumb asset={asset} /><button type="button" onClick={() => detachAsset(asset)} style={{ position:'absolute', top:5, right:5, border:0, borderRadius:6, background:'rgba(17,24,39,.78)', color:'#fff', padding:'4px 6px', fontSize:9 }}>Remove</button></div>)}</div>}{showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(105px,1fr))', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button type="button" key={asset.id} onClick={() => attachAsset(asset)} title="Attach this asset" style={{ padding:0, height:100, overflow:'hidden', border:'1px solid #d8dfe9', borderRadius:10, background:'#f7f9fc', cursor:'pointer', position:'relative' }}><AssetThumb asset={asset} />{asset.kind === 'video' && <span style={{ position:'absolute', left:5, bottom:5, padding:'3px 5px', borderRadius:5, background:'rgba(16,24,42,.8)', color:'#fff', fontSize:8, fontWeight:850 }}>VIDEO</span>}</button>) : <p style={{ gridColumn:'1/-1', color:'#758096', fontSize:11 }}>No unassigned media for this app. Generate or upload it in Creative Lab first.</p>}</div>}</div>{aiSuggestion && <div style={{ marginTop:15, padding:13, borderRadius:12, background:'#f4f2ff', border:'1px solid #ddd9ff' }}><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>AI REWRITE SUGGESTION</div><p style={{ color:'#3f4960', whiteSpace:'pre-wrap', fontSize:12, lineHeight:1.6, marginTop:7 }}>{aiSuggestion}</p><button type="button" onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} className="pipeline-action primary" style={{ marginTop:9 }}>Use suggestion</button></div>}<div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:19 }}><button type="button" onClick={aiRewrite} disabled={aiRewriting} className="pipeline-action">{aiRewriting ? 'Writing…' : 'AI rewrite'}</button><div style={{ display:'flex', gap:8 }}><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action">Cancel</button><button type="button" onClick={saveEdit} className="pipeline-action primary">Save changes</button></div></div></section></div>}
+    {selectedPost && <div onClick={() => setSelectedPost(null)} style={{ position:'fixed', inset:0, zIndex:1000, display:'grid', placeItems:'center', padding:20, background:'rgba(17,24,39,.54)', backdropFilter:'blur(8px)' }}><section onClick={event => event.stopPropagation()} style={{ width:'min(690px,100%)', maxHeight:'88vh', overflowY:'auto', padding:24, borderRadius:20, background:'#fff', boxShadow:'0 28px 80px rgba(10,15,34,.28)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>REVIEW & REFINEMENT</div><h2 style={{ color:'#273149', fontSize:23, letterSpacing:'-.05em', marginTop:6 }}>Shape this {platformMeta(selectedPost.platform).label} post.</h2></div><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action" style={{ padding:'6px 10px', fontSize:16 }}>×</button></div><textarea value={editContent} onChange={event => setEditContent(event.target.value)} rows={7} style={{ width:'100%', boxSizing:'border-box', marginTop:17, padding:'12px 13px', borderRadius:12, border:'1px solid #dce3ed', background:'#fbfcfe', color:'#273149', font: '500 13px/1.65 inherit', resize:'vertical' }}/><div style={{ marginTop:16, paddingTop:15, borderTop:'1px solid #e6eaf1' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>APP CREATIVE LIBRARY</div><p style={{ color:'#65708a', fontSize:10.5, marginTop:4 }}>Only completed images and videos for <b>{activeApp?.name || 'the selected app'}</b> are available here.</p></div><button type="button" onClick={() => setShowAssetPicker(value => !value)} className="pipeline-action">{showAssetPicker ? 'Close library' : 'Choose Creative Lab asset'}</button></div>{attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:11, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:82, height:82, flex:'0 0 auto', overflow:'hidden', borderRadius:10, background:'#eff2f7' }}><AssetThumb asset={asset} /><button type="button" onClick={() => detachAsset(asset)} style={{ position:'absolute', top:5, right:5, border:0, borderRadius:6, background:'rgba(17,24,39,.78)', color:'#fff', padding:'4px 6px', fontSize:9 }}>Remove</button></div>)}</div>}{showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(105px,1fr))', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button type="button" key={asset.id} onClick={() => attachAsset(asset)} title="Attach this asset" style={{ padding:0, height:100, overflow:'hidden', border:'1px solid #d8dfe9', borderRadius:10, background:'#f7f9fc', cursor:'pointer', position:'relative' }}><AssetThumb asset={asset} />{asset.kind === 'video' && <span style={{ position:'absolute', left:5, bottom:5, padding:'3px 5px', borderRadius:5, background:'rgba(16,24,42,.8)', color:'#fff', fontSize:8, fontWeight:850 }}>VIDEO</span>}</button>) : <p style={{ gridColumn:'1/-1', color:'#758096', fontSize:11 }}>No unassigned media for this app. Generate or upload it in Creative Lab first.</p>}</div>}</div>{aiError && <div style={{ marginTop:15, padding:11, borderRadius:12, background:'#fff7f7', border:'1px solid #f1cbd0', color:'#9b3545', fontSize:11.5 }}>{aiError}</div>}{aiSuggestion && <div style={{ marginTop:15, padding:13, borderRadius:12, background:'#f4f2ff', border:'1px solid #ddd9ff' }}><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>AI REWRITE SUGGESTION</div><p style={{ color:'#3f4960', whiteSpace:'pre-wrap', fontSize:12, lineHeight:1.6, marginTop:7 }}>{aiSuggestion}</p><button type="button" onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} className="pipeline-action primary" style={{ marginTop:9 }}>Use suggestion</button></div>}<div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:19 }}><button type="button" onClick={aiRewrite} disabled={aiRewriting} className="pipeline-action">{aiRewriting ? 'Writing…' : 'AI rewrite'}</button><div style={{ display:'flex', gap:8 }}><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action">Cancel</button><button type="button" onClick={saveEdit} className="pipeline-action primary">Save changes</button></div></div></section></div>}
   </Layout>
 }
