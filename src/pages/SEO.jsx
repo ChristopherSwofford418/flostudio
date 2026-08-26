@@ -4,6 +4,7 @@ import Layout from '../components/Layout'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { generateAppSeoBlueprint, seoBriefToText } from '../lib/portfolioSeo'
 import { listMediaAssets } from '../lib/mediaAssets'
+import { SEO_ACTION_META, buildSeoActions, createSeoActionTask, formatSeoActionTime, listSeoActionTasks, setSeoActionTaskStatus } from '../lib/seoActions'
 
 function DraftCard({ label, value, note, accent = false }) {
   return <article style={{ padding:14, border:'1px solid rgba(240,240,240,.12)', background:accent ? 'linear-gradient(145deg,rgba(120,113,255,.17),rgba(22,22,36,.54))' : 'rgba(18,18,18,.3)', borderRadius:12, minWidth:0 }}><div className="studio-kicker" style={{ color:accent ? '#cbc8ff' : 'rgba(240,240,240,.52)' }}>{label}</div><p style={{ color:'#fff', fontSize:13, fontWeight:750, lineHeight:1.55, marginTop:7, overflowWrap:'anywhere' }}>{value || 'Add more product context to draft this safely.'}</p>{note && <p style={{ color:'rgba(240,240,240,.55)', fontSize:10.5, lineHeight:1.5, marginTop:8 }}>{note}</p>}</article>
@@ -35,13 +36,18 @@ function safeFallbackBlueprint(app = {}) {
 export default function SEO() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { apps, activeApp, setActiveApp } = useWorkspace()
+  const { apps, activeApp, setActiveApp, workspaceId } = useWorkspace()
   const safeApps = Array.isArray(apps) ? apps : []
   const requestedId = searchParams.get('app') || ''
   const [selectedId, setSelectedId] = useState(requestedId || activeApp?.id || '')
   const [creativeAssets, setCreativeAssets] = useState([])
   const [assetError, setAssetError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [actionTasks, setActionTasks] = useState([])
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [actionNotice, setActionNotice] = useState('')
+  const [actionPending, setActionPending] = useState('')
 
   useEffect(() => {
     if (!safeApps.length) return
@@ -69,6 +75,7 @@ export default function SEO() {
   const blueprint = planState.blueprint
   const plannerError = planState.error
   const readyCreative = useMemo(() => creativeAssets.filter(asset => asset?.asset_url && !['failed','queued','in_progress'].includes(asset.render_status)), [creativeAssets])
+  const seoActions = useMemo(() => buildSeoActions({ app, blueprint, readyCreative }), [app, blueprint, readyCreative])
 
   useEffect(() => {
     let cancelled = false
@@ -81,6 +88,46 @@ export default function SEO() {
     })
     return () => { cancelled = true }
   }, [app?.id])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!app?.id) { setActionTasks([]); return undefined }
+    setActionLoading(true)
+    setActionError('')
+    listSeoActionTasks(app.id).then(items => {
+      if (!cancelled) setActionTasks(items)
+    }).catch(error => {
+      if (!cancelled) { setActionTasks([]); setActionError(error?.message || 'SEO action history could not be loaded.') }
+    }).finally(() => { if (!cancelled) setActionLoading(false) })
+    return () => { cancelled = true }
+  }, [app?.id])
+
+  const queueSeoAction = async action => {
+    if (!app?.id || actionPending) return
+    setActionPending(action.type)
+    setActionError('')
+    setActionNotice('')
+    try {
+      const task = await createSeoActionTask({ workspaceId, productId:app.id, action })
+      setActionTasks(current => [task, ...current])
+      setActionNotice(`${SEO_ACTION_META[action.type]?.label || 'SEO action'} is now in ${app.name}'s review queue.`)
+    } catch (error) {
+      setActionError(error?.message || 'FloStudio could not create this SEO action.')
+    } finally { setActionPending('') }
+  }
+
+  const updateSeoAction = async (task, status) => {
+    if (!task?.id || actionPending) return
+    setActionPending(task.id)
+    setActionError('')
+    try {
+      const updated = await setSeoActionTaskStatus(task.id, status)
+      setActionTasks(current => current.map(item => item.id === updated.id ? updated : item))
+      setActionNotice(status === 'completed' ? 'SEO action marked complete. No external publishing was triggered.' : 'SEO action reopened for review.')
+    } catch (error) {
+      setActionError(error?.message || 'FloStudio could not update this SEO action.')
+    } finally { setActionPending('') }
+  }
 
   const copyBrief = async () => {
     if (!blueprint) return
@@ -114,8 +161,12 @@ export default function SEO() {
       .seo-grid-2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
       .seo-grid-3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
       .seo-rail { display:flex; gap:10px; overflow-x:auto; padding:3px 2px 7px; scrollbar-width:thin; scrollbar-color:rgba(203,200,255,.65) transparent; }
+      .seo-action-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+      .seo-action-card { min-width:0; padding:14px; border:1px solid rgba(240,240,240,.12); border-radius:13px; background:linear-gradient(145deg,rgba(104,96,255,.12),rgba(16,16,27,.48)); }
+      .seo-task-row { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:11px 0; border-bottom:1px solid rgba(240,240,240,.09); }
+      @media (max-width:1080px) { .seo-action-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
       @media (max-width:960px) { .seo-hero-grid, .seo-grid-2 { grid-template-columns:1fr; } .seo-grid-3 { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-      @media (max-width:600px) { .seo-page { padding:20px 16px 42px; } .seo-grid-3 { grid-template-columns:1fr; } }
+      @media (max-width:600px) { .seo-page { padding:20px 16px 42px; } .seo-grid-3, .seo-action-grid { grid-template-columns:1fr; } .seo-task-row { align-items:flex-start; flex-direction:column; } }
     `}</style>
     <div className="seo-page">
       <section className="studio-dark abundance-hero" style={{ padding:'30px 32px', position:'relative', overflow:'hidden' }}>
@@ -123,6 +174,8 @@ export default function SEO() {
 
       {plannerError && <section className="studio-panel" style={{ marginTop:16, padding:14, borderColor:'rgba(215,211,255,.42)', background:'rgba(104,96,255,.1)', color:'rgba(240,240,240,.72)', fontSize:11.5, lineHeight:1.55 }}>FloStudio kept this SEO view safe because one nested legacy source field could not be parsed. The selected app, current listing link, and readiness checklist remain available; update the app’s saved context in Portfolio to restore the full planning draft.</section>}
       <section className="studio-panel" style={{ marginTop:16, padding:'16px 19px', borderColor:'rgba(197,197,197,.28)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'var(--signal)' }}>SELECTED APP / {app.category || 'UNCLASSIFIED'}</div><h2 style={{ color:'#fff', fontSize:23, marginTop:5 }}>{app.name} SEO and App Store plan</h2><p style={{ color:'rgba(240,240,240,.58)', fontSize:11.5, marginTop:5, lineHeight:1.55 }}>This plan stays review-only. Apply website changes in your web stack and App Store metadata changes in App Store Connect after an owner review.</p></div><div style={{ display:'flex', gap:7, flexWrap:'wrap' }}><span className="studio-chip" style={{ color:sourceCoverage.publicListing ? 'var(--signal)' : 'rgba(240,240,240,.58)' }}>{sourceCoverage.publicListing ? 'PUBLIC LISTING LINKED' : 'LISTING URL NEEDED'}</span><span className="studio-chip" style={{ color:sourceCoverage.screenshots ? 'var(--signal)' : 'rgba(240,240,240,.58)' }}>{sourceCoverage.screenshots} SCREENSHOT{sourceCoverage.screenshots === 1 ? '' : 'S'}</span><span className="studio-chip" style={{ color:readyCreative.length ? 'var(--signal)' : 'rgba(240,240,240,.58)' }}>{readyCreative.length} LAB ASSET{readyCreative.length === 1 ? '' : 'S'}</span></div></div><div style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:8, marginTop:16 }}><div style={{ borderTop:'2px solid var(--signal)', paddingTop:8 }}><b style={{ color:'#fff', fontSize:11 }}>01 / GROUND</b><p style={{ color:'rgba(240,240,240,.55)', fontSize:10, lineHeight:1.45, marginTop:4 }}>Use saved product and listing facts only.</p></div><div style={{ borderTop:'2px solid rgba(240,240,240,.3)', paddingTop:8 }}><b style={{ color:'#fff', fontSize:11 }}>02 / REVIEW</b><p style={{ color:'rgba(240,240,240,.55)', fontSize:10, lineHeight:1.45, marginTop:4 }}>Check claims, terminology, and intent.</p></div><div style={{ borderTop:'2px solid rgba(240,240,240,.3)', paddingTop:8 }}><b style={{ color:'#fff', fontSize:11 }}>03 / APPLY</b><p style={{ color:'rgba(240,240,240,.55)', fontSize:10, lineHeight:1.45, marginTop:4 }}>Publish externally only after approval.</p></div></div></section>
+
+      <section className="studio-panel" style={{ marginTop:16, padding:20, borderColor:'rgba(183,178,255,.3)', background:'linear-gradient(130deg,rgba(52,47,116,.28),rgba(16,16,25,.5))' }}><div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'var(--signal)' }}>SEO ACTION CONSOLE / {app.name.toUpperCase()}</div><h2 style={{ color:'#fff', fontSize:22, marginTop:6 }}>Move a grounded recommendation into review.</h2><p style={{ color:'rgba(240,240,240,.61)', fontSize:11.5, lineHeight:1.55, marginTop:6, maxWidth:700 }}>Each button captures the selected app’s current grounded SEO or ASO plan as a persistent review task. It does not edit a website, change App Store metadata, or publish content.</p></div><span className="studio-chip" style={{ color:'var(--signal)', borderColor:'rgba(126,225,197,.25)' }}>{actionTasks.filter(item => item.status !== 'completed').length} OPEN ACTION{actionTasks.filter(item => item.status !== 'completed').length === 1 ? '' : 'S'}</span></div>{actionError && <p style={{ marginTop:12, color:'#ffb6c1', fontSize:11 }}>{actionError}</p>}{actionNotice && <p style={{ marginTop:12, color:'#9ee8d2', fontSize:11 }}>{actionNotice}</p>}<div className="seo-action-grid" style={{ marginTop:16 }}>{seoActions.map(action => { const meta = SEO_ACTION_META[action.type] || {}; const alreadyOpen = actionTasks.find(task => task.action_type === action.type && task.status !== 'completed'); return <article className="seo-action-card" key={action.type}><div className="studio-kicker" style={{ color:'rgba(240,240,240,.5)' }}>{meta.order || 'ACTION'} / {meta.label || 'SEO review'}</div><b style={{ display:'block', color:'#fff', fontSize:12.5, lineHeight:1.45, marginTop:7 }}>{action.title}</b><p style={{ color:'rgba(240,240,240,.56)', fontSize:10.5, lineHeight:1.5, marginTop:7, minHeight:47 }}>{action.description}</p>{alreadyOpen && <p style={{ color:'#bdb9ff', fontSize:9.5, marginTop:7 }}>Already queued · {formatSeoActionTime(alreadyOpen.created_at)}</p>}<button type="button" onClick={() => queueSeoAction(action)} disabled={Boolean(actionPending)} className="studio-button studio-button--soft" style={{ marginTop:11, padding:'8px 10px', fontSize:10 }}>{actionPending === action.type ? 'Queuing…' : meta.action || 'Queue action'}</button></article> })}</div><div style={{ marginTop:18, paddingTop:14, borderTop:'1px solid rgba(240,240,240,.1)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'rgba(240,240,240,.5)' }}>SELECTED APP ACTION HISTORY</div><p style={{ color:'rgba(240,240,240,.52)', fontSize:10.5, marginTop:4 }}>Use this to track review progress for {app.name}; external changes stay manual.</p></div>{actionLoading && <span style={{ color:'rgba(240,240,240,.5)', fontSize:10.5 }}>Loading actions…</span>}</div>{!actionLoading && !actionTasks.length && <p style={{ color:'rgba(240,240,240,.5)', fontSize:11, marginTop:13 }}>No SEO actions have been queued for this app yet.</p>}{actionTasks.slice(0,8).map(task => <div className="seo-task-row" key={task.id}><div style={{ minWidth:0 }}><div style={{ display:'flex', gap:7, alignItems:'center', flexWrap:'wrap' }}><b style={{ color:'#fff', fontSize:11.5 }}>{task.title}</b><span className="studio-chip" style={{ color:task.status === 'completed' ? '#9ee8d2' : '#cbc8ff', fontSize:8 }}>{task.status.replace('_',' ')}</span></div><p style={{ color:'rgba(240,240,240,.52)', fontSize:10, marginTop:4 }}>{task.description} · {formatSeoActionTime(task.created_at)}</p></div><button type="button" onClick={() => updateSeoAction(task, task.status === 'completed' ? 'ready' : 'completed')} disabled={Boolean(actionPending)} className="studio-button studio-button--soft" style={{ padding:'7px 9px', fontSize:9.5 }}>{actionPending === task.id ? 'Saving…' : task.status === 'completed' ? 'Reopen' : 'Mark complete'}</button></div>)}</div></section>
 
       <section className="seo-grid-2" style={{ marginTop:16 }}><section className="studio-panel" style={{ padding:20, borderColor:'rgba(197,197,197,.25)' }}><div className="studio-kicker" style={{ color:'var(--signal)' }}>WEBSITE SEO / REVIEW DRAFT</div><h2 style={{ color:'#fff', fontSize:22, marginTop:6 }}>One clear landing page, backed by product truth.</h2><p style={{ color:'rgba(240,240,240,.58)', fontSize:11.5, lineHeight:1.55, marginTop:6 }}>These are page-specific, review-ready drafts—not deployed tags or page content.</p><div style={{ display:'grid', gap:9, marginTop:15 }}><DraftCard label={`LANDING URL · ${website.landingSlug}`} value={website.h1} note="Use one clearly differentiated H1 that matches the page’s actual content." accent /><DraftCard label={`TITLE DRAFT · ${website.metaTitle.length}/60`} value={website.metaTitle} note="Keep the visible H1 and document title aligned; avoid boilerplate and repeated terms." /><DraftCard label={`META DESCRIPTION DRAFT · ${website.metaDescription.length}/155`} value={website.metaDescription} note="Write a useful summary of this specific page, not a keyword list." /></div><div style={{ marginTop:15 }}><div className="studio-kicker" style={{ color:'rgba(240,240,240,.5)' }}>CONCEPT THEMES / NOT SEARCH-VOLUME CLAIMS</div><div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>{keywordThemes.map(theme => <span className="studio-chip" key={theme} style={{ color:'#dddafe', borderColor:'rgba(183,178,255,.3)', background:'rgba(104,96,255,.14)' }}>{theme}</span>)}</div></div></section>
 
