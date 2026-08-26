@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
-import { selectConnectionTarget } from '../lib/appStoreConnectRouting'
+import { appInsightsPath, selectConnectionTarget } from '../lib/appStoreConnectRouting'
 
 async function ascRequest(payload) {
   const { data } = await supabase.auth.getSession()
@@ -138,7 +138,7 @@ export default function AppStoreConnectPanel({ apps = [], initialProductId = '' 
     <style>{`.portfolio-autopilot:has(input[placeholder*="BEGIN PRIVATE KEY"]){display:none!important}`}</style>
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16, flexWrap:'wrap' }}>
       <div><div className="studio-kicker" style={{ color:'var(--signal)' }}>APP STORE CONNECT / PRIVATE PER-APP VAULT</div><h2 style={{ color:'#ffffff', fontSize:22, letterSpacing:'-.055em', marginTop:6 }}>Connect the selected app. Keep its data separate.</h2><p style={{ color:'rgba(240,240,240,.68)', fontSize:12, lineHeight:1.55, marginTop:7, maxWidth:680 }}>Upload the API key once. FloStudio encrypts it on the server, validates the exact App Store Connect app, and keeps the result scoped to this portfolio app. The `.p8` file is never placed in local storage or shown again.</p></div>
-      {connection?.status === 'connected' && <button onClick={() => navigate('/insights')} className="studio-button" style={{ whiteSpace:'nowrap' }}>Open App Insights →</button>}
+      {connection?.status === 'connected' && <button onClick={() => navigate(appInsightsPath(productId))} className="studio-button" style={{ whiteSpace:'nowrap' }}>Open {selectedApp?.name || 'app'} Insights →</button>}
     </div>
     <div style={{ display:'grid', gridTemplateColumns:'minmax(220px,.65fr) minmax(0,1.35fr)', gap:14, marginTop:18 }}>
       <label className="portfolio-field"><span>FloStudio portfolio app</span><select value={productId} onChange={event => { setProductId(event.target.value); setMessage('') }}>{apps.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}</select></label>
