@@ -153,9 +153,9 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
       actionType: 'seo_blueprint',
       result: {
         appName,
-        targetKeywords: blueprint.targetKeywords || ['career tools', 'resume builder', 'ai resume fix'],
-        metaTitle: blueprint.landingPageMeta?.metaTitle || `${appName} — Professional AI Workflow`,
-        metaDescription: blueprint.landingPageMeta?.metaDescription || `Supercharge your productivity with ${appName}.`,
+        targetKeywords: blueprint.website?.keywordThemes || [],
+        metaTitle: blueprint.website?.metaTitle || 'Add product context before drafting a title.',
+        metaDescription: blueprint.website?.metaDescription || 'Add a description or offer before drafting a meta description.',
         storeCategory: activeApp.category || 'Productivity'
       }
     }
