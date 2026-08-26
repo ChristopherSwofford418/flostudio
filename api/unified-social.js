@@ -292,6 +292,61 @@ async function saveChannelProfile(user, body, accessToken) {
   return { channel:rows?.[0] }
 }
 
+function postTextFor(draft) {
+  const caption = String(draft.caption || '').trim()
+  const tags = Array.isArray(draft.hashtags) ? draft.hashtags.map(tag => `#${String(tag || '').replace(/^#/, '').trim()}`).filter(Boolean).join(' ') : ''
+  const cta = String(draft.call_to_action || '').trim()
+  const shouldAppendCta = cta && !caption.toLowerCase().includes(cta.toLowerCase().slice(0, 28))
+  return [caption, tags, shouldAppendCta ? cta : ''].filter(Boolean).join('\n\n').slice(0, 1800)
+}
+
+function draftMediaNotes(draft) {
+  try {
+    const parsed = typeof draft.platform_notes === 'string' ? JSON.parse(draft.platform_notes) : (draft.platform_notes || {})
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch { return {} }
+}
+
+async function publishDraft(user, body, setup, accessToken) {
+  if (!setup.configured) throw apiError('UNIFIED_SOCIAL_SETUP_REQUIRED', setup.requirement, 503)
+  const draftId = String(body.draftId || '').trim()
+  if (!draftId) throw apiError('SOCIAL_DRAFT_REQUIRED', 'Choose a review-ready draft before publishing.')
+  const rows = await db(accessToken, `ai_social_drafts?select=*&id=eq.${encodeURIComponent(draftId)}&user_id=eq.${encodeURIComponent(user.id)}&limit=1`)
+  const draft = rows?.[0]
+  if (!draft) throw apiError('SOCIAL_DRAFT_NOT_FOUND', 'FloStudio could not find that social draft.', 404)
+  if (draft.status === 'published') return { draft, alreadyPublished:true }
+  if (draft.status !== 'ready_for_review' && draft.status !== 'approved') throw apiError('SOCIAL_DRAFT_NOT_READY', 'Only a review-ready draft can be approved and published.')
+  if (draft.platform !== 'facebook') throw apiError('SOCIAL_DRAFT_PLATFORM_UNSUPPORTED', 'This first live publish action is available for verified Facebook drafts only.')
+
+  const channelRows = await db(accessToken, `app_channel_profiles?select=*&id=eq.${encodeURIComponent(draft.channel_profile_id || '')}&user_id=eq.${encodeURIComponent(user.id)}&product_id=eq.${encodeURIComponent(draft.product_id)}&limit=1`)
+  const channel = channelRows?.[0]
+  if (!channel?.enabled || channel.platform !== 'facebook') throw apiError('SOCIAL_DESTINATION_NOT_ENABLED', 'Enable and verify the ResumeFix AI Facebook destination before publishing this draft.', 409)
+  const profile = await profileFor(user.id, accessToken)
+  const connected = accountList(profile?.account_snapshot).find(account => account.platform === 'facebook' && (!channel.provider_account_id || account.providerAccountId === channel.provider_account_id))
+  if (!profile || !connected) throw apiError('SOCIAL_DESTINATION_NOT_VERIFIED', 'FloStudio could not verify the mapped Facebook destination. Sync the account status and reconnect Facebook if needed.', 409)
+
+  const text = postTextFor(draft)
+  if (!text) throw apiError('SOCIAL_DRAFT_EMPTY', 'The selected draft has no Facebook post text.')
+  const mediaUrl = String(draft.media_url || '').trim()
+  if (draft.media_kind !== 'text' && !/^https:\/\//i.test(mediaUrl)) throw apiError('SOCIAL_MEDIA_URL_REQUIRED', 'Select a publicly accessible HTTPS image or video before pushing this post to Facebook.')
+  const notes = draftMediaNotes(draft)
+  const providerBody = {
+    post:text,
+    platforms:['facebook'],
+    idempotencyKey:`flostudio-facebook-${draft.id}`,
+    notes:`FloStudio approved draft ${draft.id} for ${channel.provider_account_name || 'Facebook'}`,
+  }
+  if (mediaUrl) providerBody.mediaUrls = [mediaUrl]
+  if (draft.media_kind === 'video') providerBody.isVideo = true
+  if (notes.altText && mediaUrl) providerBody.faceBookOptions = { altText:[String(notes.altText).slice(0, 500)] }
+  const published = await providerRequest('/post', setup, { method:'POST', body:providerBody })
+  const postIds = Array.isArray(published.postIds) ? published.postIds : (Array.isArray(published.posts?.[0]?.postIds) ? published.posts[0].postIds : [])
+  const facebookPost = postIds.find(post => post.platform === 'facebook' && post.status === 'success')
+  if (!facebookPost?.id) throw apiError('SOCIAL_PROVIDER_PUBLISH_UNCONFIRMED', 'The provider did not return a confirmed Facebook post ID, so FloStudio kept this draft out of published status.', 422)
+  const updated = await db(accessToken, `ai_social_drafts?id=eq.${encodeURIComponent(draft.id)}&user_id=eq.${encodeURIComponent(user.id)}`, { method:'PATCH', body:{ status:'published', provider_post_id:String(facebookPost.id), provider_post_url:facebookPost.postUrl || null, updated_at:new Date().toISOString() } })
+  return { draft:updated?.[0] || { ...draft, status:'published', provider_post_id:String(facebookPost.id), provider_post_url:facebookPost.postUrl || null }, provider:{ id:published.id || null, facebookPostId:String(facebookPost.id), postUrl:facebookPost.postUrl || null } }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST'])
@@ -326,6 +381,7 @@ export default async function handler(req, res) {
     if (body.action === 'app_config') return res.status(200).json(await appConfig(user, body.productId, accessToken))
     if (body.action === 'save_brand_agent') return res.status(200).json(await saveBrandAgent(user, body, accessToken))
     if (body.action === 'save_channel') return res.status(200).json(await saveChannelProfile(user, body, accessToken))
+    if (body.action === 'publish_draft') return res.status(200).json(await publishDraft(user, body, setup, accessToken))
     throw apiError('UNIFIED_SOCIAL_ACTION_UNKNOWN', 'Choose a supported unified social action.')
   } catch (error) {
     return sendError(res, error)
