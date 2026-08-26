@@ -228,11 +228,12 @@ async function mapConnectedAccountsToApp(user, productId, requestedPlatforms, ac
 
 async function appConfig(user, productId, accessToken) {
   const product = await productForUser(user.id, productId, accessToken)
-  const [agentRows, channelRows] = await Promise.all([
+  const [agentRows, channelRows, draftRows] = await Promise.all([
     db(accessToken, `app_brand_agents?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&limit=1`),
     db(accessToken, `app_channel_profiles?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&order=platform.asc`),
+    db(accessToken, `ai_social_drafts?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&order=created_at.desc&limit=20`),
   ])
-  return { product, context:sourceContext(product), agent:agentRows?.[0] || null, channels:channelRows || [] }
+  return { product, context:sourceContext(product), agent:agentRows?.[0] || null, channels:channelRows || [], drafts:draftRows || [] }
 }
 
 function cleanPlatforms(value) {
