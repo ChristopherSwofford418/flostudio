@@ -265,6 +265,7 @@ export default function Pipeline() {
       .pipeline-wrap{max-width:1200px;margin:0 auto;padding:0 4px 52px;animation:pipelineIn .28s ease-out}
       .pipeline-hero{position:relative;overflow:hidden;padding:30px;border:1px solid #d9e0eb;border-radius:22px;background:linear-gradient(135deg,#111a33 0%,#1b2450 56%,#513fc2 160%);box-shadow:0 20px 52px rgba(18,29,63,.14)}
       .pipeline-hero:before{content:'';position:absolute;width:460px;height:460px;right:-190px;top:-275px;border-radius:50%;background:radial-gradient(circle,rgba(167,161,255,.4),transparent 67%)}
+      .pipeline-hero h1{color:#fff!important;text-shadow:0 2px 18px rgba(4,8,30,.35)}.pipeline-hero h1 .studio-serif{color:#cbc7ff!important}.pipeline-hero p{color:rgba(243,244,255,.8)!important}
       .pipeline-hero:after{content:'';position:absolute;inset:auto 0 0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent)}
       .pipeline-context{display:grid;grid-template-columns:minmax(0,1fr) minmax(270px,.55fr);gap:16px;align-items:end;position:relative;z-index:1;margin-top:26px;padding-top:17px;border-top:1px solid rgba(255,255,255,.14)}
       .pipeline-kicker{font:800 9px 'DM Mono',monospace;letter-spacing:.13em;text-transform:uppercase;color:#bdb9ff}
