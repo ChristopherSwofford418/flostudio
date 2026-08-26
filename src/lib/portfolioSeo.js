@@ -26,8 +26,20 @@ function titleCase(value = '') {
   return clean(value).replace(/\b\w/g, letter => letter.toUpperCase())
 }
 
+function toList(value) {
+  if (Array.isArray(value)) return value
+  if (value && typeof value === 'object') return Object.values(value)
+  return value == null || value === '' ? [] : [value]
+}
+
+function assetValue(value) {
+  if (typeof value === 'string') return value
+  if (value && typeof value === 'object') return value.url || value.src || value.asset_url || value.imageUrl || value.image_url || ''
+  return ''
+}
+
 function unique(values = []) {
-  return [...new Set(values.map(value => clean(value)).filter(Boolean))]
+  return [...new Set(toList(values).map(value => clean(assetValue(value) || value)).filter(Boolean))]
 }
 
 function wordTokens(value = '') {
@@ -59,7 +71,7 @@ function buildAsaKeywordString(candidates, blockedTokens) {
 export function seoSourceCoverage(app = {}) {
   const facts = factsFor(app)
   const store = appStoreMetadata(app, facts)
-  const screenshots = facts.screenshots || facts.screenshotUrls || store.screenshots || []
+  const screenshots = toList(facts.screenshots || facts.screenshotUrls || store.screenshots || [])
   const listingUrl = app.product_url || app.url || facts.sourceUrl || ''
   return {
     name: Boolean(clean(app.name)),
@@ -69,7 +81,7 @@ export function seoSourceCoverage(app = {}) {
     audience: Boolean(clean(app.audience || facts.audience)),
     listingUrl: Boolean(clean(listingUrl)),
     publicListing: Boolean(store.appStoreId || store.trackId || facts.sourceType === 'app_store'),
-    screenshots: Array.isArray(screenshots) ? screenshots.length : 0,
+    screenshots: screenshots.length,
     artwork: Boolean(facts.image || facts.artworkUrl || store.artworkUrl100),
   }
 }
