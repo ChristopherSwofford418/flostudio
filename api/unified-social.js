@@ -187,6 +187,45 @@ async function syncProfile(user, setup, accessToken) {
   return { profile:rows?.[0] || profile, accounts, configured:true }
 }
 
+async function mapConnectedAccountsToApp(user, productId, requestedPlatforms, accessToken) {
+  if (!productId) return []
+  const product = await productForUser(user.id, productId, accessToken)
+  const selectedPlatforms = cleanPlatforms(requestedPlatforms)
+  if (!selectedPlatforms.length) return []
+  const unified = await profileFor(user.id, accessToken)
+  const accounts = accountList(unified?.account_snapshot).filter(account => selectedPlatforms.includes(account.platform))
+  const created = []
+  for (const account of accounts) {
+    const existing = await db(accessToken, `app_channel_profiles?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&platform=eq.${account.platform}&limit=1`)
+    if (existing?.[0]) { created.push(existing[0]); continue }
+    const rows = await db(accessToken, 'app_channel_profiles?on_conflict=user_id,product_id,platform', {
+      method:'POST',
+      prefer:'resolution=merge-duplicates,return=representation',
+      body:{
+        user_id:user.id,
+        workspace_id:product.workspace_id || null,
+        product_id:product.id,
+        unified_social_profile_id:unified?.id || null,
+        platform:account.platform,
+        provider_account_id:account.providerAccountId,
+        provider_account_name:account.accountName,
+        provider_handle:account.handle || null,
+        enabled:true,
+        approval_mode:'review',
+        tone:'',
+        audience:'',
+        default_cta:'',
+        preferred_formats:[],
+        hashtag_rules:{ count:5, avoidDuplicates:true },
+        schedule_preferences:{},
+        updated_at:new Date().toISOString(),
+      },
+    })
+    if (rows?.[0]) created.push(rows[0])
+  }
+  return created
+}
+
 async function appConfig(user, productId, accessToken) {
   const product = await productForUser(user.id, productId, accessToken)
   const [agentRows, channelRows] = await Promise.all([
@@ -267,18 +306,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ configured:setup.configured, connectionConfigured:setup.connectionConfigured, ownerMode:setup.ownerMode, requirement:setup.requirement, profile:profile ? { id:profile.id, title:profile.profile_title, status:profile.status, connectedPlatforms:profile.connected_platforms || [], lastSyncedAt:profile.last_synced_at } : null, accounts:profile ? accountList(profile.account_snapshot) : [] })
     }
     if (body.action === 'begin_connect') {
+      if (body.productId) await productForUser(user.id, body.productId, accessToken)
       const profile = await ensureProfile(user, body.workspaceId, setup, accessToken)
       if (!setup.configured) throw apiError('UNIFIED_SOCIAL_SETUP_REQUIRED', setup.requirement, 503)
+      const requested = cleanPlatforms(body.allowedSocial)
       await db(accessToken, `unified_social_profiles?id=eq.${encodeURIComponent(profile.id)}`, { method:'PATCH', body:{ status:'connection_pending', updated_at:new Date().toISOString() } })
       if (setup.ownerMode) {
-        return res.status(200).json({ authorizationUrl:'https://app.ayrshare.com/social-accounts', ownerManaged:true, profile:{ id:profile.id, title:profile.profile_title } })
+        return res.status(200).json({ authorizationUrl:'https://app.ayrshare.com/social-accounts', ownerManaged:true, requestedPlatforms:requested, productId:body.productId || null, profile:{ id:profile.id, title:profile.profile_title } })
       }
-      const requested = cleanPlatforms(body.allowedSocial)
       const payload = { domain:setup.domain, privateKey:setup.privateKey, profileKey:decrypt(profile.encrypted_profile_key), allowedSocial:requested.length ? requested : PLATFORMS, redirect:`${String(process.env.PUBLIC_APP_URL || 'https://www.flostudio.io').replace(/\/$/, '')}/accounts?unifiedConnected=1`, expiresIn:10 }
       const linked = await providerRequest('/profiles/generateJWT', setup, { method:'POST', body:payload })
-      return res.status(200).json({ authorizationUrl:linked.url, expiresIn:linked.expiresIn || '10m', profile:{ id:profile.id, title:profile.profile_title } })
+      return res.status(200).json({ authorizationUrl:linked.url, expiresIn:linked.expiresIn || '10m', requestedPlatforms:requested, productId:body.productId || null, profile:{ id:profile.id, title:profile.profile_title } })
     }
-    if (body.action === 'sync') return res.status(200).json(await syncProfile(user, setup, accessToken))
+    if (body.action === 'sync') {
+      const result = await syncProfile(user, setup, accessToken)
+      const appChannels = await mapConnectedAccountsToApp(user, body.productId, body.requestedPlatforms, accessToken)
+      return res.status(200).json({ ...result, appChannels })
+    }
     if (body.action === 'app_config') return res.status(200).json(await appConfig(user, body.productId, accessToken))
     if (body.action === 'save_brand_agent') return res.status(200).json(await saveBrandAgent(user, body, accessToken))
     if (body.action === 'save_channel') return res.status(200).json(await saveChannelProfile(user, body, accessToken))
