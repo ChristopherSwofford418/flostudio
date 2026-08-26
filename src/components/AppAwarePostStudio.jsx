@@ -41,7 +41,9 @@ export default function AppAwarePostStudio({ apps = [], workspaceId }) {
     if (!productId) return
     try {
       const data = await api('/api/unified-social', { action:'app_config', productId })
-      setEnabledPlatforms((data.channels || []).filter(channel => channel.enabled).map(channel => channel.platform))
+      const enabled = (data.channels || []).filter(channel => channel.enabled).map(channel => channel.platform)
+      setEnabledPlatforms(enabled)
+      setPlatform(current => enabled.includes(current) ? current : (enabled[0] || current))
     } catch (error) { setNotice(error.message) }
   }
 
