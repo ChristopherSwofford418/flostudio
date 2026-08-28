@@ -160,6 +160,8 @@ export default function ImageBank() {
   const [objectiveId, setObjectiveId] = useState('acquire')
   const [lensId, setLensId] = useState('product-in-use')
   const [handoffState, setHandoffState] = useState({ status:'idle', message:'' })
+  const [postAssistant, setPostAssistant] = useState({ status:'idle', suggestions:null, error:'' })
+  const [postDraft, setPostDraft] = useState(null)
   const assetLoadVersion = useRef(0)
   const videoBuilderRef = useRef(null)
 
@@ -186,6 +188,7 @@ export default function ImageBank() {
   const selectedCaptionTreatment = CAPTION_TREATMENTS.find(treatment => treatment.id === captionTreatment) || CAPTION_TREATMENTS[0]
   const selectedActor = castingProfile(actorId)
   const selectedVoice = voiceProfile(voiceId)
+  const postAssistantImage = useMemo(() => generatedResults[0]?.url || referenceImage || null, [generatedResults, referenceImage])
   const creativeReadiness = useMemo(() => [
     { label:'Product truth', ready:Boolean(activeApp || referenceImage), next:'Select an app or pin a real product image.' },
     { label:'Scroll-stopping hook', ready:Boolean(hook.trim()), next:'Name the opening promise or friction point.' },
@@ -320,6 +323,8 @@ export default function ImageBank() {
     setVideoSource(null)
     setGeneratedResults([])
     setHandoffState({ status:'idle', message:'' })
+    setPostAssistant({ status:'idle', suggestions:null, error:'' })
+    setPostDraft(null)
     loadAssets(activeApp?.id)
   }, [activeApp?.id])
   useEffect(() => { loadProviderConnection() }, [workspaceId])
@@ -369,12 +374,58 @@ export default function ImageBank() {
       if (first.size > 10 * 1024 * 1024) throw new Error('Please choose a reference image smaller than 10MB.')
       const reader = new FileReader()
       const reference = await new Promise((resolve, reject) => { reader.onload = event => resolve(event.target.result); reader.onerror = reject; reader.readAsDataURL(first) })
-      setReferenceImage(reference)
-      for (const file of input) await uploadAsset(file, 'brand-source', { source:'upload', kind:'image' })
+      const savedAssets = []
+      for (const file of input) savedAssets.push(await uploadAsset(file, 'brand-source', { source:'upload', kind:'image' }))
+      setReferenceImage(savedAssets[0]?.url || reference)
       await loadAssets()
     } catch (uploadError) { setError(uploadError.message || 'The image could not be uploaded.') }
     setUploading(false)
   }
+
+  const generatePostOptions = async () => {
+    if (!activeApp?.id) { setPostAssistant({ status:'error', suggestions:null, error:'Select a portfolio app before asking Flo to write a post.' }); return }
+    if (!postAssistantImage) { setPostAssistant({ status:'error', suggestions:null, error:'Select an App Store image, upload artwork, or render a creative first.' }); return }
+    setPostAssistant({ status:'working', suggestions:null, error:'' })
+    try {
+      const authHeaders = await providerHeaders()
+      const response = await fetch('/api/generate-creative-post', {
+        method:'POST',
+        headers:{ ...authHeaders, 'Content-Type':'application/json' },
+        body:JSON.stringify({
+          workspaceId,
+          productId:activeApp.id,
+          imageUrl:postAssistantImage,
+          platform:'Instagram',
+          runbook:selectedRunbook.label,
+          objective:selectedObjective.label,
+          visualLens:selectedLens.label,
+          imageAngle:selectedImageAngle.label,
+          aspectRatio,
+          hook,
+          proof,
+          direction:prompt || selectedRunbook.prompt,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || data.error) throw new Error(data.error || 'Flo could not generate post options for this creative.')
+      setPostAssistant({ status:'ready', suggestions:data.suggestions, error:'' })
+      const first = data.suggestions?.postOptions?.[0] || null
+      if (first) {
+        setPostDraft(first)
+        if (!textOverlay.trim() && first.overlayText) setTextOverlay(first.overlayText)
+      }
+    } catch (assistantError) {
+      setPostAssistant({ status:'error', suggestions:null, error:presentProviderError(assistantError.message, 'post assistant') })
+    }
+  }
+
+  const choosePostOption = option => {
+    if (!option) return
+    setPostDraft({ ...option, hashtags:Array.isArray(option.hashtags) ? option.hashtags : [] })
+    if (option.overlayText) setTextOverlay(option.overlayText)
+  }
+
+  const updatePostDraft = (field, value) => setPostDraft(current => current ? { ...current, [field]:value } : current)
 
   const persistRemoteOutput = async (url, prefix, fallbackKind = 'image', details = {}) => {
     const { requestHeaders, ...assetDetails } = details
@@ -424,7 +475,10 @@ export default function ImageBank() {
       if (asset.campaign_post_id) throw new Error('This creative is already attached to a review draft.')
       const metadata = asset.metadata || {}
       const fallbackCopy = `${metadata.runbook || selectedRunbook.label}: ${activeApp?.name || 'Your product'} — ${selectedObjective.detail}`
-      const content = [metadata.hook || hook || fallbackCopy, metadata.proof || proof || '', metadata.textOverlay || textOverlay || ''].filter(Boolean).join('\n\n')
+      const selectedHashtags = Array.isArray(postDraft?.hashtags) ? postDraft.hashtags.map(tag => `#${String(tag || '').replace(/^#/, '')}`).filter(Boolean).join(' ') : ''
+      const content = postDraft
+        ? [postDraft.hook, postDraft.caption, selectedHashtags, postDraft.callToAction].filter(Boolean).join('\n\n')
+        : [metadata.hook || hook || fallbackCopy, metadata.proof || proof || '', metadata.textOverlay || textOverlay || ''].filter(Boolean).join('\n\n')
       const { data: post, error: postError } = await supabase.from('campaign_posts').insert([{
         user_id:user.id,
         platform:'instagram',
@@ -638,6 +692,21 @@ export default function ImageBank() {
           <div style={{ marginTop:18 }}><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:9 }}>CREATIVE TREATMENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:9 }}>{STYLE_PRESETS.map(style => <button key={style.id} onClick={() => setStylePreset(style.id)} className={`format-card ${stylePreset === style.id ? 'active':''}`}><b style={{ display:'block', fontSize:12 }}>{style.label}</b><small>{style.desc}</small></button>)}</div></div>
           <div style={{ marginTop:18 }}><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:9 }}>COMPOSITION ANGLE</div><div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:9 }}>{IMAGE_ANGLES.map(angle => <button key={angle.id} onClick={() => setImageAngle(angle.id)} className={`format-card ${imageAngle === angle.id ? 'active':''}`}><b style={{ display:'block', fontSize:12 }}>{angle.label}</b><small>{angle.detail}</small></button>)}</div></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>PLACEMENT</div><select className="studio-input" value={aspectRatio} onChange={event => setAspectRatio(event.target.value)}>{ASPECT_RATIOS.map(ratio => <option key={ratio.id} value={ratio.id}>{ratio.label} / {ratio.visual}</option>)}</select></div><div><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>CREATIVE DELIVERY</div><div className="studio-input" style={{ minHeight:39, display:'flex', alignItems:'center', color:'rgba(240,240,240,.76)', fontSize:11 }}>One original image per take. New take = new composition.</div></div></div>
           <div style={{ marginTop:18 }}><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>OPTIONAL ON-IMAGE MESSAGE</div><input className="studio-input" value={textOverlay} onChange={event => setTextOverlay(event.target.value)} placeholder="e.g. EARLY ACCESS IS OPEN" /></div>
+          <section className="creative-post-assistant" aria-live="polite">
+            <div className="creative-post-assistant__head">
+              <div><div className="abundance-mini-label">AI POST ASSISTANT / IMAGE-AWARE</div><h3>Turn this creative into an app-grounded post.</h3><p>Flo reads the selected creative and combines it with the active app’s verified product context. Choose a direction, edit it, then send the finished creative to Review Queue.</p></div>
+              <button type="button" onClick={generatePostOptions} disabled={postAssistant.status === 'working' || !activeApp?.id || !postAssistantImage} className="studio-button">{postAssistant.status === 'working' ? 'Reading creative…' : 'Generate post options'}</button>
+            </div>
+            <div className="creative-post-assistant__source">{postAssistantImage ? (generatedResults[0]?.url ? 'Using the latest generated creative as the visual source.' : 'Using your pinned image as the visual source.') : 'Pin an App Store image, upload artwork, or render a creative to enable image-aware suggestions.'}</div>
+            {postAssistant.error && <div className="creative-post-assistant__error">{postAssistant.error}</div>}
+            {postAssistant.status === 'ready' && postAssistant.suggestions && <div className="creative-post-assistant__results">
+              {postAssistant.suggestions.creativeSummary && <p className="creative-post-assistant__summary"><b>Creative read:</b> {postAssistant.suggestions.creativeSummary}</p>}
+              {postAssistant.suggestions.overlayOptions?.length > 0 && <div className="creative-post-assistant__overlay"><span>ON-IMAGE TEXT OPTIONS</span><div>{postAssistant.suggestions.overlayOptions.map(option => <button type="button" key={option.id} onClick={() => setTextOverlay(option.text)} className={`creative-post-assistant__overlay-option ${textOverlay === option.text ? 'is-selected' : ''}`}><b>{option.type}</b><em>{option.text}</em><small>{option.rationale}</small></button>)}</div></div>}
+              <div className="creative-post-assistant__options">{postAssistant.suggestions.postOptions.map(option => <button type="button" key={option.id} onClick={() => choosePostOption(option)} className={`creative-post-assistant__option ${postDraft?.id === option.id ? 'is-selected' : ''}`}><span>{option.angle}</span><b>{option.hook || 'Post direction'}</b><small>{option.caption}</small></button>)}</div>
+              {postDraft && <div className="creative-post-assistant__editor"><div className="creative-post-assistant__editor-head"><b>SELECTED POST / EDIT BEFORE REVIEW</b><span>{postDraft.angle}</span></div><label>Hook<input className="studio-input" value={postDraft.hook || ''} onChange={event => updatePostDraft('hook', event.target.value)} /></label><label>Caption<textarea className="studio-input" rows={4} value={postDraft.caption || ''} onChange={event => updatePostDraft('caption', event.target.value)} /></label><div className="creative-post-assistant__editor-grid"><label>CTA<input className="studio-input" value={postDraft.callToAction || ''} onChange={event => updatePostDraft('callToAction', event.target.value)} /></label><label>Hashtags<input className="studio-input" value={(postDraft.hashtags || []).map(tag => `#${String(tag || '').replace(/^#/, '')}`).join(' ')} onChange={event => updatePostDraft('hashtags', event.target.value.split(/\s+/).map(tag => tag.replace(/^#/, '')).filter(Boolean).slice(0, 10))} /></label></div><label>Alt text<input className="studio-input" value={postDraft.altText || ''} onChange={event => updatePostDraft('altText', event.target.value)} /></label></div>}
+              <div className="creative-post-assistant__note">{postAssistant.suggestions.guardrailNote}</div>
+            </div>}
+          </section>
           <div style={{ marginTop:18 }}>
             <div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>PRODUCT REFERENCE</div>
             {referenceImage ? (
