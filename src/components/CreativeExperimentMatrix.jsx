@@ -57,7 +57,7 @@ export default function CreativeExperimentMatrix({ apps, workspaceId, userId, on
     finally { setBusy(false) }
   }
 
-  return <section className="studio-panel" style={{ padding:20, marginTop:16, border:'1px solid rgba(201,201,201,.24)', background:'linear-gradient(135deg,rgba(201,201,201,.09),rgba(12,12,12,.35))' }}>
+  return <section className="studio-panel flo-dark-surface experiment-matrix" style={{ padding:20, marginTop:16, border:'1px solid rgba(201,201,201,.24)', background:'linear-gradient(135deg,rgba(201,201,201,.09),rgba(12,12,12,.35))' }}>
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', gap:18, flexWrap:'wrap' }}>
       <div><div className="studio-kicker" style={{ color:'#ededed' }}>GROWTH LOOP / CREATIVE EXPERIMENT MATRIX</div><h2 style={{ color:'#ffffff', fontSize:25, letterSpacing:'-.05em', marginTop:5 }}>Create a controlled <span className="studio-serif" style={{ color:'#c9c9c9' }}>test set.</span></h2><p style={{ color:'rgba(242,242,242,.64)', fontSize:11.5, lineHeight:1.6, maxWidth:700, marginTop:7 }}>Add variants to the existing experiment ledger without changing any imported app, current campaign, asset, casting selection, or experiment. Each cell keeps its own hook, actor, voice, placement, and source lineage.</p></div>
       <button type="button" onClick={() => navigate('/images')} className="studio-button studio-button--soft" style={{ whiteSpace:'nowrap' }}>Open Creative Lab →</button>
