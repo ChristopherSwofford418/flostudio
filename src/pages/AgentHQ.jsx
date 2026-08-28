@@ -216,7 +216,7 @@ export default function AgentHQ() {
       @media(max-width:1060px){.engine-grid,.engine-intake-grid,.engine-board-grid{grid-template-columns:1fr!important}.engine-rail{display:none!important}.engine-header{padding:28px!important}.engine-stat-grid{grid-template-columns:repeat(2,1fr)!important}} @media(max-width:640px){.engine-stat-grid{grid-template-columns:1fr!important}.engine-fields{grid-template-columns:1fr!important}.engine-hero-title{font-size:38px!important}}
     `}</style>
     <div className="flo-page engine-ledger" style={{ maxWidth:1360, margin:'0 auto', animation:'engineEnter .42s var(--ease-out)' }}>
-      <section className="studio-dark engine-header" style={{ position:'relative', overflow:'hidden', minHeight:296, padding:'37px 42px', marginBottom:18 }}>
+      <section className="studio-dark flo-dark-surface engine-header" style={{ position:'relative', overflow:'hidden', minHeight:296, padding:'37px 42px', marginBottom:18 }}>
         <div style={{ position:'absolute', width:420, height:420, right:-150, top:-230, borderRadius:'50%', background:'radial-gradient(circle,#c5c5c5 0%,#868686 32%,rgba(134,134,134,0) 70%)', opacity:.70 }} />
         <div style={{ position:'absolute', width:240, height:240, right:120, bottom:-130, borderRadius:3, background:'linear-gradient(140deg,#c5c5c5,#7c7c7c)', transform:'rotate(24deg)', opacity:.76 }} />
         <div style={{ position:'relative', maxWidth:800 }}>
