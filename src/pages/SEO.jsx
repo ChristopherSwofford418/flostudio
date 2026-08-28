@@ -38,7 +38,7 @@ function safeFallbackBlueprint(app = {}) {
 export default function SEO() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { apps, activeApp, setActiveApp, workspaceId } = useWorkspace()
+  const { apps, activeApp, setActiveApp, workspaceId, workspaceLoading, workspaceError } = useWorkspace()
   const safeApps = Array.isArray(apps) ? apps : []
   const requestedId = searchParams.get('app') || ''
   const [selectedId, setSelectedId] = useState(requestedId || activeApp?.id || '')
@@ -199,6 +199,8 @@ export default function SEO() {
     }
   }
 
+  if (workspaceLoading) return <Layout title="SEO & ASO"><div className="studio-panel" style={{ padding:30, margin:'28px 30px', color:'rgba(240,240,240,.65)' }}>Loading your secure SEO workspace…</div></Layout>
+  if (workspaceError) return <Layout title="SEO & ASO"><div className="studio-panel" style={{ padding:30, margin:'28px 30px', color:'rgba(240,240,240,.72)' }}><div className="studio-kicker" style={{ color:'var(--signal)' }}>WORKSPACE CONNECTION</div><p style={{ marginTop:8, lineHeight:1.55 }}>{workspaceError}</p><button type="button" onClick={() => window.location.reload()} className="studio-button" style={{ marginTop:14 }}>Retry SEO workspace →</button></div></Layout>
   if (!app || !blueprint) return <Layout title="SEO & ASO"><div className="studio-panel" style={{ padding:30, margin:'28px 30px', color:'rgba(240,240,240,.65)' }}>Add a portfolio app before creating an SEO plan.</div></Layout>
 
   const website = blueprint.website || {}

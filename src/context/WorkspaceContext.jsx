@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../supabase'
 import { fetchUserTokens, consumeTokens as backendConsumeTokens, refundTokens as backendRefundTokens } from '../lib/billing'
 import { ensurePersonalWorkspace, getWorkspaceRole, listPortfolioApps } from '../lib/portfolio'
@@ -17,6 +17,7 @@ export function WorkspaceProvider({ children }) {
   const [notification, setNotification] = useState(null)
   const [workspaceLoading, setWorkspaceLoading] = useState(true)
   const [workspaceError, setWorkspaceError] = useState('')
+  const initializationRef = useRef(0)
 
   const refreshApps = useCallback(async (preferredId = null) => {
     if (!workspaceId) return []
@@ -27,6 +28,7 @@ export function WorkspaceProvider({ children }) {
   }, [workspaceId])
 
   const clearWorkspace = useCallback(() => {
+    initializationRef.current += 1
     setApps([])
     setActiveApp(null)
     setWorkspaceId(null)
@@ -40,31 +42,43 @@ export function WorkspaceProvider({ children }) {
 
   const initializeWorkspace = useCallback(async user => {
     if (!user) { clearWorkspace(); return }
+    const initializationId = initializationRef.current + 1
+    initializationRef.current = initializationId
     setWorkspaceLoading(true)
     setWorkspaceError('')
     try {
       const workspace = await ensurePersonalWorkspace()
       const [tokenState, nextApps, role] = await Promise.all([fetchUserTokens(user.id), listPortfolioApps(workspace), getWorkspaceRole(workspace)])
+      if (initializationRef.current !== initializationId) return
       setWorkspaceId(workspace)
       setWorkspaceRole(role)
       setTokens(tokenState.balance)
       setTier(tokenState.tier)
       setUnlimited(Boolean(tokenState.unlimited))
-      setApps(nextApps)
-      setActiveApp(current => nextApps.find(app => app.id === current?.id) || nextApps[0] || null)
+      setApps(Array.isArray(nextApps) ? nextApps : [])
+      setActiveApp(current => (Array.isArray(nextApps) ? nextApps : []).find(app => app.id === current?.id) || (Array.isArray(nextApps) ? nextApps : [])[0] || null)
     } catch (error) {
+      if (initializationRef.current !== initializationId) return
       console.error('FloStudio workspace initialization failed', error)
-      setWorkspaceError(error?.message || 'We could not finish setting up your workspace. Refresh or sign in again.')
+      setWorkspaceError(error?.message || 'We could not finish setting up your workspace. Retry loading this page.')
     } finally {
-      setWorkspaceLoading(false)
+      if (initializationRef.current === initializationId) setWorkspaceLoading(false)
     }
   }, [clearWorkspace])
 
   useEffect(() => {
     let mounted = true
     const boot = async () => {
-      const { data:{ user } } = await supabase.auth.getUser()
-      if (mounted) await initializeWorkspace(user)
+      try {
+        const { data:{ user }, error } = await supabase.auth.getUser()
+        if (error) throw error
+        if (mounted) await initializeWorkspace(user)
+      } catch (error) {
+        if (!mounted) return
+        console.error('FloStudio workspace boot failed', error)
+        setWorkspaceError(error?.message || 'We could not restore this workspace. Retry the page.')
+        setWorkspaceLoading(false)
+      }
     }
     boot()
     const { data:{ subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
