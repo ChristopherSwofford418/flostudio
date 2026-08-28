@@ -134,7 +134,7 @@ export default function AppStoreConnectPanel({ apps = [], initialProductId = '' 
     setMessage('')
   }
 
-  return <section id="app-store-connect" className="studio-panel" style={{ marginTop:16, padding:20, borderColor:'rgba(197,197,197,.42)', background:'linear-gradient(120deg,rgba(49,49,49,.44),rgba(25,25,25,.48))' }}>
+  return <section id="app-store-connect" className="studio-panel flo-dark-surface asc-connect-panel" style={{ marginTop:16, padding:20, borderColor:'rgba(197,197,197,.42)', background:'linear-gradient(120deg,rgba(49,49,49,.44),rgba(25,25,25,.48))' }}>
     <style>{`.portfolio-autopilot:has(input[placeholder*="BEGIN PRIVATE KEY"]){display:none!important}`}</style>
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16, flexWrap:'wrap' }}>
       <div><div className="studio-kicker" style={{ color:'var(--signal)' }}>APP STORE CONNECT / PRIVATE PER-APP VAULT</div><h2 style={{ color:'#ffffff', fontSize:22, letterSpacing:'-.055em', marginTop:6 }}>Connect the selected app. Keep its data separate.</h2><p style={{ color:'rgba(240,240,240,.68)', fontSize:12, lineHeight:1.55, marginTop:7, maxWidth:680 }}>Upload the API key once. FloStudio encrypts it on the server, validates the exact App Store Connect app, and keeps the result scoped to this portfolio app. The `.p8` file is never placed in local storage or shown again.</p></div>
