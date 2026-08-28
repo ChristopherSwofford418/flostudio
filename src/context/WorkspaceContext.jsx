@@ -4,6 +4,7 @@ import { fetchUserTokens, consumeTokens as backendConsumeTokens, refundTokens as
 import { ensurePersonalWorkspace, getWorkspaceRole, listPortfolioApps } from '../lib/portfolio'
 
 const WorkspaceContext = createContext(null)
+const ACTIVE_APP_STORAGE_KEY = 'flostudio.active_app_id'
 
 export function WorkspaceProvider({ children }) {
   const [apps, setApps] = useState([])
@@ -55,8 +56,10 @@ export function WorkspaceProvider({ children }) {
       setTokens(tokenState.balance)
       setTier(tokenState.tier)
       setUnlimited(Boolean(tokenState.unlimited))
-      setApps(Array.isArray(nextApps) ? nextApps : [])
-      setActiveApp(current => (Array.isArray(nextApps) ? nextApps : []).find(app => app.id === current?.id) || (Array.isArray(nextApps) ? nextApps : [])[0] || null)
+      const availableApps = Array.isArray(nextApps) ? nextApps : []
+      const savedActiveAppId = typeof window !== 'undefined' ? window.localStorage.getItem(ACTIVE_APP_STORAGE_KEY) : null
+      setApps(availableApps)
+      setActiveApp(current => availableApps.find(app => app.id === current?.id) || availableApps.find(app => app.id === savedActiveAppId) || availableApps[0] || null)
     } catch (error) {
       if (initializationRef.current !== initializationId) return
       console.error('FloStudio workspace initialization failed', error)
@@ -65,6 +68,10 @@ export function WorkspaceProvider({ children }) {
       if (initializationRef.current === initializationId) setWorkspaceLoading(false)
     }
   }, [clearWorkspace])
+
+  useEffect(() => {
+    if (activeApp?.id && typeof window !== 'undefined') window.localStorage.setItem(ACTIVE_APP_STORAGE_KEY, activeApp.id)
+  }, [activeApp?.id])
 
   useEffect(() => {
     let mounted = true

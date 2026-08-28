@@ -185,12 +185,22 @@ function AgentDrawer({ onClose, activeApp, apps }) {
 export default function Layout({ children, title }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { tokens, tier, unlimited, activeApp, apps } = useWorkspace()
+  const { tokens, tier, unlimited, activeApp, apps, setActiveApp } = useWorkspace()
   const [user, setUser] = useState(null)
   const [copilotOpen, setCopilotOpen] = useState(false)
   const [providerKeyOpen, setProviderKeyOpen] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
+  const [appSwitcherOpen, setAppSwitcherOpen] = useState(false)
+  const appSwitcherRef = useRef(null)
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data?.user || null)) }, [])
+  useEffect(() => {
+    const closeOnOutsideClick = event => { if (!appSwitcherRef.current?.contains(event.target)) setAppSwitcherOpen(false) }
+    const closeOnEscape = event => { if (event.key === 'Escape') setAppSwitcherOpen(false) }
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => { document.removeEventListener('mousedown', closeOnOutsideClick); document.removeEventListener('keydown', closeOnEscape) }
+  }, [])
+  const chooseActiveApp = app => { if (!app?.id) return; setActiveApp(app); setAppSwitcherOpen(false) }
   const meta = pageMeta[location.pathname] || [title || 'FloStudio', 'Build what moves your business forward.']
   const initial = (user?.email || 'F').slice(0,1).toUpperCase()
   const logout = async () => { await supabase.auth.signOut(); navigate('/auth') }
@@ -204,7 +214,7 @@ export default function Layout({ children, title }) {
       </div>
       {navCollapsed && <button onClick={() => setNavCollapsed(false)} className="flo-collapse" style={{ margin:'0 auto 16px' }} aria-label="Expand navigation">›</button>}
       <button onClick={() => setCopilotOpen(true)} className="flo-ask" style={{ justifyContent:navCollapsed ? 'center':'flex-start', padding:navCollapsed ? '12px':'12px 14px' }}><span className="flo-ask-mark">F</span>{!navCollapsed && <span className="flo-ask-copy">Open Flo operator</span>}</button>
-      {!navCollapsed && <button onClick={() => navigate('/portfolio')} className="flo-app-focus" title="Open active product in portfolio"><span className="flo-app-focus__eyebrow">ACTIVE PRODUCT</span><strong>{activeApp?.name || 'Select a product'}</strong><span>{activeApp?.category || 'Portfolio intelligence'} <b>↗</b></span></button>}
+      {!navCollapsed && <div className="flo-app-switcher" ref={appSwitcherRef}><button type="button" onClick={() => setAppSwitcherOpen(open => !open)} className="flo-app-focus" aria-haspopup="listbox" aria-expanded={appSwitcherOpen} title="Switch active product"><span className="flo-app-focus__eyebrow">ACTIVE PRODUCT · SWITCH</span><strong>{activeApp?.name || 'Select a product'}</strong><span>{activeApp?.category || 'Portfolio intelligence'} <b>{appSwitcherOpen ? '⌃' : '⌄'}</b></span></button>{appSwitcherOpen && <div className="flo-app-switcher__menu" role="listbox" aria-label="Choose active portfolio app"><button type="button" className="flo-app-switcher__portfolio" onClick={() => { setAppSwitcherOpen(false); navigate('/portfolio') }}>View all portfolio apps <span>↗</span></button>{apps.length ? apps.map(app => <button key={app.id} type="button" role="option" aria-selected={app.id === activeApp?.id} onClick={() => chooseActiveApp(app)} className={`flo-app-switcher__option ${app.id === activeApp?.id ? 'is-active' : ''}`}><span className="flo-app-switcher__dot" style={{ background:app.accentColor || '#8d85ff' }} /><span><b>{app.name}</b><small>{app.category || 'Portfolio app'}</small></span>{app.id === activeApp?.id && <em>ACTIVE</em>}</button>) : <div className="flo-app-switcher__empty">Loading portfolio apps…</div>}</div>}</div>}
       <nav className="flo-nav">{navGroups.map(group => <div key={group.label}>{!navCollapsed && <div className="flo-nav-label">{group.label}</div>}{group.items.map(([route, label, mark]) => { const path = `/${route}`; const active = location.pathname === path; return <button key={route} onClick={() => navigate(path)} title={label} className={`flo-nav-item ${active ? 'active':''}`} style={{ justifyContent:navCollapsed ? 'center':'flex-start', padding:navCollapsed ? '12px':'10px 12px' }}><span className="flo-nav-mark">{mark}</span>{!navCollapsed && <span className="flo-nav-text">{label}</span>}{active && <span className="flo-nav-pulse"/>}</button> })}</div>)}</nav>
       <div className="flo-sidebar-footer">{!navCollapsed && <div className="flo-fuel"><div className="flo-fuel-label">SIGNAL FUEL</div><div className="flo-fuel-amount"><b>{unlimited ? '∞' : tokens}</b><span>{unlimited ? 'unlimited' : 'tokens'}</span></div></div>}<div className="flo-profile" style={{ justifyContent:navCollapsed ? 'center':'flex-start' }}><div className="flo-avatar">{initial}</div>{!navCollapsed && <div className="flo-profile-copy" style={{ minWidth:0, flex:1 }}><div className="flo-profile-email">{user?.email || 'FloStudio user'}</div><div className="flo-profile-tier">{tier} workspace</div></div>}{!navCollapsed && <button onClick={logout} className="flo-signout" title="Sign out">→</button>}</div></div>
     </aside>
