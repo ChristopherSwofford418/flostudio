@@ -6,6 +6,7 @@ const PLATFORM_LABELS = {
 }
 
 const OWNER_TEST_PLATFORMS = ['facebook', 'instagram', 'linkedin', 'tiktok', 'threads', 'youtube', 'pinterest', 'reddit', 'bluesky', 'gmb', 'telegram', 'snapchat']
+const OWNER_TEST_CHANNEL_LIMIT = 3
 
 function itemsFrom(value) {
   return String(value || '').split('\n').map(item => item.trim()).filter(Boolean)
@@ -22,13 +23,25 @@ export default function AppSocialStudio({ apps = [], workspaceId, activeAppId: c
     setLocalAppId(appId)
     onAppChange?.(appId)
   }
-  const [connectPlatform, setConnectPlatform] = useState('facebook')
+  const [connectPlatforms, setConnectPlatforms] = useState(['facebook'])
   const [status, setStatus] = useState(null)
   const [config, setConfig] = useState(null)
   const [agent, setAgent] = useState({ agentName:'', brandVoice:'', primaryAudience:'', valuePropositions:'', proofPoints:'', approvedTopics:'', prohibitedClaims:'', defaultHashtags:'' })
   const [channelDrafts, setChannelDrafts] = useState({})
   const [busy, setBusy] = useState('')
   const [notice, setNotice] = useState('')
+
+  const toggleConnectPlatform = platform => {
+    setNotice('')
+    setConnectPlatforms(previous => {
+      if (previous.includes(platform)) return previous.filter(item => item !== platform)
+      if (previous.length >= OWNER_TEST_CHANNEL_LIMIT) {
+        setNotice(`Choose up to ${OWNER_TEST_CHANNEL_LIMIT} channels for this owner test. You can return to add or map more later.`)
+        return previous
+      }
+      return [...previous, platform]
+    })
+  }
 
   const activeApp = useMemo(() => apps.find(app => app.id === activeAppId) || apps[0] || null, [apps, activeAppId])
 
@@ -92,10 +105,11 @@ export default function AppSocialStudio({ apps = [], workspaceId, activeAppId: c
   }, [activeAppId, status?.profile?.id])
 
   const connectAccounts = async () => {
-    if (!activeApp) { setNotice('Choose a portfolio app before connecting a social channel.'); return }
+    if (!activeApp) { setNotice('Choose a portfolio app before connecting social channels.'); return }
+    if (!connectPlatforms.length) { setNotice('Select at least one social channel to connect.'); return }
     setBusy('connect'); setNotice('')
     try {
-      const result = await api({ action:'begin_connect', workspaceId, productId:activeApp.id, allowedSocial:[connectPlatform] })
+      const result = await api({ action:'begin_connect', workspaceId, productId:activeApp.id, allowedSocial:connectPlatforms })
       if (!result.authorizationUrl) throw new Error('The social provider did not return an account-linking URL.')
       window.location.assign(result.authorizationUrl)
     } catch (error) { setNotice(error.message) }
@@ -103,14 +117,16 @@ export default function AppSocialStudio({ apps = [], workspaceId, activeAppId: c
   }
 
   const syncAccounts = async () => {
-    if (!activeApp) { setNotice('Choose a portfolio app before syncing a social channel.'); return }
+    if (!activeApp) { setNotice('Choose a portfolio app before syncing social channels.'); return }
+    if (!connectPlatforms.length) { setNotice('Select at least one social channel to verify and map.'); return }
     setBusy('sync'); setNotice('')
     try {
-      const result = await api({ action:'sync', productId:activeApp.id, requestedPlatforms:[connectPlatform] })
+      const result = await api({ action:'sync', productId:activeApp.id, requestedPlatforms:connectPlatforms })
       setStatus(previous => ({ ...(previous || {}), configured:result.configured, profile:result.profile ? { id:result.profile.id, title:result.profile.profile_title || result.profile.profileTitle, status:result.profile.status, connectedPlatforms:result.profile.connected_platforms || result.profile.connectedPlatforms || [], lastSyncedAt:result.profile.last_synced_at || result.profile.lastSyncedAt } : previous?.profile, accounts:result.accounts || [] }))
       await loadAppConfig(activeApp.id, result.accounts || [])
-      const platformLabel = PLATFORM_LABELS[connectPlatform] || connectPlatform
-      setNotice(result.appChannels?.length ? `${platformLabel} is verified and mapped to ${activeApp.name} in review-only mode. Configure its policy below before any post can be approved.` : result.accounts?.some(account => account.platform === connectPlatform) ? `${platformLabel} was synced. Its app mapping will appear after the next configuration refresh.` : `No connected ${platformLabel} account was returned yet. Complete authorization at the provider, then sync again.`)
+      const verified = (result.appChannels || []).map(channel => PLATFORM_LABELS[channel.platform] || channel.platform)
+      const selectedLabels = connectPlatforms.map(platform => PLATFORM_LABELS[platform] || platform)
+      setNotice(verified.length ? `${verified.join(', ')} ${verified.length === 1 ? 'is' : 'are'} verified and mapped to ${activeApp.name} in review-only mode. Configure each policy below before any post can be approved.` : result.accounts?.some(account => connectPlatforms.includes(account.platform)) ? `${selectedLabels.join(', ')} ${selectedLabels.length === 1 ? 'was' : 'were'} synced. Their app mappings will appear after the next configuration refresh.` : `No connected account was returned for ${selectedLabels.join(', ')}. Complete authorization at the provider, then verify again.`)
     } catch (error) { setNotice(error.message) }
     finally { setBusy('') }
   }
@@ -150,6 +166,8 @@ export default function AppSocialStudio({ apps = [], workspaceId, activeAppId: c
 
   const appFacts = config?.context || {}
   const connectedAccounts = status?.accounts || []
+  const connectedPlatforms = new Set(connectedAccounts.map(account => account.platform))
+  const selectedChannelLabel = connectPlatforms.map(platform => PLATFORM_LABELS[platform] || platform).join(', ')
 
   return <section className="studio-panel" style={{ marginTop:22, padding:24, border:'1px solid rgba(99,91,255,.26)', background:'linear-gradient(145deg,rgba(255,255,255,.98),rgba(244,246,255,.94))' }}>
     <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'flex-start', flexWrap:'wrap' }}>
@@ -160,7 +178,7 @@ export default function AppSocialStudio({ apps = [], workspaceId, activeAppId: c
     {notice && <div style={{ marginTop:16, padding:12, borderRadius:12, background:'rgba(95,89,232,.08)', border:'1px solid rgba(95,89,232,.18)', color:'#35325f', fontSize:12, lineHeight:1.6 }}>{notice}</div>}
 
     <div style={{ display:'grid', gridTemplateColumns:'minmax(0,1.25fr) minmax(290px,.75fr)', gap:16, marginTop:20 }}>
-      <div style={{ borderRadius:16, padding:18, background:'#15182d', color:'#fff' }}><div className="studio-kicker" style={{ color:'rgba(185,181,255,.9)' }}>01 / SELECT APP, THEN CONNECT</div><label style={{ display:'grid', gap:5, marginTop:10, color:'rgba(237,239,255,.72)', fontSize:10, fontWeight:850, letterSpacing:'.08em', textTransform:'uppercase' }}>Portfolio app<select value={activeApp?.id || ''} onChange={event => changeApp(event.target.value)} style={{ padding:'9px 11px', borderRadius:10, border:'1px solid rgba(255,255,255,.18)', background:'#242845', color:'#fff', fontWeight:750, textTransform:'none', letterSpacing:0 }}>{apps.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}</select></label><h3 style={{ fontSize:19, marginTop:13 }}>{activeApp ? `Connect ${PLATFORM_LABELS[connectPlatform] || connectPlatform} for ${activeApp.name}.` : 'Choose an app before connecting.'}</h3><p style={{ color:'rgba(237,239,255,.7)', fontSize:11.5, lineHeight:1.6, marginTop:7 }}>{status?.ownerMode ? 'FloStudio opens the provider’s real consent flow for the selected platform. After you return and sync, the verified destination is automatically mapped only to this app in review-only mode; it remains unavailable to every other app until you map it there.' : 'Users authorize their own accounts in the provider’s social connection flow. FloStudio receives account metadata and an isolated server-side profile; profile keys never enter browser storage.'}</p><div style={{ display:'flex', gap:7, flexWrap:'wrap', marginTop:13 }}>{OWNER_TEST_PLATFORMS.map(platform => <button key={platform} type="button" onClick={() => setConnectPlatform(platform)} className="studio-chip" style={{ cursor:'pointer', color:connectPlatform === platform ? '#fff' : 'rgba(237,239,255,.75)', borderColor:connectPlatform === platform ? 'rgba(185,181,255,.8)' : 'rgba(255,255,255,.18)', background:connectPlatform === platform ? 'rgba(118,108,255,.58)' : 'rgba(255,255,255,.06)' }}>{PLATFORM_LABELS[platform]}</button>)}</div><div style={{ display:'flex', gap:9, flexWrap:'wrap', marginTop:15 }}><button onClick={connectAccounts} disabled={busy === 'connect' || !activeApp} className="studio-button" style={{ padding:'10px 13px', fontSize:11 }}>{busy === 'connect' ? 'Opening consent flow…' : `Connect ${PLATFORM_LABELS[connectPlatform] || connectPlatform} for ${activeApp?.name || 'app'} →`}</button><button onClick={syncAccounts} disabled={busy === 'sync' || !activeApp} className="studio-button studio-button--soft" style={{ padding:'10px 13px', fontSize:11 }}>{busy === 'sync' ? 'Verifying…' : `Verify & map ${PLATFORM_LABELS[connectPlatform] || connectPlatform}`}</button></div></div>
+      <div style={{ borderRadius:16, padding:18, background:'#15182d', color:'#fff' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center' }}><div className="studio-kicker" style={{ color:'rgba(185,181,255,.9)' }}>01 / SELECT APP, THEN CONNECT</div><span className="studio-chip" style={{ color:'#c9c7ff', borderColor:'rgba(185,181,255,.42)', background:'rgba(118,108,255,.16)', fontSize:9 }}>{connectPlatforms.length}/{OWNER_TEST_CHANNEL_LIMIT} SELECTED</span></div><label style={{ display:'grid', gap:5, marginTop:10, color:'rgba(237,239,255,.72)', fontSize:10, fontWeight:850, letterSpacing:'.08em', textTransform:'uppercase' }}>Portfolio app<select value={activeApp?.id || ''} onChange={event => changeApp(event.target.value)} style={{ padding:'9px 11px', borderRadius:10, border:'1px solid rgba(255,255,255,.18)', background:'#242845', color:'#fff', fontWeight:750, textTransform:'none', letterSpacing:0 }}>{apps.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}</select></label><h3 style={{ fontSize:19, marginTop:13 }}>{activeApp ? `Connect up to ${OWNER_TEST_CHANNEL_LIMIT} channels for ${activeApp.name}.` : 'Choose an app before connecting.'}</h3><p style={{ color:'rgba(237,239,255,.7)', fontSize:11.5, lineHeight:1.6, marginTop:7 }}>{status?.ownerMode ? 'Choose up to three networks below, then use one provider authorization session to link each available account. Return here and verify the same selection; each verified destination is mapped only to this app in review-only mode. A green dot means the provider has already returned that network.' : 'Users authorize their own accounts in the provider’s social connection flow. FloStudio receives account metadata and an isolated server-side profile; profile keys never enter browser storage.'}</p><div style={{ display:'flex', gap:7, flexWrap:'wrap', marginTop:13 }}>{OWNER_TEST_PLATFORMS.map(platform => { const selected = connectPlatforms.includes(platform); const linked = connectedPlatforms.has(platform); return <button key={platform} type="button" onClick={() => toggleConnectPlatform(platform)} className="studio-chip" style={{ cursor:'pointer', color:selected ? '#fff' : 'rgba(237,239,255,.75)', borderColor:selected ? 'rgba(185,181,255,.8)' : linked ? 'rgba(61,209,167,.52)' : 'rgba(255,255,255,.18)', background:selected ? 'rgba(118,108,255,.58)' : linked ? 'rgba(43,178,143,.14)' : 'rgba(255,255,255,.06)' }}>{linked ? '● ' : ''}{selected ? '✓ ' : ''}{PLATFORM_LABELS[platform]}</button> })}</div><div style={{ color:'rgba(202,205,230,.68)', fontSize:10.5, marginTop:10, minHeight:16 }}>{connectPlatforms.length ? `Selected: ${selectedChannelLabel}. Choose up to ${OWNER_TEST_CHANNEL_LIMIT}; click a selected channel to remove it.` : 'Select one to three channels to begin.'}</div><div style={{ display:'flex', gap:9, flexWrap:'wrap', marginTop:12 }}><button onClick={connectAccounts} disabled={busy === 'connect' || !activeApp || !connectPlatforms.length} className="studio-button" style={{ padding:'10px 13px', fontSize:11 }}>{busy === 'connect' ? 'Opening consent flow…' : `Connect selected channels →`}</button><button onClick={syncAccounts} disabled={busy === 'sync' || !activeApp || !connectPlatforms.length} className="studio-button studio-button--soft" style={{ padding:'10px 13px', fontSize:11 }}>{busy === 'sync' ? 'Verifying…' : `Verify & map selected`}</button></div></div>
       <div style={{ borderRadius:16, padding:18, border:'1px solid rgba(26,31,57,.1)', background:'rgba(255,255,255,.75)' }}><div className="studio-kicker">VERIFIED DESTINATIONS</div><div style={{ marginTop:10, display:'grid', gap:8 }}>{connectedAccounts.length ? connectedAccounts.map(account => <div key={`${account.platform}:${account.providerAccountId}`} style={{ display:'flex', gap:9, alignItems:'center', padding:'8px 10px', borderRadius:10, background:'#f4f5fb' }}><span style={{ width:8, height:8, borderRadius:'50%', background:'#25b08f', flex:'0 0 auto' }} /><div style={{ minWidth:0 }}><b style={{ display:'block', color:'#252a44', fontSize:11 }}>{PLATFORM_LABELS[account.platform] || account.platform} · {account.accountName}</b><span style={{ display:'block', color:'#747b94', fontSize:10, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{account.handle || account.profileUrl || 'Connected account'}</span></div></div>) : <p style={{ color:'#727991', fontSize:11.5, lineHeight:1.6 }}>{status?.ownerMode ? 'No verified destinations yet. Select an app and channel at left, complete that platform’s real consent flow, then verify it here.' : 'No unified accounts synced yet. Connect channels above; the account list will appear here after authorization completes.'}</p>}</div></div>
     </div>
 
