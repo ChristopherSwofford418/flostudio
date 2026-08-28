@@ -78,11 +78,11 @@ export default function Dashboard() {
 
   return (
     <Layout title="Dashboard">
-      <div className="flo-page" style={{ display:'flex', flexDirection:'column', gap:28, animation:'fadeIn 0.3s ease', maxWidth:1200, margin:'0 auto' }}>
+      <div className="flo-page performance-page" style={{ display:'flex', flexDirection:'column', gap:28, animation:'fadeIn 0.3s ease', maxWidth:1200, margin:'0 auto' }}>
         <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
         {/* Editorial performance overview */}
-        <section className="abundance-shell" style={{ display:'grid', gridTemplateColumns:'1.1fr .9fr', minHeight:270 }}>
+        <section className="abundance-shell flo-dark-surface performance-hero" style={{ display:'grid', gridTemplateColumns:'1.1fr .9fr', minHeight:270 }}>
           <div style={{ padding:'32px 34px', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
             <div><div className="studio-kicker" style={{ color:'#e2e2e2', marginBottom:13 }}>Performance desk / Live signal</div><h2 className="studio-display" style={{ fontSize:'clamp(31px,4vw,49px)', maxWidth:540 }}>Make the next move <span className="studio-serif" style={{ color:'#dadada' }}>with intent.</span></h2></div>
             <div style={{ display:'flex', alignItems:'flex-start', gap:11, maxWidth:540, paddingTop:20, borderTop:'1px solid rgba(255,255,255,.15)' }}><span style={{ width:8, height:8, borderRadius:99, background:'#e2e2e2', marginTop:5, flexShrink:0 }}/><div><div style={{ fontFamily:'DM Mono, monospace', color:'#e2e2e2', fontSize:9.5, letterSpacing:'.1em', marginBottom:5 }}>FLO'S LATEST READ</div><div style={{ fontSize:12.5, color:'rgba(251,251,251,.78)', lineHeight:1.6 }}>{insightLoading ? 'Reading your current creative mix…' : aiInsight}</div></div></div>
@@ -93,7 +93,7 @@ export default function Dashboard() {
         {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16 }}>
           {STAT_CARDS.map((s, i) => (
-            <div key={i} className="abundance-card" style={{ padding:'22px 24px', transition:'all 0.15s' }}>
+            <div key={i} className="abundance-card performance-stat-card" style={{ padding:'22px 24px', transition:'all 0.15s' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
                 <span style={{ fontSize:11.5, fontWeight:700, color:s.color, background:`${s.color}12`, padding:'3px 10px', borderRadius:20 }}>{s.badge}</span>
               </div>
@@ -103,13 +103,13 @@ export default function Dashboard() {
           ))}
         </div>
 
-        <section className="abundance-card" style={{ padding:'20px 22px', overflow:'hidden' }}>
+        <section className="abundance-card performance-inventory" style={{ padding:'20px 22px', overflow:'hidden' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16, marginBottom:16 }}><div><div className="abundance-mini-label">CREATIVE INVENTORY</div><h3 style={{ color:'#ffffff', fontSize:20, letterSpacing:'-.05em', marginTop:4 }}>Real media, ready to move into market.</h3></div><button onClick={()=>navigate('/images')} className="studio-button">Open Creative Lab</button></div>
           <div style={{ display:'grid', gridTemplateColumns:'145px 145px 1fr', gap:12, alignItems:'stretch' }}><div className="abundance-glass" style={{ padding:14, borderRadius:13 }}><div style={{ color:'#c7c7c7', font:'500 9px DM Mono,monospace', letterSpacing:'.08em' }}>IMAGE ADS</div><b style={{ display:'block', color:'#ffffff', fontSize:30, letterSpacing:'-.07em', marginTop:5 }}>{imageMedia.length}</b></div><div className="abundance-glass" style={{ padding:14, borderRadius:13 }}><div style={{ color:'#ededed', font:'500 9px DM Mono,monospace', letterSpacing:'.08em' }}>VIDEO ADS</div><b style={{ display:'block', color:'#ffffff', fontSize:30, letterSpacing:'-.07em', marginTop:5 }}>{videoMedia.length}</b></div><div style={{ display:'flex', gap:8, overflowX:'auto', minHeight:78 }}>{completedMedia.slice(0,6).map(asset => <div key={asset.id} style={{ width:78, height:78, flexShrink:0, borderRadius:11, overflow:'hidden', border:'1px solid rgba(255,255,255,.16)', background:'rgba(255,255,255,.07)' }}>{asset.kind === 'video' ? <video src={asset.asset_url} muted playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Creative library asset" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</div>)}{!completedMedia.length && <div style={{ color:'rgba(232,232,232,.58)', fontSize:12, display:'grid', placeItems:'center', padding:'0 12px' }}>No creative outputs yet. Start a real image or video render in Creative Lab.</div>}</div></div>
         </section>
 
         {/* Recent posts */}
-        <div className="abundance-card" style={{ overflow:'hidden' }}>
+        <div className="abundance-card performance-recent" style={{ overflow:'hidden' }}>
           <div style={{ padding:'20px 24px', borderBottom:'1px solid rgba(255,255,255,.12)', display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(255,255,255,.045)' }}>
             <div style={{ fontWeight:800, fontSize:15, color:'#ffffff' }}>Recent Campaign Posts</div>
             <button onClick={()=>navigate('/pipeline')} style={{ fontSize:13, color:'#535353', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>View full pipeline →</button>
@@ -125,7 +125,7 @@ export default function Dashboard() {
           ) : (
             <div>
               {recentPosts.map((post, i) => (
-                <div key={post.id} onClick={()=>navigate('/pipeline')} style={{ padding:'16px 24px', borderBottom:i<recentPosts.length-1?'1px solid rgba(255,255,255,.09)':'none', display:'flex', alignItems:'center', gap:16, cursor:'pointer', transition:'background 0.15s' }}
+                <div key={post.id} className="performance-post-row" onClick={()=>navigate('/pipeline')} style={{ padding:'16px 24px', borderBottom:i<recentPosts.length-1?'1px solid rgba(255,255,255,.09)':'none', display:'flex', alignItems:'center', gap:16, cursor:'pointer', transition:'background 0.15s' }}
                   onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.045)'}
                   onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                   <div style={{ width:38, height:38, borderRadius:10, background:`${PLATFORM_COLORS[post.platform]||'#535353'}15`, display:'flex', alignItems:'center', justifyContent:'center', color:PLATFORM_COLORS[post.platform]||'#535353', fontWeight:800, fontSize:12, textTransform:'uppercase', flexShrink:0 }}>
