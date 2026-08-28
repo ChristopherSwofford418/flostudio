@@ -767,11 +767,12 @@ async function syncMetrics({ connection, privateKey }) {
   const token = createAppleToken({ issuerId: connection.issuer_id, keyId: connection.key_id, privateKey, keyType: connection.key_type || 'team' })
   const app = await appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}?fields[apps]=name,bundleId,sku,primaryLocale`, token)
   const [versionsResult, reviewsResult, appInfosResult] = await Promise.allSettled([
-    appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appStoreVersions?limit=10&sort=-createdDate&include=appStoreVersionLocalizations&fields[appStoreVersions]=versionString,appStoreState,appVersionState,releaseDate,releaseType,earliestReleaseDate,downloadable,createdDate,platform&fields[appStoreVersionLocalizations]=locale,description,keywords,marketingUrl,promotionalText,supportUrl,versionDescription,whatsNew`, token),
+    appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appStoreVersions?limit=10&include=appStoreVersionLocalizations&fields[appStoreVersions]=versionString,appStoreState,appVersionState,releaseType,earliestReleaseDate,downloadable,createdDate,platform&fields[appStoreVersionLocalizations]=locale,description,keywords,marketingUrl,promotionalText,supportUrl,whatsNew`, token),
     appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/customerReviews?limit=200&sort=-createdDate&fields[customerReviews]=rating,title,body,createdDate,territory`, token),
     appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appInfos?include=appInfoLocalizations&fields[appInfos]=appStoreState,appStoreAgeRating&fields[appInfoLocalizations]=locale,name,subtitle,privacyPolicyUrl`, token),
   ])
   const versionsPayload = versionsResult.status === 'fulfilled' ? versionsResult.value : null
+  if (versionsPayload?.data?.length > 1) versionsPayload.data.sort((left, right) => Date.parse(right.attributes?.createdDate || 0) - Date.parse(left.attributes?.createdDate || 0))
   const appInfoPayload = appInfosResult.status === 'fulfilled' ? appInfosResult.value : null
   const appInfo = appInfoPayload?.data?.[0]?.attributes || null
   const appInfoLocalizations = includedByType(appInfoPayload, 'appInfoLocalizations').map(resource => ({
