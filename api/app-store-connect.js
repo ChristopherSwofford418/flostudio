@@ -253,57 +253,134 @@ export function summarizeSubscriptionRows({ stateRows = [], eventRows = [], purc
   }
 }
 
+function reportName(report) {
+  return String(report?.attributes?.name || '').trim().toLowerCase()
+}
+
+function reportCategory(report) {
+  return String(report?.attributes?.category || '').trim().toLowerCase()
+}
+
+function reportMatches(report, matcher) {
+  return matcher(reportName(report), reportCategory(report))
+}
+
+function reportCoverageEntry({ report, result, message = null }) {
+  if (!report) return { status:'not_generated', reportName:null, category:null, processingDate:null, message:message || 'Apple has not generated this report type for the active ongoing request yet.' }
+  if (result?.status === 'rejected') return { status:'unavailable', reportName:report.attributes?.name || null, category:report.attributes?.category || null, processingDate:null, message:result.reason?.message || 'Apple could not download this report type.', providerStatus:result.reason?.details?.providerStatus || null }
+  const value = result?.value
+  if (!value || value.status !== 'available') return { status:'pending', reportName:report.attributes?.name || null, category:report.attributes?.category || null, processingDate:value?.processingDate || null, message:value?.message || 'Apple has not published a downloadable daily instance for this report type yet.' }
+  return { status:'available', reportName:report.attributes?.name || null, category:report.attributes?.category || null, processingDate:value.processingDate || null, rowCount:value.rows.length, segmentCount:value.segmentCount, message:value.rows.length ? 'Apple returned rows for the most recent daily instance.' : 'Apple returned a completed daily instance with no rows.' }
+}
+
 async function analyticsReportsForApp({ appId, token }) {
-  const requestResponse = await appleRequest(`/v1/apps/${encodeURIComponent(appId)}/analyticsReportRequests?filter[accessType]=ONGOING&include=reports&fields[analyticsReportRequests]=accessType,stoppedDueToInactivity,reports&fields[analyticsReports]=name,category`, token)
-  const request = (requestResponse.data || []).find(item => !item.attributes?.stoppedDueToInactivity)
-  if (!request) {
+  const requestResponse = await appleRequest(`/v1/apps/${encodeURIComponent(appId)}/analyticsReportRequests?filter[accessType]=ONGOING&fields[analyticsReportRequests]=accessType,stoppedDueToInactivity`, token)
+  const requests = (requestResponse.data || []).filter(item => !item.attributes?.stoppedDueToInactivity)
+  if (!requests.length) {
     try {
       const created = await appleRequest('/v1/analyticsReportRequests', token, { method:'POST', body:{ data:{ type:'analyticsReportRequests', attributes:{ accessType:'ONGOING' }, relationships:{ app:{ data:{ type:'apps', id:String(appId) } } } } } })
-      return { status:'requested', requestId:created.data?.id || null, message:'FloStudio requested ongoing Apple App Analytics reports for this app. Apple says the first report typically arrives in 24–48 hours.' }
+      return { status:'requested', requestId:created.data?.id || null, requestIds:created.data?.id ? [created.data.id] : [], message:'FloStudio requested ongoing Apple App Analytics reports for this app. Apple says the first report typically arrives in 24–48 hours.' }
     } catch (error) {
       if (error.details?.providerStatus === 403) return { status:'requires_admin_analytics_request', message:'Apple requires an Admin Team API key to request App Analytics reports for the first time. Replace this app’s key with an Admin Team key once, then sync again.' }
       throw error
     }
   }
-  const reportsResponse = await appleRequest(`/v1/analyticsReportRequests/${encodeURIComponent(request.id)}/reports?limit=200`, token)
-  return { status:'ready', requestId:request.id, reports:reportsResponse.data || [] }
+  const reportResults = await Promise.allSettled(requests.map(async request => {
+    const response = await appleRequest(`/v1/analyticsReportRequests/${encodeURIComponent(request.id)}/reports?limit=200`, token)
+    return { requestId:request.id, reports:response.data || [] }
+  }))
+  const resolved = reportResults.filter(result => result.status === 'fulfilled').flatMap(result => result.value.reports.map(report => ({ ...report, floRequestId:result.value.requestId })))
+  const uniqueReports = [...new Map(resolved.map(report => [report.id, report])).values()]
+  if (!uniqueReports.length && reportResults.every(result => result.status === 'rejected')) throw reportResults.find(result => result.status === 'rejected').reason
+  return {
+    status:'ready',
+    requestId:requests[0]?.id || null,
+    requestIds:requests.map(request => request.id),
+    reports:uniqueReports,
+    diagnostics:{ activeRequestCount:requests.length, readableRequestCount:reportResults.filter(result => result.status === 'fulfilled').length, unreadableRequestCount:reportResults.filter(result => result.status === 'rejected').length },
+  }
 }
 
 async function analyticsRowsForReport(report, token) {
   const instancesResponse = await appleRequest(`/v1/analyticsReports/${encodeURIComponent(report.id)}/instances?limit=200&filter[granularity]=DAILY`, token)
   const instance = latestAnalyticsInstance(instancesResponse.data || [])
-  if (!instance) return { rows:[], processingDate:null }
+  if (!instance) return { status:'pending', rows:[], processingDate:null, segmentCount:0, message:'Apple has not published a daily instance for this report yet.' }
   const segmentsResponse = await appleRequest(`/v1/analyticsReportInstances/${encodeURIComponent(instance.id)}/segments?limit=200&fields[analyticsReportSegments]=url`, token)
-  const buffers = await Promise.all((segmentsResponse.data || []).map(segment => segment.attributes?.url ? analyticsSegmentRequest(segment.attributes.url) : Promise.resolve(null)))
-  return { rows:buffers.filter(Boolean).flatMap(parseTabDelimitedReport), processingDate:instance.attributes?.processingDate || null }
+  const segmentResults = await Promise.allSettled((segmentsResponse.data || []).map(segment => segment.attributes?.url ? analyticsSegmentRequest(segment.attributes.url) : Promise.resolve(null)))
+  const buffers = segmentResults.filter(result => result.status === 'fulfilled').map(result => result.value).filter(Boolean)
+  if (!buffers.length && segmentResults.some(result => result.status === 'rejected')) throw segmentResults.find(result => result.status === 'rejected').reason
+  return { status:'available', rows:buffers.flatMap(parseTabDelimitedReport), processingDate:instance.attributes?.processingDate || null, segmentCount:buffers.length, failedSegmentCount:segmentResults.filter(result => result.status === 'rejected').length }
+}
+
+async function newestRowsForReports(reports, token) {
+  if (!reports.length) return { report:null, result:null }
+  const results = await Promise.allSettled(reports.map(async report => ({ report, result:await analyticsRowsForReport(report, token) })))
+  const available = results.filter(result => result.status === 'fulfilled' && result.value.result.status === 'available')
+  const fulfilled = results.filter(result => result.status === 'fulfilled')
+  const candidates = available.length ? available : fulfilled
+  if (!candidates.length) return { report:reports[0], result:results[0] }
+  const chosen = [...candidates].sort((left, right) => reportInstanceDate({ attributes:{ processingDate:right.value.result.processingDate } }) - reportInstanceDate({ attributes:{ processingDate:left.value.result.processingDate } }))[0]
+  return { report:chosen.value.report, result:{ status:'fulfilled', value:chosen.value.result } }
 }
 
 async function analyticsMetrics({ connection, token }) {
   try {
     const reportState = await analyticsReportsForApp({ appId:connection.app_store_app_id, token })
     if (reportState.status !== 'ready') return reportState
-    const downloadReport = reportState.reports.find(report => /download/i.test(report.attributes?.name || '') || /commerce/i.test(report.attributes?.category || ''))
-    const engagementReport = reportState.reports.find(report => /discovery.*engagement/i.test(report.attributes?.name || '') || /engagement/i.test(report.attributes?.category || ''))
-    if (!downloadReport || !engagementReport) return { status:'pending', requestId:reportState.requestId, message:'Apple has accepted the App Analytics request but has not generated both Downloads and Discovery & Engagement reports yet. Apple typically delivers the first ongoing reports within 24–48 hours.' }
-    const subscriptionStateReport = reportState.reports.find(report => /subscription state/i.test(report.attributes?.name || ''))
-    const subscriptionEventReport = reportState.reports.find(report => /subscription event/i.test(report.attributes?.name || ''))
-    const purchaseReport = reportState.reports.find(report => /purchase/i.test(report.attributes?.name || ''))
+    const grouped = {
+      downloads:reportState.reports.filter(report => reportMatches(report, name => /download/.test(name))),
+      engagement:reportState.reports.filter(report => reportMatches(report, (name, category) => /discovery.*engagement|engagement/.test(name) || /engagement/.test(category))),
+      subscriptionState:reportState.reports.filter(report => reportMatches(report, name => /subscription state/.test(name))),
+      subscriptionEvents:reportState.reports.filter(report => reportMatches(report, name => /subscription event/.test(name))),
+      purchases:reportState.reports.filter(report => reportMatches(report, name => /purchase/.test(name))),
+    }
     const [downloads, engagement, subscriptionState, subscriptionEvents, purchases] = await Promise.all([
-      analyticsRowsForReport(downloadReport, token),
-      analyticsRowsForReport(engagementReport, token),
-      subscriptionStateReport ? analyticsRowsForReport(subscriptionStateReport, token) : Promise.resolve({ rows:[], processingDate:null }),
-      subscriptionEventReport ? analyticsRowsForReport(subscriptionEventReport, token) : Promise.resolve({ rows:[], processingDate:null }),
-      purchaseReport ? analyticsRowsForReport(purchaseReport, token) : Promise.resolve({ rows:[], processingDate:null }),
+      newestRowsForReports(grouped.downloads, token),
+      newestRowsForReports(grouped.engagement, token),
+      newestRowsForReports(grouped.subscriptionState, token),
+      newestRowsForReports(grouped.subscriptionEvents, token),
+      newestRowsForReports(grouped.purchases, token),
     ])
-    if (!downloads.rows.length && !engagement.rows.length) return { status:'pending', requestId:reportState.requestId, message:'Apple has not published a downloadable App Analytics instance for this app yet.' }
-    const subscriptions = subscriptionState.rows.length || subscriptionEvents.rows.length || purchases.rows.length
-      ? summarizeSubscriptionRows({ stateRows:subscriptionState.rows, eventRows:subscriptionEvents.rows, purchaseRows:purchases.rows })
-      : { status:'pending', message:'Apple has not generated the subscription state, subscription event, or purchase reports for this app yet.' }
+    const coverage = {
+      downloads:reportCoverageEntry({ report:downloads.report, result:downloads.result, message:'Apple has not generated the Downloads report type for the active ongoing request yet.' }),
+      engagement:reportCoverageEntry({ report:engagement.report, result:engagement.result, message:'Apple has not generated the Discovery & Engagement report type for the active ongoing request yet.' }),
+      subscriptionState:reportCoverageEntry({ report:subscriptionState.report, result:subscriptionState.result, message:'Apple has not generated the Subscription State report type for the active ongoing request yet.' }),
+      subscriptionEvents:reportCoverageEntry({ report:subscriptionEvents.report, result:subscriptionEvents.result, message:'Apple has not generated the Subscription Event report type for the active ongoing request yet.' }),
+      purchases:reportCoverageEntry({ report:purchases.report, result:purchases.result, message:'Apple has not generated the Purchase report type for the active ongoing request yet.' }),
+    }
+    const downloadRows = downloads.result?.status === 'fulfilled' ? downloads.result.value.rows : []
+    const engagementRows = engagement.result?.status === 'fulfilled' ? engagement.result.value.rows : []
+    const stateRows = subscriptionState.result?.status === 'fulfilled' ? subscriptionState.result.value.rows : []
+    const eventRows = subscriptionEvents.result?.status === 'fulfilled' ? subscriptionEvents.result.value.rows : []
+    const purchaseRows = purchases.result?.status === 'fulfilled' ? purchases.result.value.rows : []
+    const subscriptionAvailable = [coverage.subscriptionState, coverage.subscriptionEvents, coverage.purchases].some(entry => entry.status === 'available')
+    const subscriptions = subscriptionAvailable
+      ? { ...summarizeSubscriptionRows({ stateRows, eventRows, purchaseRows }), reportCoverage:{ state:coverage.subscriptionState, events:coverage.subscriptionEvents, purchases:coverage.purchases } }
+      : { status:'pending', message:'Apple has not generated a downloadable subscription state, subscription event, or purchase report for this app yet.', reportCoverage:{ state:coverage.subscriptionState, events:coverage.subscriptionEvents, purchases:coverage.purchases } }
+    const metricAvailability = {
+      downloads:coverage.downloads.status,
+      redownloads:coverage.downloads.status,
+      updates:coverage.downloads.status,
+      impressions:coverage.engagement.status,
+      productPageViews:coverage.engagement.status,
+      conversionRate:coverage.downloads.status === 'available' && coverage.engagement.status === 'available' ? 'available' : 'pending',
+    }
+    const processingDates = { downloads:coverage.downloads.processingDate, engagement:coverage.engagement.processingDate, subscriptionState:coverage.subscriptionState.processingDate, subscriptionEvents:coverage.subscriptionEvents.processingDate, purchases:coverage.purchases.processingDate }
+    const acquisitionAvailable = coverage.downloads.status === 'available' || coverage.engagement.status === 'available'
+    if (!acquisitionAvailable) {
+      const unavailable = [coverage.downloads, coverage.engagement].find(entry => entry.status === 'unavailable')
+      return { status:unavailable ? 'unavailable' : 'pending', periodDays:90, metricAvailability, subscriptions, reportCoverage:coverage, processingDates, requestId:reportState.requestId, requestIds:reportState.requestIds, requestDiagnostics:reportState.diagnostics, message:unavailable?.message || 'Apple has accepted the App Analytics request but has not published a downloadable acquisition report instance yet.' }
+    }
     return {
-      ...summarizeAnalyticsRows({ downloadRows:downloads.rows, engagementRows:engagement.rows }),
+      ...summarizeAnalyticsRows({ downloadRows, engagementRows }),
+      metricAvailability,
       subscriptions,
-      processingDates:{ downloads:downloads.processingDate, engagement:engagement.processingDate, subscriptionState:subscriptionState.processingDate, subscriptionEvents:subscriptionEvents.processingDate, purchases:purchases.processingDate },
+      reportCoverage:coverage,
+      requestDiagnostics:reportState.diagnostics,
+      processingDates,
       requestId:reportState.requestId,
+      requestIds:reportState.requestIds,
+      message:coverage.downloads.status === 'available' && coverage.engagement.status === 'available' ? 'Apple returned both acquisition report types for the current analytics window.' : 'Apple returned partial acquisition analytics. Available report types are displayed; pending report types remain unavailable rather than showing estimated zeros.',
     }
   } catch (error) {
     if (error.details?.providerStatus === 403) return { status:'not_authorized', message:'The current Apple key cannot read App Analytics reports. Use a Team key with the Sales and Reports, Finance, or Admin role.' }
@@ -397,6 +474,50 @@ function priceFromPayload(payload, priceType) {
   return prices.find(price => !price.startDate) || prices[0] || null
 }
 
+function appPriceRowsFromPayload(payload) {
+  const pricePoints = new Map(includedByType(payload, 'appPricePoints').map(point => [point.id, point]))
+  const territories = new Map(includedByType(payload, 'territories').map(territory => [territory.id, territory]))
+  return (payload?.data || []).map(price => {
+    const point = pricePoints.get(price.relationships?.appPricePoint?.data?.id)
+    const territory = territories.get(price.relationships?.territory?.data?.id)
+    return {
+      territory:territory?.id || price.relationships?.territory?.data?.id || null,
+      currency:territory?.attributes?.currency || null,
+      customerPrice:point?.attributes?.customerPrice || null,
+      proceeds:point?.attributes?.proceeds || null,
+      startDate:price.attributes?.startDate || null,
+      endDate:price.attributes?.endDate || null,
+      manual:Boolean(price.attributes?.manual),
+    }
+  })
+}
+
+function currentPriceForTerritory(prices, territory = 'USA', now = new Date()) {
+  const at = now.getTime()
+  return prices.filter(price => price.territory === territory).filter(price => {
+    const starts = !price.startDate || Date.parse(price.startDate) <= at
+    const ends = !price.endDate || Date.parse(price.endDate) > at
+    return starts && ends
+  }).sort((left, right) => Date.parse(right.startDate || 0) - Date.parse(left.startDate || 0))[0] || null
+}
+
+function scheduledPricesForTerritory(prices, territory = 'USA', now = new Date()) {
+  const at = now.getTime()
+  return prices.filter(price => price.territory === territory && price.startDate && Date.parse(price.startDate) > at)
+    .sort((left, right) => Date.parse(left.startDate) - Date.parse(right.startDate)).slice(0, 3)
+}
+
+function availabilitySummary(payload) {
+  const availability = payload?.data?.attributes || null
+  const territories = includedByType(payload, 'territories').map(territory => ({ territory:territory.id, currency:territory.attributes?.currency || null }))
+  return availability ? {
+    ...availability,
+    availableTerritoryCount:territories.length,
+    availableTerritories:territories.slice(0, 12),
+    territoryListTruncated:territories.length > 12,
+  } : null
+}
+
 async function subscriptionConfiguration(subscription, token) {
   const [pricesResult, offersResult] = await Promise.allSettled([
     appleRequest(`/v1/subscriptions/${encodeURIComponent(subscription.id)}/prices?filter[territory]=USA&include=subscriptionPricePoint,territory&fields[subscriptionPrices]=startDate,preserved,planType&fields[subscriptionPricePoints]=customerPrice,proceeds&fields[territories]=currency`, token),
@@ -455,30 +576,174 @@ async function inAppPurchaseConfiguration(purchase, token) {
   }
 }
 
-async function storeConfiguration({ connection, token, app }) {
+function providerAvailability(error, fallback) {
+  const providerStatus = error?.details?.providerStatus || null
+  return { status:providerStatus === 403 ? 'not_authorized' : 'unavailable', message:error?.message || fallback, providerStatus }
+}
+
+async function appPriceScheduleConfiguration({ appId, token }) {
   try {
-    const [groupsResult, purchasesResult, availabilityResult] = await Promise.allSettled([
-      appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/subscriptionGroups?limit=200&fields[subscriptionGroups]=referenceName`, token),
-      appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/inAppPurchasesV2?limit=200&fields[inAppPurchases]=name,productId,inAppPurchaseType,state,familySharable`, token),
-      appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appAvailability?include=availableTerritories&fields[appAvailabilities]=availableInNewTerritories,availableInNewTerritories&fields[territories]=currency`, token),
+    const schedule = await appleRequest(`/v1/apps/${encodeURIComponent(appId)}/appPriceSchedule?fields[appPriceSchedules]=baseTerritory,manualPrices,automaticPrices`, token)
+    const scheduleId = schedule.data?.id
+    if (!scheduleId) return { status:'pending', message:'Apple has not created an App Price Schedule for this app yet.' }
+    const [baseResult, manualResult, automaticResult] = await Promise.allSettled([
+      appleRequest(`/v1/appPriceSchedules/${encodeURIComponent(scheduleId)}/baseTerritory?fields[territories]=currency`, token),
+      appleRequest(`/v1/appPriceSchedules/${encodeURIComponent(scheduleId)}/manualPrices?limit=200&filter[territory]=USA&include=appPricePoint,territory&fields[appPrices]=manual,startDate,endDate&fields[appPricePoints]=customerPrice,proceeds&fields[territories]=currency`, token),
+      appleRequest(`/v1/appPriceSchedules/${encodeURIComponent(scheduleId)}/automaticPrices?limit=200&filter[territory]=USA&include=appPricePoint,territory&fields[appPrices]=manual,startDate,endDate&fields[appPricePoints]=customerPrice,proceeds&fields[territories]=currency`, token),
     ])
-    const groups = groupsResult.status === 'fulfilled' ? groupsResult.value.data || [] : []
-    const subscriptionLists = await Promise.all(groups.map(async group => {
-      const response = await appleRequest(`/v1/subscriptionGroups/${encodeURIComponent(group.id)}/subscriptions?limit=200&fields[subscriptions]=name,productId,subscriptionPeriod,state,familySharable`, token)
-      return { id:group.id, name:group.attributes?.referenceName || 'Subscription group', subscriptions:await Promise.all((response.data || []).map(subscription => subscriptionConfiguration(subscription, token))) }
-    }))
-    const purchases = purchasesResult.status === 'fulfilled' ? await Promise.all((purchasesResult.value.data || []).map(purchase => inAppPurchaseConfiguration(purchase, token))) : []
-    const availability = availabilityResult.status === 'fulfilled' ? availabilityResult.value.data?.attributes || null : null
+    const manualPrices = manualResult.status === 'fulfilled' ? appPriceRowsFromPayload(manualResult.value) : []
+    const automaticPrices = automaticResult.status === 'fulfilled' ? appPriceRowsFromPayload(automaticResult.value) : []
+    const baseTerritory = baseResult.status === 'fulfilled' && baseResult.value.data ? { territory:baseResult.value.data.id, currency:baseResult.value.data.attributes?.currency || null } : null
+    const currentManual = currentPriceForTerritory(manualPrices)
+    const currentAutomatic = currentPriceForTerritory(automaticPrices)
+    const scheduledManual = scheduledPricesForTerritory(manualPrices)
+    const scheduledAutomatic = scheduledPricesForTerritory(automaticPrices)
     return {
       status:'available',
-      app:{ appleId:app?.id || connection.app_store_app_id, name:app?.attributes?.name || null, bundleId:app?.attributes?.bundleId || null, sku:app?.attributes?.sku || null, primaryLocale:app?.attributes?.primaryLocale || null },
-      availability,
-      subscriptionGroups:subscriptionLists,
-      inAppPurchases:purchases,
-      message:'Current products and USD price points returned by App Store Connect for this selected app.',
+      scheduleId,
+      baseTerritory,
+      usPrice:currentManual || currentAutomatic || null,
+      usPriceSource:currentManual ? 'manual' : currentAutomatic ? 'automatic' : null,
+      scheduledUsChanges:scheduledManual.length ? scheduledManual : scheduledAutomatic,
+      hasManualUsPrice:manualPrices.length > 0,
+      sourceAvailability:{
+        baseTerritory:baseResult.status === 'fulfilled' ? 'available' : providerAvailability(baseResult.reason, 'Apple did not return the price schedule base territory.').status,
+        manualPrices:manualResult.status === 'fulfilled' ? 'available' : providerAvailability(manualResult.reason, 'Apple did not return manually chosen United States prices.').status,
+        automaticPrices:automaticResult.status === 'fulfilled' ? 'available' : providerAvailability(automaticResult.reason, 'Apple did not return automatically calculated United States prices.').status,
+      },
+      message:'Apple App Price Schedule returned the base territory and currently effective or scheduled United States pricing when configured.',
     }
   } catch (error) {
-    return { status:'unavailable', message:error.message || 'The current App Store key cannot load this app’s configuration and paywall catalog.' }
+    return providerAvailability(error, 'Apple could not provide this app’s price schedule.')
+  }
+}
+
+function includedResource(payload, type, relationship) {
+  const id = relationship?.data?.id
+  return id ? includedByType(payload, type).find(resource => resource.id === id) || null : null
+}
+
+function buildSnapshot(payload) {
+  const builds = payload?.data || []
+  const betaGroups = includedByType(payload, 'betaGroups')
+  return {
+    status:'available',
+    recentBuildCount:builds.length,
+    betaGroupCount:new Set(betaGroups.map(group => group.id)).size,
+    internalBetaGroupCount:new Set(betaGroups.filter(group => group.attributes?.isInternalGroup).map(group => group.id)).size,
+    externalBetaGroupCount:new Set(betaGroups.filter(group => !group.attributes?.isInternalGroup).map(group => group.id)).size,
+    publicBetaLinkCount:new Set(betaGroups.filter(group => group.attributes?.publicLinkEnabled).map(group => group.id)).size,
+    recentBuilds:builds.slice(0, 10).map(build => {
+      const prerelease = includedResource(payload, 'preReleaseVersions', build.relationships?.preReleaseVersion)
+      const betaDetail = includedResource(payload, 'buildBetaDetails', build.relationships?.buildBetaDetail)
+      const betaReview = includedResource(payload, 'betaAppReviewSubmissions', build.relationships?.betaAppReviewSubmission)
+      const storeVersion = includedResource(payload, 'appStoreVersions', build.relationships?.appStoreVersion)
+      return {
+        id:build.id,
+        buildNumber:build.attributes?.version || null,
+        uploadedDate:build.attributes?.uploadedDate || null,
+        expirationDate:build.attributes?.expirationDate || null,
+        expired:Boolean(build.attributes?.expired),
+        processingState:build.attributes?.processingState || null,
+        audience:build.attributes?.buildAudienceType || null,
+        minOsVersion:build.attributes?.minOsVersion || null,
+        usesNonExemptEncryption:build.attributes?.usesNonExemptEncryption ?? null,
+        prereleaseVersion:prerelease?.attributes?.version || null,
+        platform:prerelease?.attributes?.platform || null,
+        internalBuildState:betaDetail?.attributes?.internalBuildState || null,
+        externalBuildState:betaDetail?.attributes?.externalBuildState || null,
+        autoNotifyEnabled:betaDetail?.attributes?.autoNotifyEnabled ?? null,
+        betaReviewState:betaReview?.attributes?.betaReviewState || null,
+        betaReviewSubmittedDate:betaReview?.attributes?.submittedDate || null,
+        linkedStoreVersion:storeVersion?.attributes?.versionString || null,
+        linkedStoreVersionState:storeVersion?.attributes?.appStoreState || null,
+      }
+    }),
+    message:builds.length ? 'Apple returned the most recent builds and TestFlight readiness details for this app.' : 'Apple returned no builds for this app.',
+  }
+}
+
+async function releaseAndTestFlightSnapshot({ appId, token, versionsPayload }) {
+  const versions = versionsPayload?.data || []
+  const latestVersion = versions[0]?.attributes || null
+  const versionLocalizations = includedByType(versionsPayload, 'appStoreVersionLocalizations')
+  const [buildsResult, groupsResult] = await Promise.allSettled([
+    appleRequest(`/v1/builds?filter[app]=${encodeURIComponent(appId)}&limit=10&sort=-uploadedDate&include=preReleaseVersion,buildBetaDetail,betaAppReviewSubmission,betaGroups,appStoreVersion&fields[builds]=version,uploadedDate,expirationDate,expired,minOsVersion,processingState,buildAudienceType,usesNonExemptEncryption&fields[preReleaseVersions]=version,platform&fields[buildBetaDetails]=autoNotifyEnabled,internalBuildState,externalBuildState&fields[betaAppReviewSubmissions]=betaReviewState,submittedDate&fields[betaGroups]=name,isInternalGroup,hasAccessToAllBuilds,publicLinkEnabled,publicLinkLimitEnabled,publicLinkLimit,feedbackEnabled&fields[appStoreVersions]=versionString,appStoreState`, token),
+    appleRequest(`/v1/apps/${encodeURIComponent(appId)}/betaGroups?limit=200&fields[betaGroups]=name,isInternalGroup,hasAccessToAllBuilds,publicLinkEnabled,publicLinkLimitEnabled,publicLinkLimit,feedbackEnabled`, token),
+  ])
+  const testFlight = buildsResult.status === 'fulfilled'
+    ? buildSnapshot(buildsResult.value)
+    : providerAvailability(buildsResult.reason, 'The current Apple key could not load builds and TestFlight readiness.')
+  if (groupsResult.status === 'fulfilled' && testFlight.status === 'available') {
+    const groups = groupsResult.value.data || []
+    testFlight.betaGroupCount = groups.length
+    testFlight.internalBetaGroupCount = groups.filter(group => group.attributes?.isInternalGroup).length
+    testFlight.externalBetaGroupCount = groups.filter(group => !group.attributes?.isInternalGroup).length
+    testFlight.publicBetaLinkCount = groups.filter(group => group.attributes?.publicLinkEnabled).length
+    testFlight.groupAvailability = 'available'
+  } else if (testFlight.status === 'available') {
+    testFlight.groupAvailability = providerAvailability(groupsResult.reason, 'Apple did not return all beta groups for this app.').status
+  }
+  return {
+    status:'available',
+    latestAppStoreVersion:latestVersion ? {
+      versionString:latestVersion.versionString || null,
+      appStoreState:latestVersion.appStoreState || null,
+      appVersionState:latestVersion.appVersionState || null,
+      platform:latestVersion.platform || null,
+      releaseDate:latestVersion.releaseDate || null,
+      releaseType:latestVersion.releaseType || null,
+      earliestReleaseDate:latestVersion.earliestReleaseDate || null,
+      downloadable:latestVersion.downloadable ?? null,
+      createdDate:latestVersion.createdDate || null,
+    } : null,
+    versionCount:versions.length,
+    versionLocalizationCount:versionLocalizations.length,
+    testFlight,
+    message:'Current App Store release metadata and authorized TestFlight build readiness are retained separately for the selected app.',
+  }
+}
+
+async function storeConfiguration({ connection, token, app }) {
+  const appId = connection.app_store_app_id
+  try {
+    const [groupsResult, purchasesResult, availabilityResult, appPriceSchedule] = await Promise.allSettled([
+      appleRequest(`/v1/apps/${encodeURIComponent(appId)}/subscriptionGroups?limit=200&fields[subscriptionGroups]=referenceName`, token),
+      appleRequest(`/v1/apps/${encodeURIComponent(appId)}/inAppPurchasesV2?limit=200&fields[inAppPurchases]=name,productId,inAppPurchaseType,state,familySharable`, token),
+      appleRequest(`/v1/apps/${encodeURIComponent(appId)}/appAvailability?include=availableTerritories&fields[appAvailabilities]=availableInNewTerritories&fields[territories]=currency`, token),
+      appPriceScheduleConfiguration({ appId, token }),
+    ])
+    const groups = groupsResult.status === 'fulfilled' ? groupsResult.value.data || [] : []
+    const subscriptionGroupResults = await Promise.allSettled(groups.map(async group => {
+      const response = await appleRequest(`/v1/subscriptionGroups/${encodeURIComponent(group.id)}/subscriptions?limit=200&fields[subscriptions]=name,productId,subscriptionPeriod,state,familySharable`, token)
+      const subscriptions = await Promise.all((response.data || []).map(subscription => subscriptionConfiguration(subscription, token)))
+      return { id:group.id, name:group.attributes?.referenceName || 'Subscription group', subscriptions }
+    }))
+    const subscriptionLists = subscriptionGroupResults.filter(result => result.status === 'fulfilled').map(result => result.value)
+    const purchases = purchasesResult.status === 'fulfilled'
+      ? await Promise.all((purchasesResult.value.data || []).map(purchase => inAppPurchaseConfiguration(purchase, token)))
+      : []
+    const availability = availabilityResult.status === 'fulfilled' ? availabilitySummary(availabilityResult.value) : null
+    const pricing = appPriceSchedule.status === 'fulfilled' ? appPriceSchedule.value : providerAvailability(appPriceSchedule.reason, 'Apple did not return the app price schedule.')
+    const sourceAvailability = {
+      subscriptions:groupsResult.status === 'fulfilled' ? 'available' : providerAvailability(groupsResult.reason, 'Apple did not return subscription groups.').status,
+      inAppPurchases:purchasesResult.status === 'fulfilled' ? 'available' : providerAvailability(purchasesResult.reason, 'Apple did not return in-app purchases.').status,
+      availability:availabilityResult.status === 'fulfilled' ? 'available' : providerAvailability(availabilityResult.reason, 'Apple did not return App Store availability territories.').status,
+      pricing:pricing.status,
+      subscriptionGroupDetails:subscriptionGroupResults.some(result => result.status === 'rejected') ? 'partial' : groupsResult.status === 'fulfilled' ? 'available' : 'not_authorized_or_unavailable',
+    }
+    return {
+      status:'available',
+      app:{ appleId:app?.id || appId, name:app?.attributes?.name || null, bundleId:app?.attributes?.bundleId || null, sku:app?.attributes?.sku || null, primaryLocale:app?.attributes?.primaryLocale || null },
+      availability,
+      pricing,
+      subscriptionGroups:subscriptionLists,
+      inAppPurchases:purchases,
+      sourceAvailability,
+      message:'FloStudio retained the authorized App Store availability, price schedule, subscription, and in-app product settings for this selected app.',
+    }
+  } catch (error) {
+    return providerAvailability(error, 'The current App Store key cannot load this app’s configuration and paywall catalog.')
   }
 }
 
@@ -502,22 +767,21 @@ async function syncMetrics({ connection, privateKey }) {
   const token = createAppleToken({ issuerId: connection.issuer_id, keyId: connection.key_id, privateKey, keyType: connection.key_type || 'team' })
   const app = await appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}?fields[apps]=name,bundleId,sku,primaryLocale`, token)
   const [versionsResult, reviewsResult, appInfosResult] = await Promise.allSettled([
-    appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appStoreVersions?limit=10&sort=-createdDate&include=appStoreVersionLocalizations&fields[appStoreVersions]=versionString,appStoreState,releaseDate,createdDate,platform&fields[appStoreVersionLocalizations]=locale,description,keywords,marketingUrl,promotionalText,supportUrl,versionDescription,whatsNew`, token),
+    appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appStoreVersions?limit=10&sort=-createdDate&include=appStoreVersionLocalizations&fields[appStoreVersions]=versionString,appStoreState,appVersionState,releaseDate,releaseType,earliestReleaseDate,downloadable,createdDate,platform&fields[appStoreVersionLocalizations]=locale,description,keywords,marketingUrl,promotionalText,supportUrl,versionDescription,whatsNew`, token),
     appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/customerReviews?limit=200&sort=-createdDate&fields[customerReviews]=rating,title,body,createdDate,territory`, token),
     appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appInfos?include=appInfoLocalizations&fields[appInfos]=appStoreState,appStoreAgeRating&fields[appInfoLocalizations]=locale,name,subtitle,privacyPolicyUrl`, token),
   ])
-  const metrics = buildAppMetrics({ app: app.data, versions: versionsResult.status === 'fulfilled' ? versionsResult.value.data || [] : [], reviews: reviewsResult.status === 'fulfilled' ? reviewsResult.value.data || [] : [] })
-  metrics.availability.versions = versionsResult.status === 'fulfilled' ? { status: 'available' } : { status: 'not_authorized_or_unavailable', message: 'This key could not load App Store versions.' }
-  metrics.availability.reviews = reviewsResult.status === 'fulfilled' ? { status: 'available' } : { status: 'not_authorized_or_unavailable', message: 'This key could not load customer reviews.' }
+  const versionsPayload = versionsResult.status === 'fulfilled' ? versionsResult.value : null
   const appInfoPayload = appInfosResult.status === 'fulfilled' ? appInfosResult.value : null
-  const appInfoLocalizations = (appInfoPayload?.included || []).filter(resource => resource.type === 'appInfoLocalizations').map(resource => ({
+  const appInfo = appInfoPayload?.data?.[0]?.attributes || null
+  const appInfoLocalizations = includedByType(appInfoPayload, 'appInfoLocalizations').map(resource => ({
     id:resource.id,
     locale:resource.attributes?.locale || '',
     name:resource.attributes?.name || '',
     subtitle:resource.attributes?.subtitle || '',
     privacyPolicyUrl:resource.attributes?.privacyPolicyUrl || '',
   }))
-  const versionLocalizations = (versionsResult.status === 'fulfilled' ? versionsResult.value.included || [] : []).filter(resource => resource.type === 'appStoreVersionLocalizations').map(resource => ({
+  const versionLocalizations = includedByType(versionsPayload, 'appStoreVersionLocalizations').map(resource => ({
     id:resource.id,
     locale:resource.attributes?.locale || '',
     description:resource.attributes?.description || '',
@@ -528,32 +792,67 @@ async function syncMetrics({ connection, privateKey }) {
     versionDescription:resource.attributes?.versionDescription || '',
     whatsNew:resource.attributes?.whatsNew || '',
   }))
-  metrics.localizedStoreMetadata = { status:appInfosResult.status === 'fulfilled' ? 'available' : 'not_authorized_or_unavailable', appInfoLocalizations, versionLocalizations }
-  metrics.availability.localizedMetadata = appInfosResult.status === 'fulfilled'
-    ? { status:'available', message:`App Store Connect returned ${appInfoLocalizations.length} app information localizations and ${versionLocalizations.length} current-version localizations.` }
-    : { status:'not_authorized_or_unavailable', message:'This key could not load localized App Store metadata.' }
-  const analytics = await analyticsMetrics({ connection, token })
+  const metrics = buildAppMetrics({ app: app.data, versions: versionsPayload?.data || [], reviews: reviewsResult.status === 'fulfilled' ? reviewsResult.value.data || [] : [] })
+  metrics.availability.versions = versionsResult.status === 'fulfilled'
+    ? { status:'available', message:`Apple returned ${versionsPayload?.data?.length || 0} recent App Store version record(s).` }
+    : providerAvailability(versionsResult.reason, 'This key could not load App Store versions.')
+  metrics.availability.reviews = reviewsResult.status === 'fulfilled'
+    ? { status:'available', message:(reviewsResult.value.data || []).length ? `Apple returned ${(reviewsResult.value.data || []).length} authorized review record(s).` : 'Apple returned the review resource with no review records.' }
+    : providerAvailability(reviewsResult.reason, 'This key could not load customer reviews.')
+  metrics.localizedStoreMetadata = {
+    status:appInfosResult.status === 'fulfilled' || versionsResult.status === 'fulfilled' ? 'available' : 'not_authorized_or_unavailable',
+    appInfoLocalizations,
+    versionLocalizations,
+  }
+  metrics.storeMetadata = {
+    status:appInfosResult.status === 'fulfilled' ? 'available' : providerAvailability(appInfosResult.reason, 'This key could not load App Store app information.').status,
+    appInfo:appInfo ? { appStoreState:appInfo.appStoreState || null, appStoreAgeRating:appInfo.appStoreAgeRating || null } : null,
+    appInfoLocalizations,
+    versionLocalizations,
+    appInfoLocalizationCount:appInfoLocalizations.length,
+    versionLocalizationCount:versionLocalizations.length,
+    message:appInfosResult.status === 'fulfilled' ? `Apple returned ${appInfoLocalizations.length} app information localization(s) and ${versionLocalizations.length} version localization(s).` : 'Apple did not authorize this key to read app information and localized store metadata.',
+  }
+  metrics.availability.localizedMetadata = metrics.storeMetadata.status === 'available'
+    ? { status:'available', message:metrics.storeMetadata.message }
+    : providerAvailability(appInfosResult.reason, 'This key could not load localized App Store metadata.')
+  const [analytics, sales, configuration, release] = await Promise.all([
+    analyticsMetrics({ connection, token }),
+    monthlySalesMetrics({ connection, token, app:app.data }),
+    storeConfiguration({ connection, token, app:app.data }),
+    releaseAndTestFlightSnapshot({ appId:connection.app_store_app_id, token, versionsPayload }),
+  ])
   metrics.analytics = analytics
   metrics.availability.analytics = analytics.status === 'available'
-    ? { status:'available', message:`Apple App Analytics returned a ${analytics.periodDays}-day acquisition window.` }
+    ? { status:'available', message:analytics.message || `Apple App Analytics returned a ${analytics.periodDays}-day acquisition window.` }
     : { status:analytics.status, message:analytics.message }
-  metrics.availability.downloads = analytics.status === 'available'
+  const downloadsStatus = analytics.metricAvailability?.downloads || analytics.status
+  const engagementStatus = analytics.metricAvailability?.impressions || analytics.status
+  metrics.availability.downloads = downloadsStatus === 'available'
     ? { status:'available', message:`${analytics.firstTimeDownloads} first-time downloads and ${analytics.redownloads} redownloads in the Apple App Analytics window.` }
-    : { status:analytics.status, message:analytics.message }
+    : { status:downloadsStatus, message:analytics.reportCoverage?.downloads?.message || analytics.message }
+  metrics.availability.engagement = engagementStatus === 'available'
+    ? { status:'available', message:`Apple returned Discovery & Engagement data for the ${analytics.periodDays}-day analytics window.` }
+    : { status:engagementStatus, message:analytics.reportCoverage?.engagement?.message || analytics.message }
   metrics.subscriptions = analytics.subscriptions || null
   metrics.availability.subscriptions = analytics.subscriptions?.status === 'available'
-    ? { status:'available', message:`Apple subscription state, lifecycle, and purchase reports are available for the selected app.` }
+    ? { status:'available', message:'Apple subscription state, lifecycle, and purchase reports are available for the selected app.' }
     : { status:analytics.subscriptions?.status || analytics.status, message:analytics.subscriptions?.message || analytics.message }
-  const sales = await monthlySalesMetrics({ connection, token, app:app.data })
   metrics.sales = sales
   metrics.availability.proceeds = sales.status === 'available'
     ? { status:'available', message:'Estimated developer proceeds are broken out by Apple reporting currency.' }
     : { status:sales.status, message:sales.message }
-  const configuration = await storeConfiguration({ connection, token, app:app.data })
   metrics.configuration = configuration
   metrics.availability.configuration = configuration.status === 'available'
-    ? { status:'available', message:'App Store Connect returned this selected app’s product, pricing, and configuration snapshot.' }
+    ? { status:'available', message:'Apple returned this selected app’s configuration snapshot. Individual domains retain their own authorization state.' }
     : { status:configuration.status, message:configuration.message }
+  metrics.release = release
+  metrics.availability.release = versionsResult.status === 'fulfilled'
+    ? { status:'available', message:'Apple returned current App Store release metadata.' }
+    : providerAvailability(versionsResult.reason, 'This key could not load App Store release metadata.')
+  metrics.availability.testFlight = release.testFlight?.status === 'available'
+    ? { status:'available', message:release.testFlight.message }
+    : release.testFlight || { status:'unavailable', message:'Apple did not return TestFlight readiness.' }
   return metrics
 }
 
