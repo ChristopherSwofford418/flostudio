@@ -128,10 +128,17 @@ function sourceContext(product) {
   }
 }
 
-async function profileFor(userId, accessToken) {
+async function profileFor(userId, accessToken, { productId=null, ownerPrimary=false, profileId=null } = {}) {
   const params = new URLSearchParams({ select:'*', user_id:`eq.${userId}`, provider:'eq.ayrshare', limit:'1' })
+  if (profileId) params.set('id', `eq.${profileId}`)
+  else if (productId) params.set('product_id', `eq.${productId}`)
+  else if (ownerPrimary) params.set('product_id', 'is.null')
   const rows = await db(accessToken, `unified_social_profiles?${params.toString()}`)
   return rows?.[0] || null
+}
+
+function isAppIsolated(setup) {
+  return Boolean(setup.connectionConfigured)
 }
 
 async function providerRequest(path, setup, { method='GET', body, profileKey } = {}) {
@@ -147,19 +154,26 @@ async function providerRequest(path, setup, { method='GET', body, profileKey } =
   return payload
 }
 
-async function ensureProfile(user, workspaceId, setup, accessToken) {
-  const existing = await profileFor(user.id, accessToken)
-  if (existing) return existing
+async function ensureProfile(user, workspaceId, setup, accessToken, productId) {
   if (!setup.configured) throw apiError('UNIFIED_SOCIAL_SETUP_REQUIRED', setup.requirement, 503)
-  const suffix = crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 10)
-  const title = `FloStudio ${String(user.email || 'user').split('@')[0].replace(/[^a-z0-9]/gi, '-').slice(0, 38)}-${suffix}`
-  if (setup.ownerMode) {
-    const rows = await db(accessToken, 'unified_social_profiles', { method:'POST', body:{ user_id:user.id, workspace_id:workspaceId || null, provider:'ayrshare', provider_profile_id:'owner_primary', provider_ref_id:null, encrypted_profile_key:'owner_primary', profile_title:`${title} / Owner test`, status:'connection_pending' } })
+  const isolated = isAppIsolated(setup)
+  const product = productId ? await productForUser(user.id, productId, accessToken) : null
+  if (isolated && !product) throw apiError('PRODUCT_REQUIRED', 'Choose a portfolio app before creating its isolated social profile.')
+  const existing = await profileFor(user.id, accessToken, isolated ? { productId:product.id } : { ownerPrimary:true })
+  if (existing) return existing
+
+  const userSuffix = crypto.createHash('sha256').update(user.id).digest('hex').slice(0, 8)
+  if (!isolated) {
+    const title = `FloStudio ${String(user.email || 'user').split('@')[0].replace(/[^a-z0-9]/gi, '-').slice(0, 38)}-${userSuffix}`
+    const rows = await db(accessToken, 'unified_social_profiles', { method:'POST', body:{ user_id:user.id, workspace_id:workspaceId || null, product_id:null, profile_scope:'owner_primary', provider:'ayrshare', provider_profile_id:'owner_primary', provider_ref_id:null, encrypted_profile_key:'owner_primary', profile_title:`${title} / Owner test`, status:'connection_pending' } })
     return rows?.[0]
   }
-  const created = await providerRequest('/profiles', setup, { method:'POST', body:{ title, subHeader:'Connect the social accounts you want FloStudio to manage.', hideTopHeader:true } })
+
+  const productSuffix = crypto.createHash('sha256').update(`${user.id}:${product.id}`).digest('hex').slice(0, 10)
+  const title = `FloStudio / ${String(product.name || 'App').slice(0, 70)} / ${productSuffix}`
+  const created = await providerRequest('/profiles', setup, { method:'POST', body:{ title, subHeader:`Connect only ${product.name}'s Facebook, Instagram, and X accounts.`, hideTopHeader:true } })
   if (!created?.profileKey) throw apiError('UNIFIED_SOCIAL_PROFILE_CREATE_FAILED', 'The social provider did not return a protected profile key.', 422)
-  const rows = await db(accessToken, 'unified_social_profiles', { method:'POST', body:{ user_id:user.id, workspace_id:workspaceId || null, provider:'ayrshare', provider_profile_id:created.profileKey ? `profile:${suffix}` : null, provider_ref_id:created.refId || null, encrypted_profile_key:encrypt(created.profileKey), profile_title:title, status:'created' } })
+  const rows = await db(accessToken, 'unified_social_profiles', { method:'POST', body:{ user_id:user.id, workspace_id:product.workspace_id || workspaceId || null, product_id:product.id, profile_scope:'app_isolated', provider:'ayrshare', provider_profile_id:`profile:${productSuffix}`, provider_ref_id:created.refId || null, encrypted_profile_key:encrypt(created.profileKey), profile_title:title, status:'created' } })
   return rows?.[0]
 }
 
@@ -176,24 +190,25 @@ function accountList(snapshot) {
   })).filter(item => PLATFORMS.includes(item.platform))
 }
 
-async function syncProfile(user, setup, accessToken) {
-  const profile = await profileFor(user.id, accessToken)
-  if (!profile) throw apiError('UNIFIED_SOCIAL_PROFILE_REQUIRED', 'Create your FloStudio social profile before syncing connected channels.', 409)
+async function syncProfile(user, setup, accessToken, productId) {
+  const isolated = isAppIsolated(setup)
+  if (isolated && !productId) throw apiError('PRODUCT_REQUIRED', 'Choose a portfolio app before syncing its isolated social accounts.')
+  const profile = await profileFor(user.id, accessToken, isolated ? { productId } : { ownerPrimary:true })
+  if (!profile) throw apiError('UNIFIED_SOCIAL_PROFILE_REQUIRED', isolated ? 'Create this app’s isolated social profile before syncing connected channels.' : 'Create your FloStudio owner social profile before syncing connected channels.', 409)
   if (!setup.configured) return { profile, accounts:accountList(profile.account_snapshot), configured:false, requirement:setup.requirement }
-  const profileKey = profile.provider_profile_id === 'owner_primary' ? null : decrypt(profile.encrypted_profile_key)
+  const profileKey = profile.profile_scope === 'app_isolated' ? decrypt(profile.encrypted_profile_key) : null
   const snapshot = await providerRequest('/user', setup, profileKey ? { profileKey } : {})
   const accounts = accountList(snapshot)
   const rows = await db(accessToken, `unified_social_profiles?id=eq.${encodeURIComponent(profile.id)}`, { method:'PATCH', body:{ status:accounts.length ? 'connected':'connection_pending', connected_platforms:Array.from(new Set(accounts.map(account => account.platform))), account_snapshot:snapshot, last_synced_at:new Date().toISOString(), last_error_code:null, last_error_message:null, updated_at:new Date().toISOString() } })
-  return { profile:rows?.[0] || profile, accounts, configured:true }
+  return { profile:rows?.[0] || profile, accounts, configured:true, isolated }
 }
 
-async function mapConnectedAccountsToApp(user, productId, requestedPlatforms, accessToken) {
+async function mapConnectedAccountsToApp(user, productId, requestedPlatforms, accessToken, unified) {
   if (!productId) return []
   const product = await productForUser(user.id, productId, accessToken)
   const selectedPlatforms = cleanPlatforms(requestedPlatforms)
-  if (!selectedPlatforms.length) return []
-  const unified = await profileFor(user.id, accessToken)
-  const accounts = accountList(unified?.account_snapshot).filter(account => selectedPlatforms.includes(account.platform))
+  if (!selectedPlatforms.length || !unified) return []
+  const accounts = accountList(unified.account_snapshot).filter(account => selectedPlatforms.includes(account.platform))
   const created = []
   for (const account of accounts) {
     const existing = await db(accessToken, `app_channel_profiles?select=*&user_id=eq.${user.id}&product_id=eq.${encodeURIComponent(product.id)}&platform=eq.${account.platform}&limit=1`)
@@ -268,7 +283,8 @@ async function saveChannelProfile(user, body, accessToken) {
   const product = await productForUser(user.id, body.productId, accessToken)
   const platform = String(body.channel?.platform || '')
   if (!PLATFORMS.includes(platform)) throw apiError('UNIFIED_SOCIAL_PLATFORM_INVALID', 'Choose a supported unified social platform.')
-  const unified = await profileFor(user.id, accessToken)
+  const setup = providerSetup()
+  const unified = await profileFor(user.id, accessToken, isAppIsolated(setup) ? { productId:product.id } : { ownerPrimary:true })
   const channel = body.channel || {}
   const payload = {
     user_id:user.id,
@@ -322,7 +338,9 @@ async function publishDraft(user, body, setup, accessToken) {
   const channelRows = await db(accessToken, `app_channel_profiles?select=*&id=eq.${encodeURIComponent(draft.channel_profile_id || '')}&user_id=eq.${encodeURIComponent(user.id)}&product_id=eq.${encodeURIComponent(draft.product_id)}&limit=1`)
   const channel = channelRows?.[0]
   if (!channel?.enabled || channel.platform !== 'facebook') throw apiError('SOCIAL_DESTINATION_NOT_ENABLED', 'Enable and verify the ResumeFix AI Facebook destination before publishing this draft.', 409)
-  const profile = await profileFor(user.id, accessToken)
+  const profile = channel.unified_social_profile_id
+    ? await profileFor(user.id, accessToken, { profileId:channel.unified_social_profile_id })
+    : await profileFor(user.id, accessToken, { ownerPrimary:true })
   const connected = accountList(profile?.account_snapshot).find(account => account.platform === 'facebook' && (!channel.provider_account_id || account.providerAccountId === channel.provider_account_id))
   if (!profile || !connected) throw apiError('SOCIAL_DESTINATION_NOT_VERIFIED', 'FloStudio could not verify the mapped Facebook destination. Sync the account status and reconnect Facebook if needed.', 409)
 
@@ -340,7 +358,8 @@ async function publishDraft(user, body, setup, accessToken) {
   if (mediaUrl) providerBody.mediaUrls = [mediaUrl]
   if (draft.media_kind === 'video') providerBody.isVideo = true
   if (notes.altText && mediaUrl) providerBody.faceBookOptions = { altText:[String(notes.altText).slice(0, 500)] }
-  const published = await providerRequest('/post', setup, { method:'POST', body:providerBody })
+  const profileKey = profile.profile_scope === 'app_isolated' ? decrypt(profile.encrypted_profile_key) : null
+  const published = await providerRequest('/post', setup, profileKey ? { method:'POST', body:providerBody, profileKey } : { method:'POST', body:providerBody })
   const postIds = Array.isArray(published.postIds) ? published.postIds : (Array.isArray(published.posts?.[0]?.postIds) ? published.posts[0].postIds : [])
   const facebookPost = postIds.find(post => post.platform === 'facebook' && post.status === 'success')
   if (!facebookPost?.id) throw apiError('SOCIAL_PROVIDER_PUBLISH_UNCONFIRMED', 'The provider did not return a confirmed Facebook post ID, so FloStudio kept this draft out of published status.', 422)
@@ -358,12 +377,12 @@ export default async function handler(req, res) {
     const { user, accessToken } = await authenticatedUser(req)
     const setup = providerSetup()
     if (body.action === 'status') {
-      const profile = await profileFor(user.id, accessToken)
-      return res.status(200).json({ configured:setup.configured, connectionConfigured:setup.connectionConfigured, ownerMode:setup.ownerMode, requirement:setup.requirement, profile:profile ? { id:profile.id, title:profile.profile_title, status:profile.status, connectedPlatforms:profile.connected_platforms || [], lastSyncedAt:profile.last_synced_at } : null, accounts:profile ? accountList(profile.account_snapshot) : [] })
+      const profile = await profileFor(user.id, accessToken, isAppIsolated(setup) && body.productId ? { productId:body.productId } : { ownerPrimary:true })
+      return res.status(200).json({ configured:setup.configured, connectionConfigured:setup.connectionConfigured, ownerMode:setup.ownerMode, isolationMode:isAppIsolated(setup) ? 'per_app' : 'owner_test', requirement:setup.requirement, profile:profile ? { id:profile.id, title:profile.profile_title, status:profile.status, profileScope:profile.profile_scope, productId:profile.product_id || null, connectedPlatforms:profile.connected_platforms || [], lastSyncedAt:profile.last_synced_at } : null, accounts:profile ? accountList(profile.account_snapshot) : [] })
     }
     if (body.action === 'begin_connect') {
       if (body.productId) await productForUser(user.id, body.productId, accessToken)
-      const profile = await ensureProfile(user, body.workspaceId, setup, accessToken)
+      const profile = await ensureProfile(user, body.workspaceId, setup, accessToken, body.productId)
       if (!setup.configured) throw apiError('UNIFIED_SOCIAL_SETUP_REQUIRED', setup.requirement, 503)
       const requested = cleanPlatforms(body.allowedSocial)
       await db(accessToken, `unified_social_profiles?id=eq.${encodeURIComponent(profile.id)}`, { method:'PATCH', body:{ status:'connection_pending', updated_at:new Date().toISOString() } })
@@ -375,8 +394,8 @@ export default async function handler(req, res) {
       return res.status(200).json({ authorizationUrl:linked.url, expiresIn:linked.expiresIn || '10m', requestedPlatforms:requested, productId:body.productId || null, profile:{ id:profile.id, title:profile.profile_title } })
     }
     if (body.action === 'sync') {
-      const result = await syncProfile(user, setup, accessToken)
-      const appChannels = await mapConnectedAccountsToApp(user, body.productId, body.requestedPlatforms, accessToken)
+      const result = await syncProfile(user, setup, accessToken, body.productId)
+      const appChannels = await mapConnectedAccountsToApp(user, body.productId, body.requestedPlatforms, accessToken, result.profile)
       return res.status(200).json({ ...result, appChannels })
     }
     if (body.action === 'app_config') return res.status(200).json(await appConfig(user, body.productId, accessToken))
