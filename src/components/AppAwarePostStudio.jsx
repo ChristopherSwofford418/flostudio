@@ -138,9 +138,11 @@ export default function AppAwarePostStudio({ apps = [], workspaceId, activeAppId
 
   return <section className="studio-panel flo-dark-surface app-aware-post-studio" style={{ marginTop:22, padding:24, background:'linear-gradient(145deg,rgba(21,24,45,.98),rgba(37,40,83,.96))', borderColor:'rgba(167,161,255,.38)' }}>
     <style>{`
-      .app-aware-post-layout { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr); gap:18px; margin-top:20px; align-items:start; }
+      .app-aware-post-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,340px); gap:18px; margin-top:20px; align-items:start; }
       .app-aware-post-main { display:grid; gap:12px; min-width:0; }
+      .app-aware-post-main > *, .app-aware-post-controls > *, .app-aware-app-context > * { min-width:0; }
       .app-aware-post-controls { display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:10px; }
+      .app-aware-post-controls select, .app-aware-post-controls textarea, .app-aware-post-controls input, .app-aware-brief-field textarea, .app-aware-manual-media input { width:100%; min-width:0; box-sizing:border-box; }
       .app-aware-app-context { display:flex; justify-content:space-between; gap:14px; align-items:end; padding:13px 14px; border-radius:13px; background:rgba(255,255,255,.06); border:1px solid rgba(202,199,255,.18); }
       .app-aware-app-context span, .app-aware-app-context small { display:block; color:rgba(223,221,255,.66); font:700 9px/1.35 DM Mono,monospace; letter-spacing:.08em; text-transform:uppercase; }
       .app-aware-app-context strong { display:block; margin-top:4px; color:#fff; font-size:16px; letter-spacing:-.025em; }
@@ -157,10 +159,10 @@ export default function AppAwarePostStudio({ apps = [], workspaceId, activeAppId
       .app-aware-manual-media { border-radius:10px; border:1px dashed rgba(199,196,255,.22); padding:8px 10px; }
       .app-aware-manual-media summary { color:rgba(223,221,255,.68); cursor:pointer; font-size:10px; font-weight:750; }
       .app-aware-manual-media label { margin-top:10px; }
-      .app-aware-agent-panel { align-self:start; min-width:0; position:sticky; top:18px; }
+      .app-aware-agent-panel { align-self:start; min-width:0; position:static; overflow:hidden; }
       .app-aware-asset-rail { display:flex; gap:8px; overflow-x:auto; padding:10px 2px 5px; scrollbar-color:rgba(192,188,255,.65) transparent; scrollbar-width:thin; }
       .app-aware-store-rail { display:flex; gap:7px; overflow-x:auto; padding:1px 2px 5px; scrollbar-color:rgba(192,188,255,.65) transparent; scrollbar-width:thin; }
-      @media (max-width:1120px) { .app-aware-post-layout { grid-template-columns:1fr; } .app-aware-agent-panel { position:static; } }
+      @media (max-width:1280px) { .app-aware-post-layout { grid-template-columns:1fr; } .app-aware-agent-panel { position:static; } }
       @media (max-width:700px) { .app-aware-post-controls,.app-aware-channel-tabs { grid-template-columns:1fr; } .app-aware-app-context { align-items:start; flex-direction:column; } .app-aware-app-context label { width:100%; min-width:0; } }
     `}</style>
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', gap:16, flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'rgba(204,200,255,.88)' }}>APP-AWARE AI POST STUDIO</div><h2 style={{ color:'#fff', fontSize:27, letterSpacing:'-.055em', marginTop:6 }}>Write the post <span className="studio-serif" style={{ color:'#c9c6ff' }}>your app can prove.</span></h2><p style={{ color:'rgba(239,240,255,.7)', maxWidth:690, fontSize:12, lineHeight:1.65, marginTop:8 }}>Choose an app, attach an image or video, and generate a caption, hook, accessible media description, call to action, and platform-specific hashtags. The writing agent uses the app’s product truth—not generic AI filler.</p></div><span className="studio-chip" style={{ background:'rgba(104,96,255,.2)', borderColor:'rgba(183,178,255,.35)', color:'#dddafe' }}>{enabledPlatforms.length ? `${enabledPlatforms.length} CHANNEL${enabledPlatforms.length === 1 ? '' : 'S'} ENABLED` : 'REVIEW-FIRST WORKFLOW'}</span></div>
