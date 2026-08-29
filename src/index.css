@@ -126,3 +126,6 @@ input:focus,textarea:focus,select:focus{border-color:#635bff!important;box-shado
 .flo-main .flo-dark-surface .flo-light-surface :is(p,small){color:#63708a!important}
 .flo-main .flo-dark-surface .flo-light-surface .studio-kicker{color:#635bff!important}
 .flo-main .flo-dark-surface .flo-light-surface :is(input,textarea,select){color:#26314d!important;background:#fff!important}
+
+/* Readiness copy uses a deliberately high-contrast dark tone inside light child panels. */
+.flo-main .flo-dark-surface .insights-subscription-pending p,.flo-main .flo-dark-surface .insights-subscription-pending__next p{color:#34435f!important;opacity:1!important;font-weight:560}
