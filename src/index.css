@@ -119,3 +119,10 @@ input:focus,textarea:focus,select:focus{border-color:#635bff!important;box-shado
 .app-insights-page .insights-subscription-pending__step{background:#eeedff!important;color:#5148ca!important}
 .app-insights-page .insights-subscription-pending__next{background:#ffffff!important;border-color:#dfe4f1!important}
 .app-insights-page .insights-subscription-pending__next>span{color:#635bff!important}
+
+/* Semantic child-surface contract: a declared light child always wins over a dark parent. */
+.flo-main .flo-dark-surface .flo-light-surface{background:#fff!important;color:#26314d!important}
+.flo-main .flo-dark-surface .flo-light-surface :is(h1,h2,h3,h4,b,strong){color:#26314d!important}
+.flo-main .flo-dark-surface .flo-light-surface :is(p,small){color:#63708a!important}
+.flo-main .flo-dark-surface .flo-light-surface .studio-kicker{color:#635bff!important}
+.flo-main .flo-dark-surface .flo-light-surface :is(input,textarea,select){color:#26314d!important;background:#fff!important}
