@@ -110,3 +110,12 @@ input:focus,textarea:focus,select:focus{border-color:#635bff!important;box-shado
 
 /* App Insights uses dark operational consoles for Apple-report sections; light nested detail cards keep their own dark copy. */
 .app-insights-page>.studio-panel:not(.insights-analytics-blocker),.app-insights-page .insights-coverage-console{background:linear-gradient(135deg,#24254a,#17182f)!important;border-color:rgba(191,188,255,.28)!important;box-shadow:0 14px 32px rgba(24,25,62,.18)!important;color:#f8f8ff}.app-insights-page>.studio-panel:not(.insights-analytics-blocker) :is(h1,h2,h3,h4,b,strong),.app-insights-page .insights-coverage-console :is(h1,h2,h3,h4,b,strong){color:#fff!important}.app-insights-page>.studio-panel:not(.insights-analytics-blocker) :is(p,small),.app-insights-page .insights-coverage-console :is(p,small){color:rgba(244,245,255,.76)!important}.app-insights-page>.studio-panel:not(.insights-analytics-blocker) .studio-kicker,.app-insights-page .insights-coverage-console .studio-kicker{color:#b8b4ff!important}.app-insights-page .insights-analytics-blocker :is(h1,h2,h3,h4,b,strong){color:#26314d!important}.app-insights-page .insights-analytics-blocker>p{color:#65718a!important}.app-insights-page .insights-analytics-blocker .studio-kicker{color:#635bff!important}
+
+/* App Insights: intentional light readiness cards inside dark operational panels. */
+.app-insights-page .insights-subscription-pending{background:linear-gradient(145deg,#ffffff,#f5f7ff)!important;border-color:rgba(158,154,239,.28)!important;color:#26314d!important}
+.app-insights-page .insights-subscription-pending :is(h1,h2,h3,h4,b,strong){color:#26314d!important}
+.app-insights-page .insights-subscription-pending :is(p,small){color:#63708a!important}
+.app-insights-page .insights-subscription-pending .studio-kicker{color:#635bff!important}
+.app-insights-page .insights-subscription-pending__step{background:#eeedff!important;color:#5148ca!important}
+.app-insights-page .insights-subscription-pending__next{background:#ffffff!important;border-color:#dfe4f1!important}
+.app-insights-page .insights-subscription-pending__next>span{color:#635bff!important}
