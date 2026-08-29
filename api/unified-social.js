@@ -205,11 +205,22 @@ async function syncProfile(user, setup, accessToken, productId) {
   return { profile:rows?.[0] || profile, accounts, configured:true, isolated }
 }
 
+async function legacyProfileIsMappedToProduct(userId, productId, profileId, accessToken) {
+  if (!userId || !productId || !profileId) return false
+  const rows = await db(accessToken, `app_channel_profiles?select=id&user_id=eq.${encodeURIComponent(userId)}&product_id=eq.${encodeURIComponent(productId)}&unified_social_profile_id=eq.${encodeURIComponent(profileId)}&limit=1`)
+  return Boolean(rows?.[0]?.id)
+}
+
 async function mapConnectedAccountsToApp(user, productId, requestedPlatforms, accessToken, unified) {
   if (!productId) return []
   const product = await productForUser(user.id, productId, accessToken)
   const selectedPlatforms = cleanPlatforms(requestedPlatforms)
-  if (!selectedPlatforms.length || !unified) return []
+  // The owner-test profile may remain attached only to the one app it was already
+  // mapped to. Every other app must receive a provider-backed isolated profile.
+  const legacyAnchor = unified?.profile_scope === 'owner_primary'
+    ? await legacyProfileIsMappedToProduct(user.id, product.id, unified.id, accessToken)
+    : false
+  if (!selectedPlatforms.length || !unified || (unified.profile_scope !== 'app_isolated' && !legacyAnchor)) return []
   const accounts = accountList(unified.account_snapshot).filter(account => selectedPlatforms.includes(account.platform))
   const created = []
   for (const account of accounts) {
@@ -385,6 +396,18 @@ export default async function handler(req, res) {
     }
     if (body.action === 'begin_connect') {
       if (body.productId) await productForUser(user.id, body.productId, accessToken)
+      if (setup.ownerMode && body.productId) {
+        const legacyProfile = await profileFor(user.id, accessToken, { ownerPrimary:true })
+        const mayUseLegacyProfile = legacyProfile && await legacyProfileIsMappedToProduct(user.id, body.productId, legacyProfile.id, accessToken)
+        if (!mayUseLegacyProfile) {
+          throw apiError(
+            'UNIFIED_SOCIAL_APP_ISOLATION_REQUIRED',
+            'This app needs its own isolated social profile before Facebook, Instagram, or X can be connected. The existing owner-test profile remains reserved for its current mapped app and cannot be reused across your portfolio.',
+            409,
+            { requirement:'Activate the provider’s approved multi-profile connection setup before linking a separate app destination.' },
+          )
+        }
+      }
       const profile = await ensureProfile(user, body.workspaceId, setup, accessToken, body.productId)
       if (!setup.configured) throw apiError('UNIFIED_SOCIAL_SETUP_REQUIRED', setup.requirement, 503)
       const requested = cleanPlatforms(body.allowedSocial)
@@ -399,7 +422,7 @@ export default async function handler(req, res) {
     if (body.action === 'sync') {
       const result = await syncProfile(user, setup, accessToken, body.productId)
       const appChannels = await mapConnectedAccountsToApp(user, body.productId, body.requestedPlatforms, accessToken, result.profile)
-      return res.status(200).json({ ...result, appChannels })
+      return res.status(200).json({ ...result, appChannels, mappingGuard:'new app mappings require an isolated provider profile' })
     }
     if (body.action === 'app_config') return res.status(200).json(await appConfig(user, body.productId, accessToken))
     if (body.action === 'save_brand_agent') return res.status(200).json(await saveBrandAgent(user, body, accessToken))
