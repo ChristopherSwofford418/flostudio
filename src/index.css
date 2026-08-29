@@ -129,3 +129,8 @@ input:focus,textarea:focus,select:focus{border-color:#635bff!important;box-shado
 
 /* Readiness copy uses a deliberately high-contrast dark tone inside light child panels. */
 .flo-main .flo-dark-surface .insights-subscription-pending p,.flo-main .flo-dark-surface .insights-subscription-pending__next p{color:#34435f!important;opacity:1!important;font-weight:560}
+
+/* Final precedence layer: declared light children must override every shared dark operational container. */
+.flo-main .flo-page .flo-dark-surface .flo-light-surface :is(h1,h2,h3,h4,b,strong){color:#26314d!important}
+.flo-main .flo-page .flo-dark-surface .flo-light-surface :is(p,small){color:#34435f!important;opacity:1!important}
+.flo-main .flo-page .flo-dark-surface .flo-light-surface .studio-kicker{color:#635bff!important}
