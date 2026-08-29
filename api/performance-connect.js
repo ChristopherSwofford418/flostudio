@@ -47,6 +47,19 @@ function configured(platform) {
   return PLATFORMS[platform].environment.every(key => Boolean(process.env[key]))
 }
 
+function setupRequiredStatus(platform, { code, requirement } = {}) {
+  return {
+    platform,
+    label:PLATFORMS[platform].label,
+    status:'setup_required',
+    configured:false,
+    live:false,
+    requirement:requirement || PLATFORMS[platform].requirement,
+    ...(code ? { setupCode:code } : {}),
+    connection:null,
+  }
+}
+
 async function authenticatedUser(req) {
   const authorization = req.headers.authorization || ''
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
@@ -78,15 +91,21 @@ async function db(path, { method='GET', body, prefer='return=representation' } =
 
 async function statusFor({ platform, userId, workspaceId }) {
   const setupReady = configured(platform)
+  if (!setupReady) return setupRequiredStatus(platform)
   const query = new URLSearchParams({ select:'id,status,account_name,account_id,last_verified_at,last_sync_at,last_error_code', user_id:`eq.${userId}`, workspace_id:`eq.${workspaceId}`, platform:`eq.${platform}`, limit:'1' })
-  const rows = await db(`performance_connections?${query.toString()}`)
+  let rows
+  try { rows = await db(`performance_connections?${query.toString()}`) }
+  catch (error) {
+    if (error?.code === 'GROWTH_LOOP_MIGRATION_REQUIRED') return setupRequiredStatus(platform, { code:error.code, requirement:error.message })
+    throw error
+  }
   const connection = rows?.[0] || null
-  const status = connection?.status || (setupReady ? 'ready_to_authorize' : 'setup_required')
+  const status = connection?.status || 'ready_to_authorize'
   return {
     platform,
     label:PLATFORMS[platform].label,
     status,
-    configured:setupReady,
+    configured:true,
     live:status === 'connected',
     requirement:PLATFORMS[platform].requirement,
     connection:connection ? { id:connection.id, accountName:connection.account_name, accountId:connection.account_id, lastVerifiedAt:connection.last_verified_at, lastSyncAt:connection.last_sync_at, lastErrorCode:connection.last_error_code } : null,
@@ -102,6 +121,7 @@ export default async function handler(req, res) {
     if (!PLATFORMS[platform]) throw apiError('PERFORMANCE_PLATFORM_INVALID', 'Choose Meta Ads, TikTok Ads, Google Ads, or Google Analytics 4.')
     const user = await authenticatedUser(req)
     if (!body.workspaceId) throw apiError('WORKSPACE_REQUIRED', 'Choose a FloStudio workspace before managing paid-performance connections.')
+    if (!configured(platform)) return res.status(200).json(setupRequiredStatus(platform))
     if (action === 'status') return res.status(200).json(await statusFor({ platform, userId:user.id, workspaceId:body.workspaceId }))
     if (action === 'initialize') {
       const current = await statusFor({ platform, userId:user.id, workspaceId:body.workspaceId })
