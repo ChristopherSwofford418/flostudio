@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 import { listMediaAssets } from '../lib/mediaAssets'
+import { useWorkspace } from '../context/WorkspaceContext'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 
@@ -10,6 +11,7 @@ const PLATFORM_COLORS = { instagram:'#535353', twitter:'#6d6d6d', linkedin:'#575
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { activeApp } = useWorkspace()
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
   const [aiInsight, setAiInsight] = useState('')
@@ -68,6 +70,18 @@ export default function Dashboard() {
   const completedMedia = mediaAssets.filter(asset => asset.render_status === 'ready' || asset.render_status === 'completed')
   const imageMedia = completedMedia.filter(asset => asset.kind === 'image')
   const videoMedia = completedMedia.filter(asset => asset.kind === 'video')
+  const activeAppPosts = activeApp ? posts.filter(post => post.product_id === activeApp.id) : []
+  const activeAppMedia = activeApp ? completedMedia.filter(asset => asset.product_id === activeApp.id) : []
+  const activeAppReviewCount = activeAppPosts.filter(post => ['pending', 'ready_for_review', 'approved'].includes(post.status)).length
+  const activeAppPublishedCount = activeAppPosts.filter(post => post.status === 'published').length
+  const activeAppName = activeApp?.name || 'Your active app'
+  const growthNextMove = !activeApp
+    ? 'Choose an app from the global app switcher to create an app-specific growth plan.'
+    : activeAppReviewCount > 0
+      ? `${activeAppReviewCount} app-scoped draft${activeAppReviewCount === 1 ? '' : 's'} need${activeAppReviewCount === 1 ? 's' : ''} review before publishing.`
+      : activeAppMedia.length > 0
+        ? 'A completed creative is ready to turn into an app-scoped social draft.'
+        : 'Start with a real image or video in Creative Lab, then carry it into an app-scoped draft.'
 
   const STAT_CARDS = [
     { label: 'Total Posts', value: stats.total, color: '#535353', badge: 'All Active' },
@@ -88,6 +102,25 @@ export default function Dashboard() {
             <div style={{ display:'flex', alignItems:'flex-start', gap:11, maxWidth:540, paddingTop:20, borderTop:'1px solid rgba(255,255,255,.15)' }}><span style={{ width:8, height:8, borderRadius:99, background:'#e2e2e2', marginTop:5, flexShrink:0 }}/><div><div style={{ fontFamily:'DM Mono, monospace', color:'#e2e2e2', fontSize:9.5, letterSpacing:'.1em', marginBottom:5 }}>FLO'S LATEST READ</div><div style={{ fontSize:12.5, color:'rgba(251,251,251,.78)', lineHeight:1.6 }}>{insightLoading ? 'Reading your current creative mix…' : aiInsight}</div></div></div>
           </div>
           <div style={{ position:'relative', minHeight:270, overflow:'hidden' }}><img src="/visuals/flo-preview-lifestyle.jpg" alt="Campaign creative in progress" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center' }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#191919 0%,transparent 34%),linear-gradient(to top,rgba(23,23,23,.7),transparent 45%)' }}/><div className="abundance-glass" style={{ position:'absolute', right:18, bottom:18, color:'#ffffff', padding:'10px 12px', borderRadius:12, minWidth:126 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, color:'#ededed', letterSpacing:'.08em' }}>CREATIVE STATUS</div><div style={{ fontWeight:800, fontSize:12, marginTop:3 }}>{stats.pending} ideas need review</div></div></div>
+        </section>
+
+        {/* Active app command center: read-only counts and existing workflow shortcuts. */}
+        <section className="flo-light-surface performance-growth-command" style={{ display:'grid', gridTemplateColumns:'minmax(0,1.25fr) minmax(290px,.75fr)', gap:18, alignItems:'center', padding:'20px 22px', borderRadius:18, border:'1px solid rgba(95,89,232,.20)', background:'linear-gradient(135deg,#ffffff 0%,#f4f5ff 100%)', boxShadow:'0 12px 30px rgba(31,37,63,.06)' }}>
+          <div>
+            <div className="studio-kicker" style={{ color:'#5f59e8' }}>ACTIVE APP / GROWTH COMMAND</div>
+            <h3 style={{ color:'#1d213b', fontSize:25, letterSpacing:'-.045em', marginTop:7 }}>Move <span className="studio-serif" style={{ color:'#5f59e8' }}>{activeAppName}</span> forward without losing context.</h3>
+            <p style={{ color:'#626983', fontSize:12, lineHeight:1.65, marginTop:8, maxWidth:650 }}>{growthNextMove}</p>
+            <div style={{ display:'flex', gap:9, flexWrap:'wrap', marginTop:14 }}>
+              <button onClick={() => navigate('/images')} className="studio-button" style={{ padding:'10px 13px', fontSize:11 }}>Create creative</button>
+              <button onClick={() => navigate('/accounts')} className="studio-button studio-button--soft" style={{ padding:'10px 13px', fontSize:11, color:'#38327e', borderColor:'rgba(95,89,232,.30)', background:'#fff' }}>Draft for channels</button>
+              <button onClick={() => navigate(`/insights${activeApp?.id ? `?app=${activeApp.id}` : ''}`)} className="studio-button studio-button--soft" style={{ padding:'10px 13px', fontSize:11, color:'#38327e', borderColor:'rgba(95,89,232,.30)', background:'#fff' }}>Check App Store signal</button>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:9 }}>
+            <div style={{ minWidth:0, padding:'13px 12px', borderRadius:13, background:'#f1f2fb', border:'1px solid #e1e4f1' }}><div className="studio-kicker" style={{ color:'#737a94', fontSize:8 }}>READY MEDIA</div><b style={{ display:'block', color:'#20243d', fontSize:24, marginTop:6 }}>{activeApp ? activeAppMedia.length : '—'}</b><span style={{ display:'block', color:'#737a94', fontSize:10, marginTop:3 }}>app-scoped</span></div>
+            <div style={{ minWidth:0, padding:'13px 12px', borderRadius:13, background:'#f1f2fb', border:'1px solid #e1e4f1' }}><div className="studio-kicker" style={{ color:'#737a94', fontSize:8 }}>IN REVIEW</div><b style={{ display:'block', color:'#20243d', fontSize:24, marginTop:6 }}>{activeApp ? activeAppReviewCount : '—'}</b><span style={{ display:'block', color:'#737a94', fontSize:10, marginTop:3 }}>drafts</span></div>
+            <div style={{ minWidth:0, padding:'13px 12px', borderRadius:13, background:'#f1f2fb', border:'1px solid #e1e4f1' }}><div className="studio-kicker" style={{ color:'#737a94', fontSize:8 }}>PUBLISHED</div><b style={{ display:'block', color:'#20243d', fontSize:24, marginTop:6 }}>{activeApp ? activeAppPublishedCount : '—'}</b><span style={{ display:'block', color:'#737a94', fontSize:10, marginTop:3 }}>this app</span></div>
+          </div>
         </section>
 
         {/* Stats */}
