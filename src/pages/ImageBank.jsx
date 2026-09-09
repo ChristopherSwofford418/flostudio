@@ -45,6 +45,19 @@ const IMAGE_ANGLES = [
   { id:'editorial', label:'Editorial campaign frame', detail:'Art-directed texture, light, and a premium finish.', prompt:'Use art-directed texture, intentional light, and premium restraint while keeping the supplied product truth unmistakable.' },
 ]
 
+const TEN_CREATIVE_BATCH_RECIPES = [
+  { id:'hero-square', label:'Product hero / square', runbookId:'showcase', objectiveId:'acquire', lensId:'product-in-use', imageAngle:'hero', aspectRatio:'1:1', direction:'Build a clear product hero with one unmistakable app moment, restrained detail, and clean visual hierarchy.' },
+  { id:'screen-story-vertical', label:'Screen story / vertical', runbookId:'appdemo', objectiveId:'acquire', lensId:'product-in-use', imageAngle:'screen_story', aspectRatio:'9:16', direction:'Make the authentic product experience the center of a fast, legible vertical story. Do not invent app interface details.' },
+  { id:'creator-discovery-vertical', label:'Creator discovery / vertical', runbookId:'creator', objectiveId:'convert', lensId:'creator-native', imageAngle:'creator_still', aspectRatio:'9:16', direction:'Use an original, non-identifiable adult creator in a grounded discovery moment with visible product context and no fabricated testimonial.' },
+  { id:'proof-contrast-square', label:'Proof contrast / square', runbookId:'contrast', objectiveId:'convert', lensId:'proof-led', imageAngle:'hero', aspectRatio:'1:1', direction:'Show a credible before-and-after workflow contrast using only product-grounded friction and payoff, without outcome guarantees.' },
+  { id:'editorial-campaign-square', label:'Editorial campaign / square', runbookId:'reveal', objectiveId:'announce', lensId:'editorial', imageAngle:'editorial', aspectRatio:'1:1', direction:'Use art-directed texture, premium composition, and a composed product reveal while keeping the real product evidence clear.' },
+  { id:'workflow-walkthrough-vertical', label:'Workflow walkthrough / vertical', runbookId:'appdemo', objectiveId:'activate', lensId:'product-in-use', imageAngle:'screen_story', aspectRatio:'9:16', direction:'Show a single understandable product workflow in a vertical app-first composition with an honest use moment.' },
+  { id:'real-world-use-square', label:'Real-world use / square', runbookId:'showcase', objectiveId:'activate', lensId:'product-in-use', imageAngle:'creator_still', aspectRatio:'1:1', direction:'Place the product in a believable everyday use context while keeping the app or product interaction visibly central.' },
+  { id:'feature-focus-square', label:'Feature focus / square', runbookId:'showcase', objectiveId:'convert', lensId:'proof-led', imageAngle:'screen_story', aspectRatio:'1:1', direction:'Focus on one supportable feature detail with generous whitespace and a crisp product-first visual explanation.' },
+  { id:'premium-confidence-vertical', label:'Premium confidence / vertical', runbookId:'reveal', objectiveId:'announce', lensId:'editorial', imageAngle:'editorial', aspectRatio:'9:16', direction:'Create a premium vertical launch-style frame with calm confidence, no fear-based urgency, and clear product grounding.' },
+  { id:'landscape-feature-story', label:'Feature story / landscape', runbookId:'appdemo', objectiveId:'acquire', lensId:'product-in-use', imageAngle:'hero', aspectRatio:'16:9', direction:'Compose a landscape feature story with the product as the central evidence and a clear visual route from friction to next step.' },
+]
+
 const CREATOR_DELIVERIES = [
   { id:'candid', label:'Candid discovery', detail:'Conversational and specific—not scripted hype.', prompt:'Deliver like a creator sharing a genuinely useful find: direct eye-line, relaxed pace, grounded wording, and no exaggerated reactions.' },
   { id:'proof_demo', label:'Proof-on-camera demo', detail:'Hands, screen, and product proof lead every beat.', prompt:'Prioritize visible product use, tactile action, crisp screen proof, and a simple spoken explanation of what the viewer is seeing.' },
@@ -133,6 +146,7 @@ export default function ImageBank() {
   const [aspectRatio, setAspectRatio] = useState('1:1')
   const [variations, setVariations] = useState(2)
   const [generating, setGenerating] = useState(false)
+  const [batchState, setBatchState] = useState({ status:'idle', completed:0, failed:0, assets:[], message:'' })
   const [generatedResults, setGeneratedResults] = useState([])
   const [creativeRound, setCreativeRound] = useState(0)
   const [error, setError] = useState('')
@@ -196,6 +210,7 @@ export default function ImageBank() {
     { label:'Clear end frame', ready:Boolean(storyboard[3]?.caption?.trim()), next:'Define the final action or payoff.' },
   ], [activeApp, referenceImage, hook, proof, storyboard])
   const readinessScore = creativeReadiness.filter(item => item.ready).length
+  const batchHasProductTruth = Boolean(activeApp && (String(activeApp.description || '').trim() || referenceImage))
 
   useEffect(() => {
     setVideoPrompt(current => current || selectedRunbook.video)
@@ -322,6 +337,7 @@ export default function ImageBank() {
     setReferenceImage(null)
     setVideoSource(null)
     setGeneratedResults([])
+    setBatchState({ status:'idle', completed:0, failed:0, assets:[], message:'' })
     setHandoffState({ status:'idle', message:'' })
     setPostAssistant({ status:'idle', suggestions:null, error:'' })
     setPostDraft(null)
@@ -464,6 +480,129 @@ export default function ImageBank() {
       setError(generationError.name === 'AbortError' ? 'The render took too long to finish. Your FloStudio tokens were restored—try one creative or a shorter brief.' : presentProviderError(generationError.message, 'image render'))
     }
     setGenerating(false)
+  }
+
+  const runTenCreativeBatch = async () => {
+    if (generating || batchState.status === 'working') return
+    if (!activeApp?.id) { setError('Select a portfolio app before creating a creative batch.'); return }
+    if (!batchHasProductTruth) { setError('Add a factual product description or pin a real product image before creating this app’s batch. FloStudio will not invent product context.'); return }
+    if (!providerConnection.configured) { setError('Connect the workspace image provider before creating a ten-creative batch.'); return }
+
+    const totalTokenCost = TEN_CREATIVE_BATCH_RECIPES.length * 10
+    const proceed = window.confirm(`Create ${TEN_CREATIVE_BATCH_RECIPES.length} distinct image creatives for ${activeApp.name}? This starts ${TEN_CREATIVE_BATCH_RECIPES.length} provider renders (${totalTokenCost} FloStudio tokens), saves outputs only in this app’s Creative Lab, and never publishes anything.`)
+    if (!proceed) return
+
+    setGenerating(true)
+    setError('')
+    setGeneratedResults([])
+    setHandoffState({ status:'idle', message:'' })
+    setBatchState({ status:'working', completed:0, failed:0, assets:[], message:`Preparing 0 of ${TEN_CREATIVE_BATCH_RECIPES.length} app-scoped creatives…` })
+
+    const batchId = `${activeApp.id}-${Date.now()}`
+    const nextRound = creativeRound + 1
+    const results = []
+    const failures = []
+    let attempted = 0
+    let refundableTokens = 0
+    let charged = false
+    let stopBatch = false
+
+    try {
+      const authorized = await useTokens(totalTokenCost, `${TEN_CREATIVE_BATCH_RECIPES.length}-creative image batch for ${activeApp.name}`)
+      if (!authorized) {
+        setBatchState({ status:'idle', completed:0, failed:0, assets:[], message:'The batch was not started because the token check did not complete.' })
+        return
+      }
+      charged = true
+
+      const authHeaders = await providerHeaders()
+      const brandContext = activeApp?.brand_dna ? `Brand DNA: ${typeof activeApp.brand_dna === 'string' ? activeApp.brand_dna : JSON.stringify(activeApp.brand_dna).slice(0, 1200)}.` : ''
+      const productContext = `Product: ${activeApp.name}. Category: ${activeApp.category || 'not specified'}. Description: ${activeApp.description || 'Use the supplied real product reference only.'}. Audience: ${activeApp.audience || 'not specified'}. ${brandContext}`
+
+      for (const [index, recipe] of TEN_CREATIVE_BATCH_RECIPES.entries()) {
+        if (stopBatch) break
+        const runbook = AD_RUNBOOKS.find(item => item.id === recipe.runbookId) || AD_RUNBOOKS[0]
+        const objective = CAMPAIGN_OBJECTIVES.find(item => item.id === recipe.objectiveId) || CAMPAIGN_OBJECTIVES[0]
+        const lens = VISUAL_LENSES.find(item => item.id === recipe.lensId) || VISUAL_LENSES[0]
+        const angle = IMAGE_ANGLES.find(item => item.id === recipe.imageAngle) || IMAGE_ANGLES[0]
+        const style = STYLE_PRESETS.find(item => item.id === runbook.style) || STYLE_PRESETS[0]
+        let remoteOutputReceived = false
+        attempted += 1
+        setBatchState({ status:'working', completed:results.length, failed:failures.length, assets:results, message:`Rendering ${index + 1} of ${TEN_CREATIVE_BATCH_RECIPES.length}: ${recipe.label}` })
+
+        try {
+          const brief = `Ad format: ${runbook.label}. Campaign objective: ${objective.label}. ${objective.prompt} Visual lens: ${lens.label}. ${lens.prompt} Composition angle: ${angle.label}. ${angle.prompt} Batch concept: ${recipe.direction} Hook: ${hook || 'derive an honest scroll-stopping hook from the supplied product truth.'} Proof: ${proof || 'use only credible product details and avoid unsupported claims.'} ${productContext} Style: ${style.label} — ${style.desc}`
+          const controller = new AbortController()
+          const timeout = window.setTimeout(() => controller.abort(), 70000)
+          const response = await fetch('/api/generate-image', {
+            method:'POST',
+            signal:controller.signal,
+            headers:{ ...authHeaders, 'Content-Type':'application/json' },
+            body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio:recipe.aspectRatio, variations:1, referenceImage, creativeRound:nextRound, workspaceId }),
+          }).finally(() => window.clearTimeout(timeout))
+          const data = await response.json()
+          if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
+          const image = data.images?.[0]
+          if (!image?.url) throw new Error('The image provider did not return a usable creative output.')
+          remoteOutputReceived = true
+          const saved = await persistRemoteOutput(image.url, `ai-batch-${batchId}-${String(index + 1).padStart(2, '0')}`, 'image', {
+            source:'ai_image',
+            provider:'openai',
+            prompt:brief,
+            metadata:{
+              aspectRatio:recipe.aspectRatio,
+              stylePreset:style.id,
+              imageAngle:angle.id,
+              textOverlay,
+              variation:1,
+              creativeRound:nextRound,
+              concept:image.concept || null,
+              runbook:runbook.id,
+              objective:objective.id,
+              visualLens:lens.id,
+              productAppId:activeApp.id,
+              hook,
+              proof,
+              batchId,
+              batchIndex:index + 1,
+              batchTotal:TEN_CREATIVE_BATCH_RECIPES.length,
+              batchRecipe:recipe.id,
+              batchLabel:recipe.label,
+            },
+          })
+          results.push(saved)
+          setGeneratedResults([...results])
+        } catch (batchError) {
+          const message = batchError.name === 'AbortError' ? 'This render timed out before producing an output.' : presentProviderError(batchError.message, 'batch image render')
+          failures.push({ label:recipe.label, message })
+          if (!remoteOutputReceived) refundableTokens += 10
+          if (/credit|quota|billing|insufficient|provider key|workspace image provider/i.test(String(message))) stopBatch = true
+        }
+      }
+
+      const unattempted = stopBatch && attempted < TEN_CREATIVE_BATCH_RECIPES.length ? TEN_CREATIVE_BATCH_RECIPES.length - attempted : 0
+      if (unattempted) refundableTokens += unattempted * 10
+      if (results.length) setCreativeRound(nextRound)
+
+      const incompleteCount = failures.length + unattempted
+      const status = results.length === TEN_CREATIVE_BATCH_RECIPES.length ? 'complete' : results.length ? 'partial' : 'error'
+      const message = status === 'complete'
+        ? `${results.length} app-scoped creatives saved to the library. Review them before creating any drafts or publishing.`
+        : results.length
+          ? `${results.length} creatives saved; ${incompleteCount} did not complete. No posts were created or published.`
+          : 'No creatives were saved. Any render that did not start will have its FloStudio tokens restored.'
+      setBatchState({ status, completed:results.length, failed:incompleteCount, assets:results, message })
+      if (status !== 'complete') setError(failures[0]?.message || message)
+      await loadAssets(activeApp.id)
+    } catch (batchError) {
+      if (charged && attempted === 0) refundableTokens = TEN_CREATIVE_BATCH_RECIPES.length * 10
+      const message = presentProviderError(batchError.message, 'creative batch')
+      setBatchState({ status:'error', completed:results.length, failed:Math.max(1, failures.length), assets:results, message })
+      setError(message)
+    } finally {
+      if (refundableTokens) await refundTokens(refundableTokens, 'batch image renders that did not start').catch(() => {})
+      setGenerating(false)
+    }
   }
 
   const sendCreativeToReview = async asset => {
@@ -694,10 +833,23 @@ export default function ImageBank() {
               </div>
             )}
           </div>
+          <section style={{ marginTop:18, padding:'14px', border:'1px solid rgba(99,91,255,.28)', background:'linear-gradient(135deg,rgba(99,91,255,.10),rgba(255,255,255,.035))', borderRadius:3 }} aria-live="polite">
+            <div style={{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}>
+              <div>
+                <div className="abundance-mini-label">APP BATCH / TEN DISTINCT IMAGE CONCEPTS</div>
+                <h3 style={{ color:'#ffffff', fontSize:16, letterSpacing:'-.04em', marginTop:4 }}>Create 10 full creatives for {activeApp?.name || 'this app'}.</h3>
+                <p style={{ color:'rgba(240,240,240,.68)', fontSize:11, lineHeight:1.5, marginTop:5, maxWidth:540 }}>FloStudio renders ten different image directions, saves each result only to this app’s Creative Lab, and leaves every output out of social publishing and review drafts until you choose a next step.</p>
+              </div>
+              <span className="abundance-pill">100 tokens / 10 renders</span>
+            </div>
+            {!batchHasProductTruth && <div style={{ marginTop:10, color:'rgba(240,240,240,.72)', fontSize:10.5, lineHeight:1.45 }}>Needs a factual product description or a pinned real product image. FloStudio will not generate a generic batch from an app name alone.</div>}
+            {batchState.message && <div style={{ marginTop:10, color:batchState.status === 'complete' ? 'var(--signal)' : batchState.status === 'error' ? '#cccccc' : 'rgba(240,240,240,.78)', fontSize:11, lineHeight:1.45 }}>{batchState.message}{batchState.status !== 'idle' && ` (${batchState.completed}/${TEN_CREATIVE_BATCH_RECIPES.length} saved${batchState.failed ? `, ${batchState.failed} not completed` : ''})`}</div>}
+            <button type="button" onClick={runTenCreativeBatch} disabled={generating || batchState.status === 'working' || !activeApp?.id || !batchHasProductTruth || providerConnection.loading || !providerConnection.configured} className="studio-button" style={{ width:'100%', marginTop:13, padding:13 }}>{batchState.status === 'working' ? `Rendering batch ${batchState.completed + batchState.failed + 1} of ${TEN_CREATIVE_BATCH_RECIPES.length}…` : 'Create 10 image creatives · review only'}</button>
+          </section>
           {error && <div style={{ marginTop:15, padding:'11px 13px', color:'#cccccc', fontSize:12, border:'1px solid rgba(136,136,136,.32)', background:'rgba(136,136,136,.1)', borderRadius:11 }}>{error}</div>}
-          <button onClick={generateImages} disabled={generating || (!prompt.trim() && !referenceImage && !activeApp)} className="studio-button" style={{ width:'100%', marginTop:20, padding:14 }}>{generating ? 'Rendering your original creative...' : `Render ${selectedRunbook.label.toLowerCase()} creative · 10 tokens`}</button>
+          <button onClick={generateImages} disabled={generating || batchState.status === 'working' || (!prompt.trim() && !referenceImage && !activeApp)} className="studio-button" style={{ width:'100%', marginTop:20, padding:14 }}>{generating ? (batchState.status === 'working' ? 'Rendering the ten-creative batch...' : 'Rendering your original creative...') : `Render ${selectedRunbook.label.toLowerCase()} creative · 10 tokens`}</button>
         </section>
-        <section className="abundance-card" style={{ padding:22, minHeight:530, display:'flex', flexDirection:'column' }}><div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}><div><div className="abundance-mini-label">LIVE OUTPUT BOARD</div><h2 style={{ fontSize:20, letterSpacing:'-.05em', marginTop:4 }}>Generated creatives</h2></div><span className="abundance-pill">{creativeRound ? `round ${creativeRound}` : 'saved automatically'}</span></div>{generating ? <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center' }}><div><span className="spinner" style={{ width:34, height:34, borderWidth:3 }} /><div style={{ color:'#ffffff', fontWeight:800, marginTop:15 }}>Rendering a new creative round</div><div style={{ color:'rgba(232,232,232,.64)', fontSize:12, marginTop:6 }}>Each pass uses a different performance-ad concept and adds the real output to your library.</div></div></div> : generatedResults.length ? <><div style={{ display:'grid', gridTemplateColumns:generatedResults.length > 1 ? '1fr 1fr' : '1fr', gap:12 }}>{generatedResults.map((asset, index) => <div key={asset.name} style={{ minHeight:240, borderRadius:3, overflow:'hidden', position:'relative', background:'rgba(255,255,255,.06)' }}><AssetVisual asset={asset} /><div style={{ position:'absolute', left:0, right:0, bottom:0, padding:'28px 10px 10px', background:'linear-gradient(transparent,rgba(18,18,18,.9))', display:'flex', alignItems:'end', justifyContent:'space-between', gap:8 }}><span style={{ color:'var(--signal)', font:'500 8px DM Mono,monospace', letterSpacing:'.09em' }}>CONCEPT {String(index + 1).padStart(2,'0')}</span><a href={asset.url} target="_blank" rel="noreferrer" className="abundance-pill">Open</a></div></div>)}</div><button onClick={generateImages} disabled={generating} className="studio-chip" style={{ marginTop:13, alignSelf:'flex-start', background:'var(--signal)', borderColor:'var(--signal)', color:'var(--ink-deep)' }}>Create a different take →</button><p style={{ color:'rgba(232,232,232,.58)', fontSize:10.5, lineHeight:1.55, marginTop:8 }}>A new round changes the visual concept; it does not overwrite the outputs already saved in your production library.</p></> : <div className="abundance-glass" style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'flex-end', minHeight:390, padding:18, borderRadius:3, background:'linear-gradient(150deg,rgba(223,223,223,.13),rgba(132,132,132,.09))' }}><div className="abundance-mini-label">REAL OUTPUT, NOT A PLACEHOLDER</div><h3 style={{ fontSize:24, lineHeight:1.05, letterSpacing:'-.06em', maxWidth:300, marginTop:7 }}>Your first changing creative round starts here.</h3><p style={{ color:'rgba(232,232,232,.65)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:370 }}>Render a format to create real AI images. Create another take when you want a different visual idea, not the same placeholder rearranged.</p></div>}</section>
+        <section className="abundance-card" style={{ padding:22, minHeight:530, display:'flex', flexDirection:'column' }}><div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}><div><div className="abundance-mini-label">LIVE OUTPUT BOARD</div><h2 style={{ fontSize:20, letterSpacing:'-.05em', marginTop:4 }}>Generated creatives</h2></div><span className="abundance-pill">{creativeRound ? `round ${creativeRound}` : 'saved automatically'}</span></div>{generating ? <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center' }}><div><span className="spinner" style={{ width:34, height:34, borderWidth:3 }} /><div style={{ color:'#ffffff', fontWeight:800, marginTop:15 }}>{batchState.status === 'working' ? `Rendering creative ${batchState.completed + batchState.failed + 1} of ${TEN_CREATIVE_BATCH_RECIPES.length}` : 'Rendering a new creative round'}</div><div style={{ color:'rgba(232,232,232,.64)', fontSize:12, marginTop:6 }}>{batchState.status === 'working' ? batchState.message : 'Each pass uses a different performance-ad concept and adds the real output to your library.'}</div></div></div> : generatedResults.length ? <><div style={{ display:'grid', gridTemplateColumns:generatedResults.length > 1 ? '1fr 1fr' : '1fr', gap:12 }}>{generatedResults.map((asset, index) => <div key={asset.name} style={{ minHeight:240, borderRadius:3, overflow:'hidden', position:'relative', background:'rgba(255,255,255,.06)' }}><AssetVisual asset={asset} /><div style={{ position:'absolute', left:0, right:0, bottom:0, padding:'28px 10px 10px', background:'linear-gradient(transparent,rgba(18,18,18,.9))', display:'flex', alignItems:'end', justifyContent:'space-between', gap:8 }}><span style={{ color:'var(--signal)', font:'500 8px DM Mono,monospace', letterSpacing:'.09em' }}>CONCEPT {String(index + 1).padStart(2,'0')}</span><a href={asset.url} target="_blank" rel="noreferrer" className="abundance-pill">Open</a></div></div>)}</div><button onClick={generateImages} disabled={generating || batchState.status === 'working'} className="studio-chip" style={{ marginTop:13, alignSelf:'flex-start', background:'var(--signal)', borderColor:'var(--signal)', color:'var(--ink-deep)' }}>Create a different take →</button><p style={{ color:'rgba(232,232,232,.58)', fontSize:10.5, lineHeight:1.55, marginTop:8 }}>A new round changes the visual concept; it does not overwrite the outputs already saved in your production library.</p></> : <div className="abundance-glass" style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'flex-end', minHeight:390, padding:18, borderRadius:3, background:'linear-gradient(150deg,rgba(223,223,223,.13),rgba(132,132,132,.09))' }}><div className="abundance-mini-label">REAL OUTPUT, NOT A PLACEHOLDER</div><h3 style={{ fontSize:24, lineHeight:1.05, letterSpacing:'-.06em', maxWidth:300, marginTop:7 }}>Your first changing creative round starts here.</h3><p style={{ color:'rgba(232,232,232,.65)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:370 }}>Render a format to create real AI images. Create another take when you want a different visual idea, not the same placeholder rearranged.</p></div>}</section>
       </div>}
 
       {activeTab === 'generate' && generatedResults.length > 0 && <section className="abundance-card" style={{ marginTop:20, padding:'18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap', borderColor:'rgba(223,223,223,.34)' }}><div><div className="abundance-mini-label">REVIEW HANDOFF / TURN A REAL OUTPUT INTO A DECISION</div><h3 style={{ fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>Send this creative straight to the review queue.</h3><p style={{ color:'rgba(240,240,240,.62)', fontSize:11.5, lineHeight:1.5, marginTop:5, maxWidth:590 }}>FloStudio creates a real pending Instagram draft using your hook and proof, then attaches this saved creative so it is ready for an approval decision.</p>{handoffState.message && <div style={{ marginTop:8, fontSize:11.5, color:handoffState.status === 'done' ? 'var(--signal)' : handoffState.status === 'error' ? '#c3c3c3' : 'rgba(240,240,240,.76)' }}>{handoffState.message}</div>}</div><button onClick={() => sendCreativeToReview(generatedResults[0])} disabled={handoffState.status === 'working' || handoffState.status === 'done'} className="studio-button" style={{ whiteSpace:'nowrap' }}>{handoffState.status === 'working' ? 'Creating review draft…' : handoffState.status === 'done' ? 'Sent to review' : 'Send to review queue →'}</button></section>}
