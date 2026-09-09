@@ -175,6 +175,7 @@ export default function ImageBank() {
   const [lensId, setLensId] = useState('product-in-use')
   const [handoffState, setHandoffState] = useState({ status:'idle', message:'' })
   const [postAssistant, setPostAssistant] = useState({ status:'idle', suggestions:null, error:'' })
+  const [hookBank, setHookBank] = useState({ status:'idle', hooks:[], guardrailNote:'', error:'', generatedAt:null })
   const [postDraft, setPostDraft] = useState(null)
   const assetLoadVersion = useRef(0)
   const videoBuilderRef = useRef(null)
@@ -340,6 +341,12 @@ export default function ImageBank() {
     setBatchState({ status:'idle', completed:0, failed:0, assets:[], message:'' })
     setHandoffState({ status:'idle', message:'' })
     setPostAssistant({ status:'idle', suggestions:null, error:'' })
+    try {
+      const savedHooks = JSON.parse(localStorage.getItem(`flostudio_hook_bank_${activeApp?.id}`) || 'null')
+      setHookBank(savedHooks?.hooks?.length ? { status:'ready', hooks:savedHooks.hooks, guardrailNote:savedHooks.guardrailNote || '', error:'', generatedAt:savedHooks.generatedAt || null } : { status:'idle', hooks:[], guardrailNote:'', error:'', generatedAt:null })
+    } catch {
+      setHookBank({ status:'idle', hooks:[], guardrailNote:'', error:'', generatedAt:null })
+    }
     setPostDraft(null)
     loadAssets(activeApp?.id)
   }, [activeApp?.id])
@@ -433,6 +440,35 @@ export default function ImageBank() {
     } catch (assistantError) {
       setPostAssistant({ status:'error', suggestions:null, error:presentProviderError(assistantError.message, 'post assistant') })
     }
+  }
+
+  const generateTenHooks = async () => {
+    if (!activeApp?.id) { setHookBank({ status:'error', hooks:[], guardrailNote:'', error:'Select a portfolio app before generating hooks.', generatedAt:null }); return }
+    if (!batchHasProductTruth) { setHookBank({ status:'error', hooks:[], guardrailNote:'', error:'Add a factual product description or pin a real product image first. FloStudio will not invent hooks from an app name alone.', generatedAt:null }); return }
+    if (!providerConnection.configured) { setHookBank({ status:'error', hooks:[], guardrailNote:'', error:'Connect the workspace writing provider before generating hook options.', generatedAt:null }); return }
+    setHookBank(current => ({ ...current, status:'working', error:'' }))
+    try {
+      const authHeaders = await providerHeaders()
+      const response = await fetch('/api/generate-hooks', {
+        method:'POST',
+        headers:{ ...authHeaders, 'Content-Type':'application/json' },
+        body:JSON.stringify({ workspaceId, productId:activeApp.id, direction:prompt || selectedRunbook.prompt }),
+      })
+      const data = await response.json()
+      if (!response.ok || data.error) throw new Error(data.error || 'FloStudio could not generate hook options.')
+      const next = { status:'ready', hooks:Array.isArray(data.suggestions?.hooks) ? data.suggestions.hooks : [], guardrailNote:data.suggestions?.guardrailNote || '', error:'', generatedAt:data.generatedAt || new Date().toISOString() }
+      if (next.hooks.length !== 10) throw new Error('FloStudio did not receive ten distinct hook options. Retry generation.')
+      setHookBank(next)
+      try { localStorage.setItem(`flostudio_hook_bank_${activeApp.id}`, JSON.stringify({ hooks:next.hooks, guardrailNote:next.guardrailNote, generatedAt:next.generatedAt })) } catch {}
+    } catch (hookError) {
+      setHookBank(current => ({ ...current, status:'error', error:presentProviderError(hookError.message, 'hook generation') }))
+    }
+  }
+
+  const applyHookToBrief = value => {
+    const text = String(value || '').trim()
+    if (!text) return
+    setHook(text)
   }
 
   const choosePostOption = option => {
@@ -784,6 +820,20 @@ export default function ImageBank() {
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom:20 }}><div><div className="abundance-mini-label">IMAGE AD / {selectedRunbook.type}</div><h2 style={{ fontSize:23, letterSpacing:'-.055em', marginTop:5 }}>{selectedRunbook.label}. Make it perform.</h2></div><span className="abundance-pill">10 tokens / take</span></div>
           <label style={{ display:'block', color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>CREATIVE DIRECTION</label>
           <textarea className="studio-input" value={prompt} onChange={event => setPrompt(event.target.value)} rows={4} placeholder={selectedRunbook.prompt} style={{ resize:'vertical', lineHeight:1.6 }} />
+          <section style={{ marginTop:14, padding:'14px', border:'1px solid rgba(99,91,255,.28)', background:'linear-gradient(135deg,rgba(99,91,255,.09),rgba(255,255,255,.025))', borderRadius:3 }} aria-live="polite">
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}>
+              <div>
+                <div className="abundance-mini-label">HOOK BANK / SELECTED APP ONLY</div>
+                <h3 style={{ color:'#ffffff', fontSize:16, letterSpacing:'-.04em', marginTop:4 }}>10 high-attention hooks for {activeApp?.name || 'this app'}.</h3>
+                <p style={{ color:'rgba(240,240,240,.68)', fontSize:11, lineHeight:1.5, marginTop:5, maxWidth:560 }}>FloStudio uses only this app’s saved product, brand, and App Store context. Hook options are editable internal copy; choosing one simply fills the creative brief. No post, image, draft, channel action, or publication is created.</p>
+              </div>
+              <button type="button" onClick={generateTenHooks} disabled={hookBank.status === 'working' || !activeApp?.id || !batchHasProductTruth || providerConnection.loading || !providerConnection.configured} className="studio-button" style={{ padding:'10px 12px', whiteSpace:'nowrap' }}>{hookBank.status === 'working' ? 'Writing 10 hooks…' : 'Generate 10 hooks'}</button>
+            </div>
+            {!batchHasProductTruth && <div style={{ marginTop:10, color:'rgba(240,240,240,.72)', fontSize:10.5, lineHeight:1.45 }}>Add a factual product description or pin a real product image to enable source-grounded hooks for this app.</div>}
+            {hookBank.error && <div style={{ marginTop:10, color:'#cccccc', fontSize:11, lineHeight:1.45 }}>{hookBank.error}</div>}
+            {hookBank.hooks.length > 0 && <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:8, marginTop:12 }}>{hookBank.hooks.map((item, index) => <article key={item.id || index} style={{ padding:10, border:'1px solid rgba(240,240,240,.16)', background:'rgba(16,16,16,.28)', borderRadius:3 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}><span style={{ color:'var(--signal)', font:'500 8px DM Mono,monospace', letterSpacing:'.08em' }}>{String(index + 1).padStart(2, '0')} / {item.angle || 'HOOK'}</span><button type="button" onClick={() => applyHookToBrief(item.text)} className="studio-chip" style={{ padding:'5px 7px', fontSize:9 }}>Use hook</button></div><p style={{ color:'#ffffff', fontSize:12, fontWeight:700, lineHeight:1.38, marginTop:7 }}>{item.text}</p>{item.rationale && <small style={{ display:'block', color:'rgba(240,240,240,.54)', fontSize:9.5, lineHeight:1.35, marginTop:6 }}>{item.rationale}</small>}</article>)}</div>}
+            {hookBank.guardrailNote && <div style={{ marginTop:10, color:'rgba(240,240,240,.55)', fontSize:10, lineHeight:1.4 }}>{hookBank.guardrailNote}</div>}
+          </section>
           <div className="ad-blueprint"><div className="ad-blueprint__label">AD BLUEPRINT</div><input value={hook} onChange={event => setHook(event.target.value)} placeholder="Opening hook / what stops the scroll?" /><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Proof / what makes the claim believable?" /></div>
           <div style={{ marginTop:18 }}><div className="abundance-mini-label">CREATIVE RECIPE / THE BUSINESS JOB AND VISUAL EXECUTION</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginTop:10 }}><div><div style={{ color:'#ffffff', fontSize:11, fontWeight:800, marginBottom:7 }}>CAMPAIGN OBJECTIVE</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>{CAMPAIGN_OBJECTIVES.map(objective => <button key={objective.id} onClick={() => setObjectiveId(objective.id)} className={`format-card ${objectiveId === objective.id ? 'active':''}`} style={{ padding:10 }}><b style={{ display:'block', fontSize:11 }}>{objective.label}</b><small>{objective.detail}</small></button>)}</div></div><div><div style={{ color:'#ffffff', fontSize:11, fontWeight:800, marginBottom:7 }}>VISUAL LENS</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>{VISUAL_LENSES.map(lens => <button key={lens.id} onClick={() => setLensId(lens.id)} className={`format-card ${lensId === lens.id ? 'active':''}`} style={{ padding:10 }}><b style={{ display:'block', fontSize:11 }}>{lens.label}</b><small>{lens.detail}</small></button>)}</div></div></div></div>
           <div style={{ marginTop:18 }}><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:9 }}>CREATIVE TREATMENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:9 }}>{STYLE_PRESETS.map(style => <button key={style.id} onClick={() => setStylePreset(style.id)} className={`format-card ${stylePreset === style.id ? 'active':''}`}><b style={{ display:'block', fontSize:12 }}>{style.label}</b><small>{style.desc}</small></button>)}</div></div>
