@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { belongsToProduct, createMediaAsset, getCurrentMediaUser, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
 import { createCreativeExperimentMatrix, estimateMatrixCells, listCreativeExperimentMatrices, matrixReadiness } from '../lib/creativeExperimentMatrix'
+import { listShortformResearchExamples } from '../lib/shortformResearch'
 import { buildVideoSourceOptions, resolvedVideoReference } from '../lib/videoReferences'
 import UGCCastingPanel from '../components/UGCCastingPanel.jsx'
 import { castingProfile, voiceProfile } from '../lib/ugcCasting'
@@ -181,9 +182,13 @@ export default function ImageBank() {
   const [selectedExperimentHooks, setSelectedExperimentHooks] = useState([])
   const [experimentMatrices, setExperimentMatrices] = useState([])
   const [experimentState, setExperimentState] = useState({ loading:false, saving:false, error:'', message:'' })
+  const [shortformResearch, setShortformResearch] = useState([])
+  const [shortformResearchState, setShortformResearchState] = useState({ loading:false, error:'' })
+  const [shortformPlatform, setShortformPlatform] = useState('all')
   const [postDraft, setPostDraft] = useState(null)
   const assetLoadVersion = useRef(0)
   const hookBankRef = useRef(null)
+  const shortformResearchRef = useRef(null)
   const batchRef = useRef(null)
   const videoBuilderRef = useRef(null)
 
@@ -220,13 +225,16 @@ export default function ImageBank() {
   const readinessScore = creativeReadiness.filter(item => item.ready).length
   const batchHasProductTruth = Boolean(activeApp && (String(activeApp.description || '').trim() || referenceImage))
   const matrixCellCount = useMemo(() => estimateMatrixCells({ hooks:selectedExperimentHooks, actorIds:[actorId], voiceIds:[voiceId] }), [selectedExperimentHooks, actorId, voiceId])
+  const visibleShortformResearch = useMemo(() => shortformPlatform === 'all' ? shortformResearch : shortformResearch.filter(item => item.platform === shortformPlatform), [shortformResearch, shortformPlatform])
+  const shortformPlatforms = useMemo(() => ['all', ...new Set(shortformResearch.map(item => item.platform))], [shortformResearch])
   const appWorkflowSteps = useMemo(() => [
     { id:'truth', label:'Product truth', detail:activeApp ? `${activeApp.name} is the active app context.` : 'Choose a portfolio app first.', ready:Boolean(activeApp), action:null },
+    { id:'research', label:'Study public formats', detail:shortformResearch.length ? `${shortformResearch.length} attributed public examples linked for this app.` : 'No public format research is linked yet.', ready:Boolean(shortformResearch.length), action:'research' },
     { id:'playbook', label:'Choose a content lane', detail:selectedPlaybookLaneId ? 'A lane is shaping the current brief.' : 'Pick an original product-led content direction.', ready:Boolean(selectedPlaybookLaneId), action:'playbook' },
     { id:'hooks', label:'Build hook options', detail:hookBank.hooks.length ? `${hookBank.hooks.length} app-specific hooks are ready to use.` : 'Generate ten grounded hook options.', ready:hookBank.hooks.length === 10, action:'hooks' },
     { id:'creative', label:'Make original creatives', detail:imageAssets.length ? `${imageAssets.length} saved image output${imageAssets.length === 1 ? '' : 's'} for this app.` : 'Prepare a ten-concept creative batch when ready.', ready:Boolean(imageAssets.length), action:'creative' },
     { id:'review', label:'Review before delivery', detail:'Open this app’s asset library; sending an asset to review remains a separate choice.', ready:false, action:'review' },
-  ], [activeApp, selectedPlaybookLaneId, hookBank.hooks.length, imageAssets.length])
+  ], [activeApp, selectedPlaybookLaneId, hookBank.hooks.length, imageAssets.length, shortformResearch.length])
 
   useEffect(() => {
     setVideoPrompt(current => current || selectedRunbook.video)
@@ -258,6 +266,11 @@ export default function ImageBank() {
   const openWorkflowStep = step => {
     if (step === 'playbook') {
       document.getElementById('app-intelligence-playbook')?.scrollIntoView({ behavior:'smooth', block:'start' })
+      return
+    }
+    if (step === 'research') {
+      setActiveTab('generate')
+      window.setTimeout(() => shortformResearchRef.current?.scrollIntoView({ behavior:'smooth', block:'start' }), 0)
       return
     }
     if (step === 'hooks') {
@@ -312,6 +325,20 @@ export default function ImageBank() {
       if (requestVersion === assetLoadVersion.current) setError(loadError.message || 'Your media library could not be loaded.')
     }
     if (requestVersion === assetLoadVersion.current) setLoadingAssets(false)
+  }
+
+  const loadShortformResearch = async (productId = activeApp?.id) => {
+    if (!workspaceId || !productId) { setShortformResearch([]); return }
+    setShortformResearchState({ loading:true, error:'' })
+    try {
+      const user = await getCurrentMediaUser()
+      const items = await listShortformResearchExamples({ workspaceId, userId:user.id, productId })
+      setShortformResearch(items)
+    } catch (researchError) {
+      setShortformResearchState({ loading:false, error:researchError.message || 'This app’s public format research could not be loaded.' })
+      return
+    }
+    setShortformResearchState({ loading:false, error:'' })
   }
 
   const loadExperimentMatrices = async (productId = activeApp?.id) => {
@@ -452,6 +479,9 @@ export default function ImageBank() {
     setSelectedExperimentHooks([])
     setExperimentMatrices([])
     setExperimentState({ loading:false, saving:false, error:'', message:'' })
+    setShortformResearch([])
+    setShortformResearchState({ loading:false, error:'' })
+    setShortformPlatform('all')
     try {
       const savedHooks = JSON.parse(localStorage.getItem(`flostudio_hook_bank_${activeApp?.id}`) || 'null')
       setHookBank(savedHooks?.hooks?.length ? { status:'ready', hooks:savedHooks.hooks, guardrailNote:savedHooks.guardrailNote || '', error:'', generatedAt:savedHooks.generatedAt || null } : { status:'idle', hooks:[], guardrailNote:'', error:'', generatedAt:null })
@@ -463,6 +493,7 @@ export default function ImageBank() {
   }, [activeApp?.id])
   useEffect(() => { loadProviderConnection() }, [workspaceId])
   useEffect(() => { loadExperimentMatrices(activeApp?.id) }, [workspaceId, activeApp?.id])
+  useEffect(() => { loadShortformResearch(activeApp?.id) }, [workspaceId, activeApp?.id])
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('flostudio_active_video_render') || 'null')
@@ -930,6 +961,7 @@ export default function ImageBank() {
         <UGCCastingPanel appName={activeApp?.name} actorId={actorId} voiceId={voiceId} onActorChange={setActorId} onVoiceChange={setVoiceId} /><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', marginTop:14, padding:'12px', border:'1px solid rgba(49,130,246,.24)', background:'rgba(49,130,246,.06)' }}><div><div className="abundance-mini-label">CASTING SELECTED</div><div style={{ color:'#1c2530', fontSize:12, fontWeight:800, marginTop:3 }}>{selectedActor.name} · {selectedVoice.name}</div></div><button type="button" onClick={() => videoBuilderRef.current?.scrollIntoView({ behavior:'smooth', block:'start' })} className="studio-button" style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>Continue to video builder ↓</button></div><div style={{ marginTop:14, paddingTop:13, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">ON-CAMERA DIRECTION / ORIGINAL ADULT TALENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_MODES.map(mode => <button key={mode.id} onClick={() => setCreatorMode(mode.id)} className={`format-card ${creatorMode === mode.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{mode.label}</b><small>{mode.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'160px minmax(0,1fr)', gap:10, alignItems:'center', marginTop:11 }}><div className="abundance-mini-label">UGC STORY SHAPE</div><select className="studio-input" value={ugcStoryShape} onChange={event => setUgcStoryShape(event.target.value)}>{UGC_STORY_SHAPES.map(shape => <option value={shape.id} key={shape.id}>{shape.label} — {shape.detail}</option>)}</select></div><p style={{ color:'rgba(240,240,240,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>Creator modes use original, non-identifiable adult talent. FloStudio never asks the model to imitate a real person. The selected app screen remains the canonical product reference.</p></div>
       </section>}
       {activeTab !== 'library' && <section className="abundance-card" style={{ marginTop:18, padding:'14px 16px', borderColor:'rgba(49,130,246,.32)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="abundance-mini-label">CREATIVE DIRECTOR CHECK</div><h2 style={{ fontSize:17, letterSpacing:'-.045em', marginTop:4 }}>Production readiness: {readinessScore} / {creativeReadiness.length}</h2><p style={{ color:'rgba(240,240,240,.6)', fontSize:11, lineHeight:1.5, marginTop:5 }}>FloStudio never blocks an early concept, but complete briefs produce stronger image and UGC-video direction.</p></div><span className="abundance-pill">{readinessScore === creativeReadiness.length ? 'ready to render' : 'brief in progress'}</span></div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:8, marginTop:12 }}>{creativeReadiness.map(item => <div key={item.label} style={{ border:'1px solid rgba(240,240,240,.14)', background:item.ready ? 'rgba(49,130,246,.08)' : 'rgba(240,240,240,.025)', padding:9, borderRadius:3 }}><b style={{ display:'block', fontSize:10.5, color:item.ready ? 'var(--signal)' : '#ffffff' }}>{item.ready ? '✓ ' : '○ '}{item.label}</b><span style={{ display:'block', marginTop:4, color:'rgba(240,240,240,.55)', fontSize:9.5, lineHeight:1.35 }}>{item.ready ? 'Locked into the production brief.' : item.next}</span></div>)}</div></section>}
+      {activeTab !== 'library' && <section ref={shortformResearchRef} style={{ marginTop:18, padding:'15px 16px', border:'1px solid rgba(121,229,204,.34)', background:'linear-gradient(135deg,rgba(121,229,204,.08),rgba(255,255,255,.025))', borderRadius:3 }} aria-live="polite"><div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}><div><div className="abundance-mini-label">PUBLIC FORMAT RESEARCH / SELECTED APP ONLY</div><h2 style={{ color:'#ffffff', fontSize:18, letterSpacing:'-.045em', marginTop:4 }}>Real source links for {activeApp?.name || 'this app'}.</h2><p style={{ color:'rgba(240,240,240,.66)', fontSize:11, lineHeight:1.5, marginTop:5, maxWidth:700 }}>Study the public format, hook structure, and visual device behind each example. The links remain attributed to their original creators; FloStudio’s directions are for making a new, app-grounded creative—not copying, downloading, remixing, or reposting the source.</p></div><span className="abundance-pill">{shortformResearch.length} linked examples</span></div>{shortformResearchState.loading && <div style={{ color:'rgba(240,240,240,.66)', fontSize:11, marginTop:12 }}>Loading this app’s source-linked research…</div>}{shortformResearchState.error && <div style={{ color:'#cccccc', fontSize:11, marginTop:12 }}>{shortformResearchState.error}</div>}{shortformResearch.length > 0 && <><div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:12 }}>{shortformPlatforms.map(platform => <button type="button" key={platform} onClick={() => setShortformPlatform(platform)} className="studio-chip" style={{ padding:'6px 8px', background:shortformPlatform === platform ? 'rgba(121,229,204,.15)' : undefined, borderColor:shortformPlatform === platform ? 'rgba(121,229,204,.56)' : undefined, color:shortformPlatform === platform ? '#79e5cc' : undefined }}>{platform === 'all' ? `All (${shortformResearch.length})` : platform}</button>)}</div><div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))', gap:9, marginTop:12 }}>{visibleShortformResearch.map(item => <article key={item.id} style={{ minHeight:185, padding:12, border:'1px solid rgba(240,240,240,.15)', background:'rgba(16,16,16,.28)', borderRadius:3, display:'flex', flexDirection:'column' }}><div style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'flex-start' }}><span style={{ color:'#79e5cc', font:'500 8px DM Mono,monospace', letterSpacing:'.09em' }}>{item.platform}</span><span style={{ color:'rgba(240,240,240,.52)', fontSize:9 }}>{item.research_status === 'source_linked' ? 'SOURCE-LINKED' : item.research_status}</span></div><b style={{ color:'#ffffff', fontSize:11.5, marginTop:8 }}>{item.source_creator || 'Public creator account'}</b><p style={{ color:'rgba(240,240,240,.62)', fontSize:10, lineHeight:1.42, marginTop:6 }}>{item.format_pattern}</p><div style={{ marginTop:'auto', paddingTop:9, borderTop:'1px solid rgba(240,240,240,.11)' }}><div style={{ color:'rgba(240,240,240,.50)', fontSize:9.5, lineHeight:1.35 }}><b style={{ color:'rgba(240,240,240,.72)' }}>Observed:</b> {item.observed_evidence || 'Not displayed'}</div><div style={{ color:'rgba(240,240,240,.58)', fontSize:9.5, lineHeight:1.35, marginTop:5 }}><b style={{ color:'rgba(240,240,240,.72)' }}>Original direction:</b> {item.original_adaptation}</div><a href={item.source_url} target="_blank" rel="noreferrer" className="studio-chip" style={{ display:'inline-flex', marginTop:9, padding:'6px 8px', color:'#ffffff', textDecoration:'none' }}>Open original source ↗</a></div></article>)}</div></>}</section>}
       {activeTab !== 'library' && <section id="app-intelligence-playbook" style={{ marginTop:18, padding:'15px 16px', border:'1px solid rgba(99,91,255,.30)', background:'linear-gradient(135deg,rgba(99,91,255,.08),rgba(255,255,255,.025))', borderRadius:3 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}><div><div className="abundance-mini-label">APP INTELLIGENCE / ORIGINAL CONTENT PLAYBOOK</div><h2 style={{ color:'#ffffff', fontSize:18, letterSpacing:'-.045em', marginTop:4 }}>Choose a content lane, then make it your app’s own.</h2><p style={{ color:'rgba(240,240,240,.66)', fontSize:11, lineHeight:1.5, marginTop:5, maxWidth:720 }}>This gives {activeApp?.name || 'the selected app'} a clear route from verified product context to a creative format, hook options, original visual directions, and review. It never scrapes, downloads, imitates, or republishes another creator’s content.</p></div><span className="abundance-pill">10 original lanes</span></div><div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:8, marginTop:13 }}>{TEN_CREATIVE_BATCH_RECIPES.map((recipe, index) => <button type="button" key={recipe.id} onClick={() => selectPlaybookLane(recipe)} className={`runbook-card ${selectedPlaybookLaneId === recipe.id ? 'active':''}`} style={{ minHeight:120, padding:10 }}><span className="runbook-card__type">{String(index + 1).padStart(2, '0')} / {recipe.aspectRatio}</span><b style={{ fontSize:11 }}>{recipe.label}</b><small>{recipe.direction}</small></button>)}</div><div style={{ marginTop:11, color:'rgba(240,240,240,.55)', fontSize:10.5, lineHeight:1.45 }}>Selecting a lane adjusts this app’s internal creative brief only. Generate hooks or creatives only when you choose the corresponding button, and review every output before any future publishing step.</div></section>}
       {activeTab !== 'library' && <section><div className="abundance-mini-label" style={{ marginTop:18 }}>FORMAT SHELF / START FROM THE AD YOU WANT TO MAKE</div><div className="runbook-shelf">{AD_RUNBOOKS.map(runbook => <button key={runbook.id} onClick={() => selectRunbook(runbook)} className={`runbook-card ${runbookId === runbook.id ? 'active':''}`}><span className="runbook-card__type">{runbook.type}</span><b>{runbook.label}</b><small>{runbook.description}</small></button>)}</div></section>}
 
