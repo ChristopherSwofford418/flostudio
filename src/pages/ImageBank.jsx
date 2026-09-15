@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Layout from '../components/Layout.jsx'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
-import { belongsToProduct, createMediaAsset, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
+import { belongsToProduct, createMediaAsset, getCurrentMediaUser, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
+import { createCreativeExperimentMatrix, estimateMatrixCells, listCreativeExperimentMatrices, matrixReadiness } from '../lib/creativeExperimentMatrix'
 import { buildVideoSourceOptions, resolvedVideoReference } from '../lib/videoReferences'
 import UGCCastingPanel from '../components/UGCCastingPanel.jsx'
 import { castingProfile, voiceProfile } from '../lib/ugcCasting'
@@ -177,6 +178,9 @@ export default function ImageBank() {
   const [handoffState, setHandoffState] = useState({ status:'idle', message:'' })
   const [postAssistant, setPostAssistant] = useState({ status:'idle', suggestions:null, error:'' })
   const [hookBank, setHookBank] = useState({ status:'idle', hooks:[], guardrailNote:'', error:'', generatedAt:null })
+  const [selectedExperimentHooks, setSelectedExperimentHooks] = useState([])
+  const [experimentMatrices, setExperimentMatrices] = useState([])
+  const [experimentState, setExperimentState] = useState({ loading:false, saving:false, error:'', message:'' })
   const [postDraft, setPostDraft] = useState(null)
   const assetLoadVersion = useRef(0)
   const hookBankRef = useRef(null)
@@ -215,6 +219,7 @@ export default function ImageBank() {
   ], [activeApp, referenceImage, hook, proof, storyboard])
   const readinessScore = creativeReadiness.filter(item => item.ready).length
   const batchHasProductTruth = Boolean(activeApp && (String(activeApp.description || '').trim() || referenceImage))
+  const matrixCellCount = useMemo(() => estimateMatrixCells({ hooks:selectedExperimentHooks, actorIds:[actorId], voiceIds:[voiceId] }), [selectedExperimentHooks, actorId, voiceId])
   const appWorkflowSteps = useMemo(() => [
     { id:'truth', label:'Product truth', detail:activeApp ? `${activeApp.name} is the active app context.` : 'Choose a portfolio app first.', ready:Boolean(activeApp), action:null },
     { id:'playbook', label:'Choose a content lane', detail:selectedPlaybookLaneId ? 'A lane is shaping the current brief.' : 'Pick an original product-led content direction.', ready:Boolean(selectedPlaybookLaneId), action:'playbook' },
@@ -309,6 +314,64 @@ export default function ImageBank() {
     if (requestVersion === assetLoadVersion.current) setLoadingAssets(false)
   }
 
+  const loadExperimentMatrices = async (productId = activeApp?.id) => {
+    if (!workspaceId || !productId) { setExperimentMatrices([]); return }
+    setExperimentState(current => ({ ...current, loading:true, error:'' }))
+    try {
+      const user = await getCurrentMediaUser()
+      const matrices = await listCreativeExperimentMatrices({ workspaceId, userId:user.id, productId })
+      setExperimentMatrices(matrices)
+    } catch (matrixError) {
+      setExperimentState(current => ({ ...current, error:matrixError.message || 'This app’s experiment plans could not be loaded.' }))
+    } finally {
+      setExperimentState(current => ({ ...current, loading:false }))
+    }
+  }
+
+  const toggleExperimentHook = hookText => {
+    const value = String(hookText || '').trim()
+    if (!value) return
+    setExperimentState(current => ({ ...current, error:'', message:'' }))
+    setSelectedExperimentHooks(current => {
+      if (current.includes(value)) return current.filter(item => item !== value)
+      if (current.length >= 3) {
+        setExperimentState(state => ({ ...state, error:'Choose up to three hooks for one controlled matrix. Create another matrix to test more.' }))
+        return current
+      }
+      return [...current, value]
+    })
+  }
+
+  const createExperimentPlan = async () => {
+    if (!activeApp?.id || !workspaceId) { setExperimentState(current => ({ ...current, error:'Select a signed-in workspace and portfolio app before planning a test.' })); return }
+    if (!selectedExperimentHooks.length) { setExperimentState(current => ({ ...current, error:'Choose one to three app-specific hooks before planning a controlled test.' })); return }
+    setExperimentState(current => ({ ...current, saving:true, error:'', message:'' }))
+    try {
+      const user = await getCurrentMediaUser()
+      const result = await createCreativeExperimentMatrix({
+        workspaceId,
+        userId:user.id,
+        productId:activeApp.id,
+        campaignId:null,
+        title:`${activeApp.name} · ${selectedObjective.label} hook test`,
+        objective:selectedObjective.label,
+        primaryMetric:'Qualified engagement',
+        hypothesis:`For ${activeApp.name}, compare the selected product-grounded hook and casting combinations before investing in production or delivery.`,
+        hooks:selectedExperimentHooks,
+        actorIds:[actorId],
+        voiceIds:[voiceId],
+        format:aspectRatio,
+        placement:'organic_social',
+      })
+      const hydrated = { ...result.matrix, creative_experiment_cells:result.cells || [], marketing_experiments:result.experiment || null }
+      setExperimentMatrices(current => [hydrated, ...current])
+      setExperimentState({ loading:false, saving:false, error:'', message:`Planned ${result.cells?.length || matrixCellCount} app-only test variant${(result.cells?.length || matrixCellCount) === 1 ? '' : 's'}. Nothing was rendered, scheduled, or published.` })
+      setSelectedExperimentHooks([])
+    } catch (matrixError) {
+      setExperimentState(current => ({ ...current, saving:false, error:matrixError.message || 'FloStudio could not create this experiment plan.' }))
+    }
+  }
+
   const providerHeaders = async () => {
     const { data:{ session } } = await supabase.auth.getSession()
     if (!session?.access_token) throw new Error('Sign in again before using the connected workspace provider key.')
@@ -386,6 +449,9 @@ export default function ImageBank() {
     setBatchState({ status:'idle', completed:0, failed:0, assets:[], message:'' })
     setHandoffState({ status:'idle', message:'' })
     setPostAssistant({ status:'idle', suggestions:null, error:'' })
+    setSelectedExperimentHooks([])
+    setExperimentMatrices([])
+    setExperimentState({ loading:false, saving:false, error:'', message:'' })
     try {
       const savedHooks = JSON.parse(localStorage.getItem(`flostudio_hook_bank_${activeApp?.id}`) || 'null')
       setHookBank(savedHooks?.hooks?.length ? { status:'ready', hooks:savedHooks.hooks, guardrailNote:savedHooks.guardrailNote || '', error:'', generatedAt:savedHooks.generatedAt || null } : { status:'idle', hooks:[], guardrailNote:'', error:'', generatedAt:null })
@@ -396,6 +462,7 @@ export default function ImageBank() {
     loadAssets(activeApp?.id)
   }, [activeApp?.id])
   useEffect(() => { loadProviderConnection() }, [workspaceId])
+  useEffect(() => { loadExperimentMatrices(activeApp?.id) }, [workspaceId, activeApp?.id])
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('flostudio_active_video_render') || 'null')
@@ -882,8 +949,9 @@ export default function ImageBank() {
             </div>
             {!batchHasProductTruth && <div style={{ marginTop:10, color:'rgba(240,240,240,.72)', fontSize:10.5, lineHeight:1.45 }}>Add a factual product description or pin a real product image to enable source-grounded hooks for this app.</div>}
             {hookBank.error && <div style={{ marginTop:10, color:'#cccccc', fontSize:11, lineHeight:1.45 }}>{hookBank.error}</div>}
-            {hookBank.hooks.length > 0 && <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:8, marginTop:12 }}>{hookBank.hooks.map((item, index) => <article key={item.id || index} style={{ padding:10, border:'1px solid rgba(240,240,240,.16)', background:'rgba(16,16,16,.28)', borderRadius:3 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}><span style={{ color:'var(--signal)', font:'500 8px DM Mono,monospace', letterSpacing:'.08em' }}>{String(index + 1).padStart(2, '0')} / {item.angle || 'HOOK'}</span><button type="button" onClick={() => applyHookToBrief(item.text)} className="studio-chip" style={{ padding:'5px 7px', fontSize:9 }}>Use hook</button></div><p style={{ color:'#ffffff', fontSize:12, fontWeight:700, lineHeight:1.38, marginTop:7 }}>{item.text}</p>{item.rationale && <small style={{ display:'block', color:'rgba(240,240,240,.54)', fontSize:9.5, lineHeight:1.35, marginTop:6 }}>{item.rationale}</small>}</article>)}</div>}
+            {hookBank.hooks.length > 0 && <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:8, marginTop:12 }}>{hookBank.hooks.map((item, index) => <article key={item.id || index} style={{ padding:10, border:'1px solid rgba(240,240,240,.16)', background:'rgba(16,16,16,.28)', borderRadius:3 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}><span style={{ color:'var(--signal)', font:'500 8px DM Mono,monospace', letterSpacing:'.08em' }}>{String(index + 1).padStart(2, '0')} / {item.angle || 'HOOK'}</span><div style={{ display:'flex', gap:5 }}><button type="button" onClick={() => applyHookToBrief(item.text)} className="studio-chip" style={{ padding:'5px 7px', fontSize:9 }}>Use hook</button><button type="button" onClick={() => toggleExperimentHook(item.text)} className="studio-chip" style={{ padding:'5px 7px', fontSize:9, background:selectedExperimentHooks.includes(item.text) ? 'rgba(121,229,204,.16)' : undefined, borderColor:selectedExperimentHooks.includes(item.text) ? 'rgba(121,229,204,.56)' : undefined, color:selectedExperimentHooks.includes(item.text) ? '#79e5cc' : undefined }}>{selectedExperimentHooks.includes(item.text) ? 'In test' : 'Test'}</button></div></div><p style={{ color:'#ffffff', fontSize:12, fontWeight:700, lineHeight:1.38, marginTop:7 }}>{item.text}</p>{item.rationale && <small style={{ display:'block', color:'rgba(240,240,240,.54)', fontSize:9.5, lineHeight:1.35, marginTop:6 }}>{item.rationale}</small>}</article>)}</div>}
             {hookBank.guardrailNote && <div style={{ marginTop:10, color:'rgba(240,240,240,.55)', fontSize:10, lineHeight:1.4 }}>{hookBank.guardrailNote}</div>}
+            {hookBank.hooks.length > 0 && <section style={{ marginTop:13, paddingTop:13, borderTop:'1px solid rgba(240,240,240,.15)' }} aria-live="polite"><div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, flexWrap:'wrap' }}><div><div className="abundance-mini-label">EXPERIMENT PLANNER / CONTROLLED VARIANTS</div><h4 style={{ color:'#ffffff', fontSize:14, letterSpacing:'-.035em', marginTop:4 }}>Turn up to three hooks into a test plan.</h4><p style={{ color:'rgba(240,240,240,.63)', fontSize:10.5, lineHeight:1.45, marginTop:4, maxWidth:520 }}>Compare selected hooks with the currently selected actor, voice, and placement. This records an internal app-only plan—not a render request, campaign schedule, social post, or performance claim.</p></div><span className="abundance-pill">{matrixCellCount} planned variant{matrixCellCount === 1 ? '' : 's'}</span></div>{experimentState.error && <div style={{ color:'#cccccc', fontSize:10.5, lineHeight:1.45, marginTop:9 }}>{experimentState.error}</div>}{experimentState.message && <div style={{ color:'var(--signal)', fontSize:10.5, lineHeight:1.45, marginTop:9 }}>{experimentState.message}</div>}<button type="button" onClick={createExperimentPlan} disabled={experimentState.saving || !selectedExperimentHooks.length || !activeApp?.id || !workspaceId} className="studio-button" style={{ marginTop:11, padding:'9px 11px' }}>{experimentState.saving ? 'Planning controlled test…' : `Plan ${matrixCellCount || 0} hook variant${matrixCellCount === 1 ? '' : 's'} · internal only`}</button>{experimentMatrices.length > 0 && <div style={{ display:'grid', gap:6, marginTop:11 }}>{experimentMatrices.slice(0, 3).map(matrix => { const readiness = matrixReadiness(matrix); const planned = readiness.planned || matrix.inputs?.plannedCellCount || 0; return <div key={matrix.id} style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'center', padding:'8px 9px', border:'1px solid rgba(240,240,240,.12)', background:'rgba(240,240,240,.035)' }}><div><b style={{ color:'#ffffff', display:'block', fontSize:10.5 }}>{matrix.title}</b><span style={{ color:'rgba(240,240,240,.52)', fontSize:9.5 }}>{planned} planned · {readiness.ready} ready · {readiness.approved} approved</span></div><span style={{ color:'rgba(240,240,240,.62)', font:'500 8px DM Mono,monospace', letterSpacing:'.08em' }}>{matrix.status || 'planned'}</span></div>})}</div>}</section>}
           </section>
           <div className="ad-blueprint"><div className="ad-blueprint__label">AD BLUEPRINT</div><input value={hook} onChange={event => setHook(event.target.value)} placeholder="Opening hook / what stops the scroll?" /><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Proof / what makes the claim believable?" /></div>
           <div style={{ marginTop:18 }}><div className="abundance-mini-label">CREATIVE RECIPE / THE BUSINESS JOB AND VISUAL EXECUTION</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginTop:10 }}><div><div style={{ color:'#ffffff', fontSize:11, fontWeight:800, marginBottom:7 }}>CAMPAIGN OBJECTIVE</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>{CAMPAIGN_OBJECTIVES.map(objective => <button key={objective.id} onClick={() => setObjectiveId(objective.id)} className={`format-card ${objectiveId === objective.id ? 'active':''}`} style={{ padding:10 }}><b style={{ display:'block', fontSize:11 }}>{objective.label}</b><small>{objective.detail}</small></button>)}</div></div><div><div style={{ color:'#ffffff', fontSize:11, fontWeight:800, marginBottom:7 }}>VISUAL LENS</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>{VISUAL_LENSES.map(lens => <button key={lens.id} onClick={() => setLensId(lens.id)} className={`format-card ${lensId === lens.id ? 'active':''}`} style={{ padding:10 }}><b style={{ display:'block', fontSize:11 }}>{lens.label}</b><small>{lens.detail}</small></button>)}</div></div></div></div>
