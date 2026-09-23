@@ -9,7 +9,7 @@ import WorkspaceProviderKey from './WorkspaceProviderKey.jsx'
 const navGroups = [
   { label: 'PORTFOLIO', items: [['portfolio', 'My Portfolio', '00']] },
   { label: 'CREATE', items: [['agent', 'Campaign Engine', '01'], ['images', 'Creative Lab', '02'], ['ai-calendar', 'Campaign Map', '03']] },
-  { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['experiments', 'Experiments', '05'], ['dashboard', 'Performance', '06'], ['accounts', 'Channels', '07'], ['insights', 'App Insights', '08'], ['seo', 'SEO & ASO', '09']] },
+  { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['experiments', 'Experiments', '05'], ['easy-growth', 'Easy Growth', '06'], ['dashboard', 'Performance', '07'], ['accounts', 'Channels', '08'], ['insights', 'App Insights', '09'], ['seo', 'SEO & ASO', '10']] },
 ]
 
 const pageMeta = {
@@ -22,6 +22,7 @@ const pageMeta = {
   '/dashboard': ['Performance', 'Your campaign command center.'],
   '/insights': ['App Insights', 'Verified App Store Connect data for the selected portfolio app.'],
   '/seo': ['SEO & ASO', 'Grounded website and App Store discovery planning for the selected portfolio app.'],
+  '/easy-growth': ['Easy Growth Center', 'Choose a product and open a real campaign, experiment, or learning workflow.'],
   '/pricing': ['Plans & Tokens', 'Scale your creative output with transparent usage.'],
 }
 

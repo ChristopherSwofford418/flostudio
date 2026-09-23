@@ -18,6 +18,7 @@ import Portfolio from './pages/Portfolio.jsx'
 import Experiments from './pages/Experiments.jsx'
 import AppInsights from './pages/AppInsights.jsx'
 import SEO from './pages/SEO.jsx'
+import EasyCommand from './pages/EasyCommand.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="/dashboard" element={session ? <Dashboard /> : <Navigate to="/auth" />} />
         <Route path="/insights" element={session ? <AppInsights /> : <Navigate to="/auth" />} />
         <Route path="/seo" element={session ? <SEO /> : <Navigate to="/auth" />} />
+        <Route path="/easy-growth" element={session ? <EasyCommand /> : <Navigate to="/auth" />} />
         <Route path="*" element={<Navigate to={session ? '/portfolio' : '/auth'} replace />} />
       </Routes>
     </WorkspaceProvider>

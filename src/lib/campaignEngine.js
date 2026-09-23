@@ -2,6 +2,7 @@ import { supabase } from '../supabase'
 import { createMediaAsset } from './mediaAssets'
 import { recordMemoryEvent } from './creativeMemory'
 import { ensurePersonalWorkspace } from './portfolio'
+import { ensureCampaignRunbook } from './campaignRunbook'
 
 const platformTimes = { instagram:'09:00', linkedin:'08:00', facebook:'13:00', tiktok:'19:00', twitter:'12:00' }
 
@@ -17,9 +18,11 @@ export async function loadCampaignWorkspace(userId) {
   return { brands:brands.data || [], products:products.data || [], campaigns:campaigns.data || [], media:media.data || [] }
 }
 
-export async function saveBrandAndProduct({ userId, brandName, websiteUrl, productName, description, offerText, audience, brandDna, sourceFacts }) {
+export async function saveBrandAndProduct({ userId, brandId, productId, brandName, websiteUrl, productName, description, offerText, audience, brandDna, sourceFacts }) {
   const workspaceId = await ensurePersonalWorkspace()
-  const existingBrand = await supabase.from('brands').select('*').eq('user_id', userId).eq('workspace_id', workspaceId).eq('name', brandName).maybeSingle()
+  const existingBrand = brandId
+    ? await supabase.from('brands').select('*').eq('id', brandId).eq('user_id', userId).eq('workspace_id', workspaceId).maybeSingle()
+    : await supabase.from('brands').select('*').eq('user_id', userId).eq('workspace_id', workspaceId).eq('name', brandName).maybeSingle()
   let brand
   if (existingBrand.data) {
     const update = await supabase.from('brands').update({ workspace_id:workspaceId, website_url:websiteUrl || null, brand_dna:brandDna, updated_at:new Date().toISOString() }).eq('id', existingBrand.data.id).select().single()
@@ -31,7 +34,9 @@ export async function saveBrandAndProduct({ userId, brandName, websiteUrl, produ
     brand = insert.data
   }
 
-  const existingProduct = await supabase.from('products').select('*').eq('user_id', userId).eq('workspace_id', workspaceId).eq('brand_id', brand.id).eq('name', productName).maybeSingle()
+  const existingProduct = productId
+    ? await supabase.from('products').select('*').eq('id', productId).eq('user_id', userId).eq('workspace_id', workspaceId).maybeSingle()
+    : await supabase.from('products').select('*').eq('user_id', userId).eq('workspace_id', workspaceId).eq('brand_id', brand.id).eq('name', productName).maybeSingle()
   const productPayload = { workspace_id:workspaceId, brand_id:brand.id, product_url:websiteUrl || null, description:description || null, offer_text:offerText || null, audience:audience || null, source_facts:sourceFacts || {}, updated_at:new Date().toISOString() }
   let product
   if (existingProduct.data) {
@@ -55,6 +60,8 @@ export async function createCampaign({ userId, brand, product, name, objective, 
   const response = await supabase.from('campaigns').insert([{ user_id:userId, workspace_id:workspaceId, brand_id:brand.id, product_id:product.id, name, objective, audience, offer_text:offerText, platforms, brief, status:'concepting' }]).select().single()
   if (response.error) throw response.error
   await recordMemoryEvent({ userId, brandId:brand.id, productId:product.id, campaignId:response.data.id, eventType:'campaign_created', attributes:{ objective, platforms, offerText } })
+  const runbook = await ensureCampaignRunbook({ workspaceId, userId, productId:product.id, campaignId:response.data.id })
+  await recordMemoryEvent({ userId, brandId:brand.id, productId:product.id, campaignId:response.data.id, eventType:'runbook_created', attributes:{ runbookId:runbook.id }, note:'A Campaign Runbook was created for this durable campaign.' })
   return response.data
 }
 
@@ -76,6 +83,7 @@ export async function updateCampaignConcept({ userId, conceptId, updates }) {
     ...(updates.cta !== undefined ? { cta:updates.cta } : {}),
     ...(updates.visual_recipe !== undefined ? { visual_recipe:updates.visual_recipe } : {}),
     ...(updates.script !== undefined ? { script:updates.script } : {}),
+    ...(updates.status !== undefined && ['proposed', 'archived'].includes(updates.status) ? { status:updates.status } : {}),
     updated_at:new Date().toISOString(),
   }
   const response = await supabase.from('campaign_concepts').update(safeUpdates).eq('id', conceptId).eq('user_id', userId).select().single()
@@ -84,27 +92,48 @@ export async function updateCampaignConcept({ userId, conceptId, updates }) {
   return response.data
 }
 
-export async function selectCampaignConcept(campaignId, conceptId) {
-  const [campaignUpdate, conceptUpdate] = await Promise.all([
-    supabase.from('campaigns').update({ selected_concept_id:conceptId, status:'ready_for_review', updated_at:new Date().toISOString() }).eq('id', campaignId).select().single(),
-    supabase.from('campaign_concepts').update({ status:'selected', updated_at:new Date().toISOString() }).eq('id', conceptId).select().single(),
+export async function selectCampaignConcept(campaignId, conceptId, userId) {
+  const now = new Date().toISOString()
+  const campaignScope = supabase.from('campaigns').select('*').eq('id', campaignId)
+  if (userId) campaignScope.eq('user_id', userId)
+  const campaignRecord = await campaignScope.maybeSingle()
+  if (campaignRecord.error) throw campaignRecord.error
+  if (!campaignRecord.data) throw new Error('This campaign is no longer available in the current workspace.')
+  const conceptScope = supabase.from('campaign_concepts').select('*').eq('id', conceptId).eq('campaign_id', campaignId)
+  if (userId) conceptScope.eq('user_id', userId)
+  const conceptRecord = await conceptScope.maybeSingle()
+  if (conceptRecord.error) throw conceptRecord.error
+  if (!conceptRecord.data) throw new Error('Choose a creative thesis that belongs to this campaign.')
+  const demotion = supabase.from('campaign_concepts').update({ status:'proposed', updated_at:now }).eq('campaign_id', campaignId).neq('id', conceptId)
+  if (userId) demotion.eq('user_id', userId)
+  const [demoted, campaignUpdate, conceptUpdate] = await Promise.all([
+    demotion,
+    supabase.from('campaigns').update({ selected_concept_id:conceptId, status:'ready_for_review', updated_at:now }).eq('id', campaignId).eq('user_id', campaignRecord.data.user_id).select().single(),
+    supabase.from('campaign_concepts').update({ status:'selected', updated_at:now }).eq('id', conceptId).eq('campaign_id', campaignId).eq('user_id', conceptRecord.data.user_id).select().single(),
   ])
+  if (demoted.error) throw demoted.error
   if (campaignUpdate.error) throw campaignUpdate.error
   if (conceptUpdate.error) throw conceptUpdate.error
   return { campaign:campaignUpdate.data, concept:conceptUpdate.data }
 }
 
 export async function createCampaignPosts({ userId, campaignId, concept, platforms }) {
-  const workspaceId = concept.workspace_id || await ensurePersonalWorkspace()
+  const campaignResult = await supabase.from('campaigns').select('workspace_id').eq('id', campaignId).eq('user_id', userId).maybeSingle()
+  if (campaignResult.error) throw campaignResult.error
+  const workspaceId = campaignResult.data?.workspace_id || await ensurePersonalWorkspace()
+  const existing = await supabase.from('campaign_posts').select('*').eq('campaign_id', campaignId).eq('concept_id', concept.id).eq('user_id', userId)
+  if (existing.error) throw existing.error
+  const existingByPlatform = new Map((existing.data || []).map(post => [post.platform, post]))
   const now = new Date()
-  const rows = platforms.map((platform, index) => {
+  const rows = platforms.filter(platform => !existingByPlatform.has(platform)).map((platform, index) => {
     const scheduled = new Date(now)
     scheduled.setDate(scheduled.getDate() + index + 1)
     const [hour, minute] = (platformTimes[platform] || '10:00').split(':').map(Number)
     scheduled.setHours(hour, minute, 0, 0)
     const content = `${concept.hook}\n\n${concept.proof}\n\n${concept.cta}`
-    return { user_id:userId, workspace_id:workspaceId, campaign_id:campaignId, platform, content, status:'pending', scheduled_at:scheduled.toISOString() }
+    return { user_id:userId, workspace_id:workspaceId, campaign_id:campaignId, concept_id:concept.id, platform, content, status:'pending', scheduled_at:scheduled.toISOString() }
   })
+  if (!rows.length) return (existing.data || []).filter(post => platforms.includes(post.platform))
   const response = await supabase.from('campaign_posts').insert(rows).select()
   if (response.error) throw response.error
   const posts = response.data || []
@@ -132,7 +161,7 @@ export async function generateCampaignVariant({ userId, campaign, concept, post,
     const { error: uploadError } = await supabase.storage.from('marketing-assets').upload(storagePath, blob, { contentType:blob.type || 'image/png', upsert:true })
     if (uploadError) throw uploadError
     const { data: publicData } = supabase.storage.from('marketing-assets').getPublicUrl(storagePath)
-    const asset = await createMediaAsset({ user_id:userId, workspace_id:workspaceId, kind:'image', source:'ai_image', provider:'openai_gpt_image', render_status:'completed', prompt, asset_url:publicData.publicUrl, storage_path:storagePath, campaign_post_id:post.id, campaign_id:campaign.id, concept_id:concept.id, render_job_id:job.id, metadata:{ variation, platform:post.platform, origin:'campaign-engine', ratio:'4:5' }, completed_at:new Date().toISOString() })
+    const asset = await createMediaAsset({ user_id:userId, workspace_id:workspaceId, product_id:campaign.product_id || null, kind:'image', source:'ai_image', provider:'openai_gpt_image', render_status:'completed', prompt, asset_url:publicData.publicUrl, storage_path:storagePath, campaign_post_id:post.id, campaign_id:campaign.id, concept_id:concept.id, render_job_id:job.id, metadata:{ variation, platform:post.platform, origin:'campaign-engine', ratio:'4:5' }, completed_at:new Date().toISOString() })
     await supabase.from('campaign_media').insert([{ user_id:userId, workspace_id:workspaceId, campaign_id:campaign.id, concept_id:concept.id, media_asset_id:asset.id, role:'variant' }])
     await supabase.from('render_jobs').update({ status:'completed', settled_tokens:10, media_asset_id:asset.id, completed_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', job.id)
     await recordMemoryEvent({ userId, campaignId:campaign.id, conceptId:concept.id, mediaAssetId:asset.id, eventType:'asset_rendered', attributes:{ provider:'openai_gpt_image', platform:post.platform, variation, visualDirection:concept.visual_recipe?.direction || '' } })

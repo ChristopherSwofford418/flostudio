@@ -7,6 +7,8 @@ import { refreshPortfolioAppIntelligence } from '../lib/appStoreIntelligence'
 import { runMonthlyAutopilotForApp } from '../lib/monthlyAutopilot'
 import { supabase } from '../supabase'
 import AppStoreConnectPanel from '../components/AppStoreConnectPanel'
+import PortfolioLearningReview from '../components/PortfolioLearningReview'
+import { loadPortfolioMomentumOverview } from '../lib/campaignRunbook'
 
 const defaultAutopilot = { enabled:false, cadence:20, platforms:['instagram'], creativeMix:{ image:70, video:30 }, approvalMode:'review' }
 const platforms = ['instagram','facebook','linkedin','tiktok','twitter']
@@ -61,8 +63,21 @@ export default function Portfolio() {
   const [runningAutopilot, setRunningAutopilot] = useState(false)
   const [autopilotReport, setAutopilotReport] = useState(null)
   const [intelligenceRefresh, setIntelligenceRefresh] = useState({ running:false, progress:'', report:null })
+  const [momentumOverview, setMomentumOverview] = useState([])
 
   useEffect(() => { setLoading(false) }, [apps])
+
+  const refreshMomentumOverview = async () => {
+    if (!workspaceId || !apps.length) { setMomentumOverview([]); return }
+    try {
+      const { data:{ user } } = await supabase.auth.getUser()
+      if (!user) return
+      setMomentumOverview(await loadPortfolioMomentumOverview({ workspaceId, userId:user.id, apps }))
+    } catch {
+      setMomentumOverview([])
+    }
+  }
+  useEffect(() => { refreshMomentumOverview() }, [workspaceId, apps])
 
   const activeCount = useMemo(() => apps.filter(app => app.autopilot?.enabled).length, [apps])
   const portfolioLoading = workspaceLoading || loading
@@ -173,6 +188,8 @@ export default function Portfolio() {
       {autopilotReport && <section className="studio-panel flo-dark-surface" style={{ marginTop:16, padding:20, borderColor:'var(--signal)', background:'rgba(223,223,223,.06)' }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}><div className="studio-kicker" style={{ color:'var(--signal)' }}>PORTFOLIO AUTOPILOT EXECUTION REPORT</div><button onClick={() => setAutopilotReport(null)} className="studio-chip">Dismiss</button></div><h3 style={{ color:'#ffffff', fontSize:18, marginTop:6 }}>Successfully synchronized {autopilotReport.totalPosts} posts across {autopilotReport.totalApps} portfolio products.</h3><div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:10, marginTop:12 }}>{autopilotReport.results.map(r => <div key={r.appId} style={{ padding:10, background:'rgba(16,16,16,.4)', border:'1px solid rgba(240,240,240,.12)', borderRadius:3, color:'#ffffff', fontSize:12 }}><b>{r.name}</b>: {r.success ? `${r.postsCount} posts queued for review` : `Error: ${r.error}`}</div>)}</div></section>}
 
       <section className="portfolio-summary-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginTop:16 }}><div className="studio-panel portfolio-summary-card" style={{ padding:18 }}><div className="studio-kicker">PORTFOLIO SIZE</div><div style={{ color:'#ffffff', fontSize:30, fontWeight:850, marginTop:7 }}>{apps.length}</div><div style={{ color:'rgba(240,240,240,.52)', fontSize:11, marginTop:4 }}>user-owned products</div></div><div className="studio-panel portfolio-summary-card" style={{ padding:18 }}><div className="studio-kicker">MONTHLY AUTOPILOT</div><div style={{ color:'var(--signal)', fontSize:30, fontWeight:850, marginTop:7 }}>{activeCount}</div><div style={{ color:'rgba(240,240,240,.52)', fontSize:11, marginTop:4 }}>apps configured to generate</div></div><div className="studio-panel portfolio-summary-card" style={{ padding:18 }}><div className="studio-kicker" style={{ color:'var(--vermilion)' }}>TENANT MODE</div><div style={{ color:'#ffffff', fontSize:18, fontWeight:850, marginTop:13 }}>Private workspace</div><div style={{ color:'rgba(240,240,240,.52)', fontSize:11, marginTop:4 }}>your data stays yours</div></div></section>
+
+      {momentumOverview.length > 0 && <PortfolioLearningReview workspaceId={workspaceId} userId={apps[0]?.user_id} items={momentumOverview} onChanged={refreshMomentumOverview} onOpenCampaign={(item) => { setActiveApp(item.product); navigate(item.campaign ? `/agent?campaign=${encodeURIComponent(item.campaign.id)}` : '/agent') }} />}
 
       <section className="studio-panel portfolio-ad-room" style={{ marginTop:16, padding:'18px 20px', display:'grid', gridTemplateColumns:'minmax(0,1fr) auto', gap:18, alignItems:'center', borderColor:'rgba(223,223,223,.34)', background:'linear-gradient(100deg,rgba(223,223,223,.12),rgba(132,132,132,.08))' }}><div><div className="studio-kicker" style={{ color:'var(--signal)' }}>NEW / PORTFOLIO AD ROOM</div><h2 style={{ color:'#ffffff', fontSize:21, letterSpacing:'-.055em', marginTop:5 }}>Create a real campaign visual before your portfolio is full.</h2><p style={{ color:'rgba(240,240,240,.68)', fontSize:12, lineHeight:1.55, marginTop:6, maxWidth:720 }}>The Creative Lab now starts from a proven ad format, campaign objective, and visual lens. Upload a product reference or add an app to make every image product-aware, then send the result to Review Queue.</p></div><button onClick={() => navigate('/images')} className="studio-button" style={{ whiteSpace:'nowrap' }}>Build an ad →</button></section>
 

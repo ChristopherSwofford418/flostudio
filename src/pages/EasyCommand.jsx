@@ -1,176 +1,66 @@
-import React, { useState } from 'react';
-import Layout from '../components/Layout';
-import { useWorkspace } from '../context/WorkspaceContext';
-import { recordPortfolioRun } from '../lib/portfolioOperations';
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import Layout from '../components/Layout'
+import { useWorkspace } from '../context/WorkspaceContext'
+
+const goals = [
+  {
+    id:'start_campaign',
+    title:'Start a campaign from product facts',
+    description:'Open the Campaign Engine with this app as the active product. Confirm the product truth and choose an editable thesis before any creative work.',
+    destination:'Campaign Engine',
+    route:'/agent',
+  },
+  {
+    id:'controlled_test',
+    title:'Prepare a controlled creative test',
+    description:'Open Experiments for this app. Add a real hypothesis, control, challenger, and a source for later observations.',
+    destination:'Experiments',
+    route:'/experiments',
+  },
+  {
+    id:'review_learning',
+    title:'Review verified learning',
+    description:'Open the private Portfolio Learning Review. It shows only linked Campaign Runbook evidence and source-aware next actions.',
+    destination:'Portfolio Learning Review',
+    route:'/portfolio',
+  },
+]
 
 export default function EasyCommand() {
-  const { apps, activeApp, setActiveApp } = useWorkspace();
-  const [selectedAppId, setSelectedAppId] = useState(activeApp?.id || apps[0]?.id || '');
-  const [step, setStep] = useState(1);
-  const [goal, setGoal] = useState('monthly_marketing');
-  const [running, setRunning] = useState(false);
-  const [resultMessage, setResultMessage] = useState('');
+  const navigate = useNavigate()
+  const { apps, activeApp, setActiveApp } = useWorkspace()
+  const [selectedAppId, setSelectedAppId] = useState(activeApp?.id || '')
+  const [step, setStep] = useState(1)
+  const [goalId, setGoalId] = useState('start_campaign')
 
-  const currentApp = apps.find(a => a.id === selectedAppId) || apps[0];
+  useEffect(() => {
+    if (!selectedAppId && (activeApp?.id || apps[0]?.id)) setSelectedAppId(activeApp?.id || apps[0].id)
+  }, [activeApp?.id, apps, selectedAppId])
 
-  const handleRunGoal = async () => {
-    if (!currentApp) return;
-    setRunning(true);
-    setResultMessage('');
-    try {
-      await new Promise(r => setTimeout(r, 1200));
-      const goalLabels = {
-        monthly_marketing: 'Complete Monthly Marketing Schedule',
-        ads_images: 'Store-Grounded Ad & Image Pack',
-        seo_boost: 'Search Engine & App Store Boost'
-      };
-      const label = goalLabels[goal] || 'Marketing Action';
+  const currentApp = apps.find(app => app.id === selectedAppId) || null
+  const goal = useMemo(() => goals.find(item => item.id === goalId) || goals[0], [goalId])
+  const finishRoute = () => {
+    if (!currentApp) return
+    setActiveApp(currentApp)
+    const query = `?app=${encodeURIComponent(currentApp.id)}`
+    navigate(goal.route === '/agent' ? `${goal.route}${query}` : `${goal.route}${query}`)
+  }
 
-      await recordPortfolioRun({
-        userId: 'current_user',
-        appId: currentApp.id,
-        appName: currentApp.name,
-        actionType: goal,
-        status: 'success',
-        summary: `Successfully completed ${label} for ${currentApp.name}.`
-      });
+  return <Layout title="Easy Growth Center">
+    <div className="flo-page" style={{ padding:'36px 30px 72px', maxWidth:900, margin:'0 auto' }}>
+      <section className="studio-dark" style={{ padding:'32px 34px', textAlign:'center' }}>
+        <div className="studio-kicker" style={{ color:'#d8d4ff' }}>EASY GROWTH / REAL WORKFLOWS ONLY</div>
+        <h1 className="studio-display" style={{ color:'#fff', fontSize:'clamp(34px,4.4vw,50px)', marginTop:9 }}>Choose the next <span className="studio-serif" style={{ color:'#d8d4ff' }}>meaningful action.</span></h1>
+        <p style={{ color:'rgba(242,243,255,.72)', fontSize:13, lineHeight:1.7, margin:'12px auto 0', maxWidth:650 }}>This center never reports generated, scheduled, or completed work before a durable Flo Studio record exists. It routes you into the real campaign, experiment, or learning workflow instead.</p>
+      </section>
 
-      setResultMessage(`Success! ${label} has been generated and scheduled for ${currentApp.name}. You can view the results in your Pipeline or Creative Lab.`);
-      setStep(3);
-    } catch (e) {
-      setResultMessage('Something went wrong. Please try again.');
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  return (
-    <Layout title="Easy Growth Center">
-      <div style={{ padding: '36px 40px 72px', maxWidth: 900, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <div className="studio-kicker">SIMPLE 3-STEP MARKETING ASSISTANT</div>
-          <h1 className="studio-display" style={{ fontSize: 42, color: '#ffffff', marginTop: 8 }}>Grow Your Apps Without Complexity</h1>
-          <p style={{ color: 'rgba(240,240,240,.75)', fontSize: 16, marginTop: 8, maxWidth: 620, marginLeft: 'auto', marginRight: 'auto' }}>
-            Pick your app, choose what you want to achieve today, and let Flo do the heavy lifting across your marketing and search presence.
-          </p>
-        </div>
-
-        <div style={{ background: '#191919', border: '1px solid #2c2c2c', borderRadius: 16, padding: 36, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
-          {step === 1 && (
-            <div>
-              <h3 style={{ color: '#ffffff', fontSize: 20, marginBottom: 12 }}>Step 1: Choose Your App</h3>
-              <p style={{ color: '#a0a0a0', fontSize: 14, marginBottom: 24 }}>Which app in your portfolio do you want to work on right now?</p>
-
-              {apps.length === 0 ? (
-                <div style={{ background: '#1f1f1f', padding: 24, borderRadius: 10, textAlign: 'center' }}>
-                  <p style={{ color: '#8e8e8e', marginBottom: 12 }}>No apps found in your portfolio yet.</p>
-                  <a href="/portfolio" style={{ color: '#757575', fontWeight: 600, textDecoration: 'none' }}>+ Add your first app in Portfolio</a>
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, marginBottom: 32 }}>
-                  {apps.map(app => (
-                    <div
-                      key={app.id}
-                      onClick={() => setSelectedAppId(app.id)}
-                      style={{
-                        background: selectedAppId === app.id ? '#272727' : '#1f1f1f',
-                        border: selectedAppId === app.id ? '2px solid #757575' : '1px solid #313131',
-                        borderRadius: 12,
-                        padding: 20,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <h4 style={{ color: '#ffffff', fontSize: 16, margin: 0, marginBottom: 6 }}>{app.name}</h4>
-                      <p style={{ color: '#a0a0a0', fontSize: 12, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.category || 'Mobile / Web App'}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  disabled={!currentApp}
-                  onClick={() => setStep(2)}
-                  style={{ background: '#757575', color: '#ffffff', border: 'none', padding: '12px 28px', borderRadius: 8, fontWeight: 600, fontSize: 15, cursor: 'pointer' }}
-                >
-                  Continue to Goal →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && currentApp && (
-            <div>
-              <h3 style={{ color: '#ffffff', fontSize: 20, marginBottom: 12 }}>Step 2: What would you like to do for <span style={{ color: '#757575' }}>{currentApp.name}</span>?</h3>
-              <p style={{ color: '#a0a0a0', fontSize: 14, marginBottom: 24 }}>Select your primary marketing goal for this app.</p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 32 }}>
-                {[
-                  { id: 'monthly_marketing', title: '📅 Complete Monthly Social Media Plan', desc: 'Generate 4 weeks of ready-to-publish posts, captions, and hashtag strategies.' },
-                  { id: 'ads_images', title: '🖼️ Store-Grounded Ad & Image Creator', desc: 'Create eye-catching promotional ad creatives using your app store artwork and professional AI backgrounds.' },
-                  { id: 'seo_boost', title: '🔍 App Store & Search Ranking Boost', desc: 'Generate high-traffic keyword blueprints and landing page recommendations.' }
-                ].map(item => (
-                  <div
-                    key={item.id}
-                    onClick={() => setGoal(item.id)}
-                    style={{
-                      background: goal === item.id ? '#272727' : '#1f1f1f',
-                      border: goal === item.id ? '2px solid #757575' : '1px solid #313131',
-                      borderRadius: 12,
-                      padding: 20,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <h4 style={{ color: '#ffffff', fontSize: 16, margin: 0, marginBottom: 4 }}>{item.title}</h4>
-                    <p style={{ color: '#a0a0a0', fontSize: 13, margin: 0 }}>{item.desc}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <button
-                  onClick={() => setStep(1)}
-                  style={{ background: 'transparent', color: '#a0a0a0', border: '1px solid #333333', padding: '12px 20px', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
-                >
-                  ← Back
-                </button>
-                <button
-                  disabled={running}
-                  onClick={handleRunGoal}
-                  style={{ background: '#757575', color: '#ffffff', border: 'none', padding: '12px 28px', borderRadius: 8, fontWeight: 600, fontSize: 15, cursor: 'pointer' }}
-                >
-                  {running ? 'Working magic...' : 'Run This Goal Now 🚀'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>✨</div>
-              <h3 style={{ color: '#ffffff', fontSize: 24, marginBottom: 12 }}>Mission Accomplished!</h3>
-              <p style={{ color: '#b8b8b8', fontSize: 15, lineHeight: 1.6, maxWidth: 600, margin: '0 auto 32px' }}>
-                {resultMessage}
-              </p>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
-                <button
-                  onClick={() => setStep(1)}
-                  style={{ background: '#262626', color: '#ffffff', border: '1px solid #333333', padding: '12px 24px', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
-                >
-                  Work on Another App
-                </button>
-                <a
-                  href="/pipeline"
-                  style={{ background: '#757575', color: '#ffffff', border: 'none', padding: '12px 24px', borderRadius: 8, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}
-                >
-                  View My Pipeline →
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </Layout>
-  );
+      <section className="studio-panel flo-dark-surface" style={{ marginTop:16, padding:'28px clamp(18px,4vw,34px)' }}>
+        <div style={{ display:'flex', gap:7, alignItems:'center', marginBottom:24 }}><span className="studio-chip" style={{ color:step >= 1 ? '#e4e0ff' : 'rgba(242,243,255,.45)', borderColor:'rgba(219,215,255,.22)' }}>1 · App</span><span style={{ color:'rgba(242,243,255,.32)' }}>—</span><span className="studio-chip" style={{ color:step >= 2 ? '#e4e0ff' : 'rgba(242,243,255,.45)', borderColor:'rgba(219,215,255,.22)' }}>2 · Goal</span><span style={{ color:'rgba(242,243,255,.32)' }}>—</span><span className="studio-chip" style={{ color:step >= 3 ? '#e4e0ff' : 'rgba(242,243,255,.45)', borderColor:'rgba(219,215,255,.22)' }}>3 · Route</span></div>
+        {step === 1 && <div><div className="studio-kicker" style={{ color:'#d8d4ff' }}>STEP 1 / SELECT A PORTFOLIO APP</div><h2 style={{ color:'#fff', fontSize:23, marginTop:6 }}>Which product should Flo Studio open?</h2><p style={{ color:'rgba(242,243,255,.65)', fontSize:11.5, lineHeight:1.6, marginTop:6 }}>The active app context follows you into the destination workflow. No campaign or post is created here.</p>{apps.length === 0 ? <div style={{ marginTop:18, padding:22, border:'1px dashed rgba(218,214,255,.32)', borderRadius:12, textAlign:'center' }}><p style={{ color:'rgba(242,243,255,.65)', fontSize:12 }}>No portfolio app exists yet.</p><button onClick={() => navigate('/portfolio')} className="studio-button" style={{ marginTop:10 }}>Add an app in Portfolio →</button></div> : <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))', gap:10, marginTop:18 }}>{apps.map(app => <button key={app.id} onClick={() => setSelectedAppId(app.id)} style={{ textAlign:'left', padding:15, borderRadius:11, cursor:'pointer', fontFamily:'inherit', border:`1px solid ${selectedAppId === app.id ? 'rgba(199,191,255,.65)' : 'rgba(255,255,255,.12)'}`, background:selectedAppId === app.id ? 'rgba(132,113,229,.18)' : 'rgba(255,255,255,.035)' }}><b style={{ display:'block', color:'#fff', fontSize:13 }}>{app.name}</b><span style={{ display:'block', color:'rgba(242,243,255,.55)', fontSize:9.5, marginTop:4 }}>{app.category || 'Portfolio app'}</span></button>)}</div>}<div style={{ display:'flex', justifyContent:'flex-end', marginTop:22 }}><button disabled={!currentApp} onClick={() => setStep(2)} className="studio-button">Continue to goal →</button></div></div>}
+        {step === 2 && currentApp && <div><div className="studio-kicker" style={{ color:'#d8d4ff' }}>STEP 2 / CHOOSE A REAL ROUTE</div><h2 style={{ color:'#fff', fontSize:23, marginTop:6 }}>What should happen next for {currentApp.name}?</h2><p style={{ color:'rgba(242,243,255,.65)', fontSize:11.5, lineHeight:1.6, marginTop:6 }}>Each option opens an existing workflow. It does not simulate completion, generate content, or spend tokens.</p><div style={{ display:'grid', gap:10, marginTop:18 }}>{goals.map(item => <button key={item.id} onClick={() => setGoalId(item.id)} style={{ textAlign:'left', padding:16, borderRadius:11, cursor:'pointer', fontFamily:'inherit', border:`1px solid ${goalId === item.id ? 'rgba(199,191,255,.65)' : 'rgba(255,255,255,.12)'}`, background:goalId === item.id ? 'rgba(132,113,229,.18)' : 'rgba(255,255,255,.035)' }}><b style={{ display:'block', color:'#fff', fontSize:12.5 }}>{item.title}</b><span style={{ display:'block', color:'rgba(242,243,255,.64)', fontSize:10.5, lineHeight:1.5, marginTop:5 }}>{item.description}</span></button>)}</div><div style={{ display:'flex', justifyContent:'space-between', marginTop:22 }}><button onClick={() => setStep(1)} className="studio-button studio-button--soft">← App</button><button onClick={() => setStep(3)} className="studio-button">Review route →</button></div></div>}
+        {step === 3 && currentApp && <div style={{ textAlign:'center', padding:'12px 0 4px' }}><div className="studio-kicker" style={{ color:'#d8d4ff' }}>STEP 3 / READY TO CONTINUE</div><h2 style={{ color:'#fff', fontSize:25, marginTop:8 }}>{goal.destination} is ready for {currentApp.name}.</h2><p style={{ color:'rgba(242,243,255,.68)', fontSize:12, lineHeight:1.65, maxWidth:600, margin:'10px auto 0' }}>{goal.description} Flo will only show stage progress after the destination workflow saves real campaign, review, experiment, or learning evidence.</p><div style={{ display:'flex', justifyContent:'center', gap:8, flexWrap:'wrap', marginTop:21 }}><button onClick={() => setStep(2)} className="studio-button studio-button--soft">Choose another goal</button><button onClick={finishRoute} className="studio-button">Open {goal.destination} →</button></div></div>}
+      </section>
+    </div>
+  </Layout>
 }

@@ -33,6 +33,8 @@ export async function generateVisualForPost(post) {
   if (uploadError) throw uploadError
   const { data: publicData } = supabase.storage.from('marketing-assets').getPublicUrl(storagePath)
   return createMediaAsset({
+    workspace_id:post.workspace_id || null,
+    product_id:post.campaign?.product_id || null,
     kind:'image',
     source:'ai_image',
     provider:'openai_gpt_image',
@@ -41,6 +43,8 @@ export async function generateVisualForPost(post) {
     asset_url:publicData.publicUrl,
     storage_path:storagePath,
     campaign_post_id:post.id,
+    campaign_id:post.campaign_id || null,
+    concept_id:post.concept_id || null,
     metadata:{ platform:post.platform, postPreview:(post.content || '').slice(0, 160), ratio:'4:5', origin:'pipeline' },
     completed_at:new Date().toISOString(),
   })

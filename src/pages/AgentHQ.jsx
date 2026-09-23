@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { createCampaign, createCampaignPosts, generateCampaignVariant, listCampaignMedia, loadCampaignWorkspace, saveBrandAndProduct, saveCampaignConcepts, selectCampaignConcept, updateCampaignConcept } from '../lib/campaignEngine'
 import { buildNextBestCreative, recordMemoryEvent } from '../lib/creativeMemory'
+import { ensureCampaignRunbook, loadCampaignRunbookContext } from '../lib/campaignRunbook'
+import CampaignMomentumMap from '../components/CampaignMomentumMap'
+import CreativeFamilyPanel from '../components/CreativeFamilyPanel'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWYiOiJ4eGtwdm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5Nzc3MDI1NDh9.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
 const platforms = ['instagram', 'facebook', 'linkedin', 'tiktok']
@@ -55,7 +58,8 @@ function fallbackConcepts({ brand, product, offer }) {
 
 export default function AgentHQ() {
   const navigate = useNavigate()
-  const { activeApp, tokens, useTokens } = useWorkspace()
+  const [searchParams] = useSearchParams()
+  const { activeApp, tokens, useTokens, workspaceId } = useWorkspace()
   const [stage, setStage] = useState('intake')
   const [userId, setUserId] = useState(null)
   const [workspace, setWorkspace] = useState({ brands:[], products:[], campaigns:[], media:[] })
@@ -83,6 +87,10 @@ export default function AgentHQ() {
   const [editingConcept, setEditingConcept] = useState(null)
   const [scriptDraft, setScriptDraft] = useState('')
   const [savingConcept, setSavingConcept] = useState(false)
+  const [runbookContext, setRunbookContext] = useState(null)
+  const [compareIds, setCompareIds] = useState([])
+  const [renderQuoteOpen, setRenderQuoteOpen] = useState(false)
+  const [angleNotice, setAngleNotice] = useState('')
 
   const stageIndex = stageOrder.indexOf(stage)
   const campaignName = useMemo(() => `${brandName || 'New brand'} — ${offerText || objective || 'Campaign'}`, [brandName, offerText, objective])
@@ -102,10 +110,31 @@ export default function AgentHQ() {
     })
   }, [])
 
+  useEffect(() => {
+    if (!activeApp || campaign) return
+    setBrandName(activeApp.brandName || activeApp.name || '')
+    setWebsiteUrl(activeApp.product_url || activeApp.url || '')
+    setProductName(activeApp.name || '')
+    setDescription(activeApp.description || '')
+    setOfferText(activeApp.offer_text || '')
+    setAudience(activeApp.audience || '')
+    setBrandDna(previous => ({ ...previous, ...(activeApp.brandDna || {}) }))
+    setSourceFacts(activeApp.source_facts || activeApp.sourceFacts || {})
+  }, [activeApp?.id])
+
   const refreshWorkspace = async () => { if (userId) setWorkspace(await loadCampaignWorkspace(userId)) }
   const refreshMemory = async brandId => {
     if (!userId || !brandId) return
     try { setMemoryBrief(await buildNextBestCreative({ userId, brandId })) } catch {}
+  }
+  const refreshRunbook = async (targetCampaign = campaign, targetProductId = targetCampaign?.product_id || activeApp?.id) => {
+    if (!userId || !targetCampaign?.id || !targetProductId) return null
+    const scopeWorkspaceId = targetCampaign.workspace_id || workspaceId
+    if (!scopeWorkspaceId) return null
+    await ensureCampaignRunbook({ workspaceId:scopeWorkspaceId, userId, productId:targetProductId, campaignId:targetCampaign.id })
+    const context = await loadCampaignRunbookContext({ workspaceId:scopeWorkspaceId, userId, productId:targetProductId, campaignId:targetCampaign.id })
+    setRunbookContext(context)
+    return context
   }
   const togglePlatform = platform => setSelectedPlatforms(previous => previous.includes(platform) ? previous.filter(item => item !== platform) : [...previous, platform])
   const beginEditConcept = concept => { setEditingConcept({ ...concept, visual_recipe:{ ...(concept.visual_recipe || {}) }, script:{ ...(concept.script || {}) } }); setScriptDraft(concept.script?.fifteen_second || concept.script?.['15_second'] || '') }
@@ -121,6 +150,29 @@ export default function AgentHQ() {
       cancelEditConcept()
     } catch (editError) { setError(editError.message || 'Flo could not save this creative edit.') }
     finally { setSavingConcept(false) }
+  }
+  const toggleThesisComparison = conceptId => {
+    setCompareIds(previous => previous.includes(conceptId)
+      ? previous.filter(id => id !== conceptId)
+      : [...previous.slice(-1), conceptId])
+  }
+  const saveConceptReference = async concept => {
+    if (!userId) return
+    setAngleNotice('')
+    try {
+      await updateCampaignConcept({ userId, conceptId:concept.id, updates:{ script:{ ...(concept.script || {}), reference_saved:true } } })
+      setAngleNotice(`“${concept.title}” is retained as a reference. It has not been selected or scored.`)
+    } catch (referenceError) { setAngleNotice(referenceError.message || 'Flo could not save this reference.') }
+  }
+  const dismissConcept = async concept => {
+    if (!userId) return
+    setAngleNotice('')
+    try {
+      const saved = await updateCampaignConcept({ userId, conceptId:concept.id, updates:{ status:'archived' } })
+      setConcepts(previous => previous.map(item => item.id === saved.id ? saved : item))
+      setCompareIds(previous => previous.filter(id => id !== saved.id))
+      setAngleNotice(`“${concept.title}” was set aside. It does not count as progress or failure.`)
+    } catch (dismissError) { setAngleNotice(dismissError.message || 'Flo could not set this thesis aside.') }
   }
 
   const analyzeUrl = async () => {
@@ -145,7 +197,7 @@ export default function AgentHQ() {
     if (!userId) { setError('Your workspace is still loading. Please try again in a moment.'); return }
     setBusy('create-angles'); setError('')
     try {
-      const { brand, product } = await saveBrandAndProduct({ userId, brandName:brandName.trim(), websiteUrl:websiteUrl.trim(), productName:productName.trim(), description:description.trim(), offerText:offerText.trim(), audience:audience.trim(), brandDna, sourceFacts })
+      const { brand, product } = await saveBrandAndProduct({ userId, brandId:activeApp?.brand_id || null, productId:activeApp?.id || null, brandName:brandName.trim(), websiteUrl:websiteUrl.trim(), productName:productName.trim(), description:description.trim(), offerText:offerText.trim(), audience:audience.trim(), brandDna, sourceFacts })
       const newCampaign = await createCampaign({ userId, brand, product, name:campaignName, objective, audience, offerText, platforms:selectedPlatforms, brief:{ description, sourceFacts, brandDna } })
       const generated = await callAI([
         { role:'system', content:'You are FloStudio’s creative strategy director. Return valid JSON only: an array of exactly 10 materially different campaign concepts. Each object must have title, angle, hook, proof, cta, visual_recipe with a direction field, and script with a fifteen_second field containing a concise 15-second spoken script with Hook, Proof, and CTA beats. Vary the angles across pain-to-clarity, outcome proof, lifestyle transformation, comparison, feature spotlight, objection reversal, speed, audience identity, aspiration, and activation. Be specific and do not make unsupported claims.' },
@@ -157,7 +209,7 @@ export default function AgentHQ() {
       const trustedText = `${description}\n${sourceFacts}\n${brandDna.proofPoints || ''}`
       const normalized = parsed.slice(0,10).map(concept => normalizeConceptClaims(concept, trustedText))
       const stored = await saveCampaignConcepts({ userId, campaignId:newCampaign.id, concepts:normalized })
-      setActiveBrandId(brand.id); setCampaign(newCampaign); setConcepts(stored); setStage('angles'); await refreshWorkspace(); await refreshMemory(brand.id)
+      setActiveBrandId(brand.id); setCampaign(newCampaign); setConcepts(stored); setStage('angles'); await refreshRunbook(newCampaign, product.id); await refreshWorkspace(); await refreshMemory(brand.id)
     } catch (campaignError) { setError(campaignError.message || 'Flo could not create campaign angles. Please try again.') }
     finally { setBusy('') }
   }
@@ -166,10 +218,10 @@ export default function AgentHQ() {
     if (!campaign) return
     setBusy(`choose-${concept.id}`); setError('')
     try {
-      const result = await selectCampaignConcept(campaign.id, concept.id)
+      const result = await selectCampaignConcept(campaign.id, concept.id, userId)
       const posts = await createCampaignPosts({ userId, campaignId:campaign.id, concept, platforms:selectedPlatforms.length ? selectedPlatforms : ['instagram'] })
       await recordMemoryEvent({ userId, brandId:result.campaign.brand_id, campaignId:campaign.id, conceptId:concept.id, eventType:'concept_selected', attributes:{ title:concept.title, angle:concept.angle, hook:concept.hook } })
-      setCampaign(result.campaign); setSelectedConcept(result.concept); setCampaignPosts(posts); setStage('board'); await refreshWorkspace(); await refreshMemory(result.campaign.brand_id)
+      setCampaign(result.campaign); setSelectedConcept(result.concept); setCampaignPosts(posts); setStage('board'); await refreshRunbook(result.campaign, result.campaign.product_id); await refreshWorkspace(); await refreshMemory(result.campaign.brand_id)
     } catch (chooseError) { setError(chooseError.message || 'Flo could not create your campaign board.') }
     finally { setBusy('') }
   }
@@ -199,12 +251,26 @@ export default function AgentHQ() {
       const postsResult = await supabase.from('campaign_posts').select('*').eq('campaign_id', item.id).order('created_at')
       const assets = await listCampaignMedia(item.id)
       const selected = conceptsResult.data?.find(concept => concept.id === item.selected_concept_id) || conceptsResult.data?.find(concept => concept.status === 'selected') || null
-      setActiveBrandId(item.brand_id); setCampaign(item); setConcepts(conceptsResult.data || []); setSelectedConcept(selected); setCampaignPosts(postsResult.data || []); setCampaignAssets(assets); setStage(selected ? 'board' : 'angles'); await refreshMemory(item.brand_id)
+      setActiveBrandId(item.brand_id); setCampaign(item); setConcepts(conceptsResult.data || []); setSelectedConcept(selected); setCampaignPosts(postsResult.data || []); setCampaignAssets(assets); setStage(selected ? 'board' : 'angles'); await refreshRunbook(item, item.product_id); await refreshMemory(item.brand_id)
     } catch (openError) { setError(openError.message || 'Flo could not load that campaign.') }
     finally { setBusy('') }
   }
 
-  const startOver = () => { setStage('intake'); setCampaign(null); setConcepts([]); setSelectedConcept(null); setCampaignPosts([]); setCampaignAssets([]); setRenderProgress(null); setError('') }
+  useEffect(() => {
+    const campaignId = searchParams.get('campaign')
+    const linkedCampaign = campaignId ? workspace.campaigns.find(item => item.id === campaignId) : null
+    if (linkedCampaign && campaign?.id !== linkedCampaign.id) openExistingCampaign(linkedCampaign)
+  }, [workspace.campaigns, searchParams])
+
+  const startOver = () => { setStage('intake'); setCampaign(null); setConcepts([]); setSelectedConcept(null); setCampaignPosts([]); setCampaignAssets([]); setRunbookContext(null); setRenderProgress(null); setCompareIds([]); setError('') }
+  const openMomentumAction = target => {
+    if (target === 'truth') { setStage('intake'); return }
+    if (target === 'thesis') { setStage('angles'); return }
+    if (target === 'family' || target === 'review_family') { setStage('board'); return }
+    if (target === 'review') { navigate(`/pipeline?app=${encodeURIComponent(campaign?.product_id || activeApp?.id || '')}&campaign=${encodeURIComponent(campaign?.id || '')}`); return }
+    if (target === 'experiment' || target === 'learning' || target === 'reuse') { navigate(`/experiments?app=${encodeURIComponent(campaign?.product_id || activeApp?.id || '')}&campaign=${encodeURIComponent(campaign?.id || '')}`); return }
+    if (target === 'reopen' && runbookContext?.runbook) refreshRunbook(campaign, campaign?.product_id || activeApp?.id)
+  }
 
   return <Layout title="Campaign Engine">
     <style>{`
@@ -262,15 +328,28 @@ export default function AgentHQ() {
               <div style={{ display:'flex', gap:9, flexWrap:'wrap' }}><button onClick={() => setStage('intake')} className="studio-button studio-button--soft">← Product</button><button onClick={createAngles} disabled={busy === 'create-angles'} className="studio-button">{busy === 'create-angles' ? 'Finding angles…' : 'Create campaign angles →'}</button></div>
             </div>
           </section>}
-
-                        {stage === 'angles' && <section style={{ padding:'26px 28px' }}>
-            <div className="studio-kicker" style={{ color:'#ededed' }}>03 / Campaign angles & batch creator</div><h2 style={{ color:'#ffffff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>Build a creative matrix before you spend on renders.</h2><p style={{ color:'rgba(232,232,232,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>Flo now produces ten distinct campaign theses from one product intake. Edit the hook, proof, CTA, visual direction, and 15-second script before selecting the angle that should become your production board.</p><div style={{ display:'grid', gap:11, marginTop:22 }}>{concepts.map((concept, index) => <article key={concept.id} style={{ padding:'17px 18px', borderRadius:14, border:'1px solid rgba(255,255,255,.13)', background:index === 0 ? 'linear-gradient(120deg,rgba(114,114,114,.22),rgba(123,123,123,.1))' : 'rgba(255,255,255,.035)' }}><div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:15 }}><div style={{ flex:1, minWidth:0 }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>ANGLE {String(index + 1).padStart(2,'0')} / {concept.angle}</div><h3 style={{ color:'#ffffff', fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>{concept.title}</h3><div style={{ color:'#dbdbdb', fontFamily:'Playfair Display,serif', fontSize:17, marginTop:10 }}>“{concept.hook}”</div><p style={{ color:'rgba(232,232,232,.7)', fontSize:11.5, lineHeight:1.6, marginTop:8, maxWidth:610 }}>{concept.proof}</p><div style={{ color:'#e9e9e9', fontSize:11, fontWeight:750, marginTop:9 }}>CTA: {concept.cta}</div><div style={{ color:'rgba(232,232,232,.5)', fontSize:10.5, marginTop:8 }}>Visual lens: {concept.visual_recipe?.direction || 'Editorial product story'}</div></div><div style={{ display:'grid', gap:7, flexShrink:0 }}><button onClick={() => beginEditConcept(concept)} className="studio-button studio-button--soft" style={{ fontSize:10 }}>{editingConcept?.id === concept.id ? 'Editing' : 'Edit script & hook'}</button><button onClick={() => chooseConcept(concept)} disabled={busy === `choose-${concept.id}`} className="studio-button" style={{ fontSize:10 }}>{busy === `choose-${concept.id}` ? 'Building…' : 'Choose angle'}</button></div></div>{editingConcept?.id === concept.id && <div style={{ display:'grid', gap:10, marginTop:16, paddingTop:15, borderTop:'1px solid rgba(255,255,255,.12)' }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>EDITABLE CREATIVE DIRECTION</div><input value={editingConcept.hook || ''} onChange={event => setEditingConcept(previous => ({ ...previous, hook:event.target.value }))} placeholder="Opening hook" style={fieldStyle} /><textarea value={editingConcept.proof || ''} onChange={event => setEditingConcept(previous => ({ ...previous, proof:event.target.value }))} rows={2} placeholder="Proof beat" style={{ ...fieldStyle, resize:'vertical' }} /><input value={editingConcept.cta || ''} onChange={event => setEditingConcept(previous => ({ ...previous, cta:event.target.value }))} placeholder="Call to action" style={fieldStyle} /><input value={editingConcept.visual_recipe?.direction || ''} onChange={event => setEditingConcept(previous => ({ ...previous, visual_recipe:{ ...(previous.visual_recipe || {}), direction:event.target.value } }))} placeholder="Visual direction" style={fieldStyle} /><textarea value={scriptDraft} onChange={event => setScriptDraft(event.target.value)} rows={5} placeholder="Hook: ...\nProof: ...\nCTA: ..." style={{ ...fieldStyle, resize:'vertical' }} /><div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}><button onClick={cancelEditConcept} className="studio-button studio-button--soft" style={{ fontSize:10 }}>Cancel</button><button onClick={saveConceptEdit} disabled={savingConcept} className="studio-button" style={{ fontSize:10 }}>{savingConcept ? 'Saving…' : 'Save creative direction'}</button></div></div>}</article>)}</div>
+          {stage === 'angles' && <section style={{ padding:'26px 28px' }}>
+            <div className="studio-kicker" style={{ color:'#ededed' }}>03 / Creative thesis</div>
+            <h2 style={{ color:'#ffffff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>Choose a thesis you can inspect and edit.</h2>
+            <p style={{ color:'rgba(232,232,232,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>Flo created distinct starting points from the confirmed product context. Selection is a human strategic choice, not a prediction or score.</p>
+            {compareIds.length === 2 && (() => {
+              const compared = compareIds.map(id => concepts.find(item => item.id === id)).filter(Boolean)
+              const [left, right] = compared
+              return <section style={{ marginTop:17, padding:14, borderRadius:13, background:'rgba(141,127,255,.12)', border:'1px solid rgba(186,179,255,.27)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center' }}><div><div className="studio-kicker" style={{ color:'#d8d2ff' }}>COMPARE TWO THESES</div><b style={{ color:'#fff', fontSize:13, display:'block', marginTop:4 }}>{left.title} ↔ {right.title}</b></div><button onClick={() => setCompareIds([])} className="studio-chip" style={{ color:'#e6e2ff', borderColor:'rgba(220,216,255,.25)' }}>Close compare</button></div><div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:10, marginTop:11 }}>{compared.map(item => <article key={item.id} style={{ padding:11, borderRadius:9, background:'rgba(0,0,0,.16)' }}><b style={{ color:'#fff', fontSize:11 }}>{item.title}</b><p style={{ color:'#dcd8ff', fontSize:10, lineHeight:1.5, marginTop:7 }}><b>Hook:</b> {item.hook}</p><p style={{ color:'rgba(242,241,255,.67)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>Proof:</b> {item.proof}</p><p style={{ color:'rgba(242,241,255,.67)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>CTA:</b> {item.cta}</p><p style={{ color:'rgba(242,241,255,.67)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>Visual:</b> {item.visual_recipe?.direction || 'Not specified'}</p><p style={{ color:'rgba(242,241,255,.55)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>Claim notes:</b> {brandDna.restrictedClaims || 'No additional restriction entered.'}</p><p style={{ color:'rgba(242,241,255,.55)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>Platform fit:</b> {(selectedPlatforms || []).map(platform => platformLabel[platform]).join(', ') || 'Choose platforms in Brand DNA.'}</p></article>)}</div><p style={{ color:'rgba(242,241,255,.7)', fontSize:10, lineHeight:1.55, marginTop:10 }}><b style={{ color:'#f0eeff' }}>Meaningful difference:</b> {left.angle || left.hook} emphasizes a different audience tension or proof style from {right.angle || right.hook}. Edit either thesis to make that trade-off explicit before selecting one.</p></section>
+            })()}
+            {angleNotice && <div role="status" style={{ marginTop:13, padding:'9px 11px', borderRadius:9, background:'rgba(255,255,255,.06)', color:'#dedaff', fontSize:10.5 }}>{angleNotice}</div>}
+            <div style={{ display:'grid', gap:11, marginTop:22 }}>{concepts.filter(concept => concept.status !== 'archived').map((concept, index) => <article key={concept.id} style={{ padding:'17px 18px', borderRadius:14, border:`1px solid ${compareIds.includes(concept.id) ? 'rgba(202,195,255,.58)' : 'rgba(255,255,255,.13)'}`, background:compareIds.includes(concept.id) ? 'linear-gradient(120deg,rgba(119,105,221,.24),rgba(123,123,123,.08))' : index === 0 ? 'linear-gradient(120deg,rgba(114,114,114,.22),rgba(123,123,123,.1))' : 'rgba(255,255,255,.035)' }}><div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:15 }}><div style={{ flex:1, minWidth:0 }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>THESIS {String(index + 1).padStart(2,'0')} / {concept.angle}</div><h3 style={{ color:'#ffffff', fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>{concept.title}</h3><div style={{ color:'#dbdbdb', fontFamily:'Playfair Display,serif', fontSize:17, marginTop:10 }}>“{concept.hook}”</div><p style={{ color:'rgba(232,232,232,.7)', fontSize:11.5, lineHeight:1.6, marginTop:8, maxWidth:610 }}>{concept.proof}</p><div style={{ color:'#e9e9e9', fontSize:11, fontWeight:750, marginTop:9 }}>CTA: {concept.cta}</div><div style={{ color:'rgba(232,232,232,.5)', fontSize:10.5, marginTop:8 }}>Visual lens: {concept.visual_recipe?.direction || 'Editorial product story'}</div></div><div style={{ display:'grid', gap:7, flexShrink:0 }}><button onClick={() => toggleThesisComparison(concept.id)} className="studio-button studio-button--soft" style={{ fontSize:10 }}>{compareIds.includes(concept.id) ? 'Remove compare' : compareIds.length >= 2 ? 'Compare full' : 'Compare thesis'}</button><button onClick={() => beginEditConcept(concept)} className="studio-button studio-button--soft" style={{ fontSize:10 }}>{editingConcept?.id === concept.id ? 'Editing' : 'Edit thesis'}</button><button onClick={() => chooseConcept(concept)} disabled={busy === `choose-${concept.id}`} className="studio-button" style={{ fontSize:10 }}>{busy === `choose-${concept.id}` ? 'Selecting…' : 'Select this thesis'}</button><button onClick={() => saveConceptReference(concept)} className="studio-chip" style={{ color:'#ddd9ff', borderColor:'rgba(218,212,255,.23)', fontSize:9 }}>Save as reference</button><button onClick={() => dismissConcept(concept)} className="studio-chip" style={{ color:'rgba(233,232,244,.62)', borderColor:'rgba(255,255,255,.13)', fontSize:9 }}>Dismiss</button></div></div>{editingConcept?.id === concept.id && <div style={{ display:'grid', gap:10, marginTop:16, paddingTop:15, borderTop:'1px solid rgba(255,255,255,.12)' }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>EDITABLE CREATIVE DIRECTION</div><input value={editingConcept.hook || ''} onChange={event => setEditingConcept(previous => ({ ...previous, hook:event.target.value }))} placeholder="Opening hook" style={fieldStyle} /><textarea value={editingConcept.proof || ''} onChange={event => setEditingConcept(previous => ({ ...previous, proof:event.target.value }))} rows={2} placeholder="Proof beat" style={{ ...fieldStyle, resize:'vertical' }} /><input value={editingConcept.cta || ''} onChange={event => setEditingConcept(previous => ({ ...previous, cta:event.target.value }))} placeholder="Call to action" style={fieldStyle} /><input value={editingConcept.visual_recipe?.direction || ''} onChange={event => setEditingConcept(previous => ({ ...previous, visual_recipe:{ ...(previous.visual_recipe || {}), direction:event.target.value } }))} placeholder="Visual direction" style={fieldStyle} /><textarea value={scriptDraft} onChange={event => setScriptDraft(event.target.value)} rows={5} placeholder="Hook: ...
+Proof: ...
+CTA: ..." style={{ ...fieldStyle, resize:'vertical' }} /><div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}><button onClick={cancelEditConcept} className="studio-button studio-button--soft" style={{ fontSize:10 }}>Cancel</button><button onClick={saveConceptEdit} disabled={savingConcept} className="studio-button" style={{ fontSize:10 }}>{savingConcept ? 'Saving…' : 'Save creative direction'}</button></div></div>}</article>)}</div>
+            <p style={{ color:'rgba(232,232,232,.5)', fontSize:10.5, lineHeight:1.5, marginTop:13 }}>Keep exploring, saving a reference, or dismissing a thesis neither advances nor harms the Campaign Runbook. Only an explicit selection with its stored fields creates thesis evidence.</p>
           </section>}
-
           {stage === 'board' && <section style={{ padding:'26px 28px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'#ededed' }}>04 / Campaign board</div><h2 style={{ color:'#ffffff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>{campaign?.name}</h2><p style={{ color:'rgba(232,232,232,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>One selected concept, connected posts, and real creative variants. Everything here follows the campaign into review and planning.</p></div><div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><button onClick={renderVariants} disabled={Boolean(renderProgress && renderProgress.complete < renderProgress.total)} className="studio-button">{renderProgress ? `Rendering ${renderProgress.complete}/${renderProgress.total}` : 'Render 3 campaign visuals · 30'}</button><button onClick={() => navigate('/pipeline')} className="studio-button studio-button--soft">Open Review Queue →</button></div></div>
+            <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'#ededed' }}>04 / Campaign board</div><h2 style={{ color:'#ffffff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>{campaign?.name}</h2><p style={{ color:'rgba(232,232,232,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>One selected concept, connected posts, reviewable creative family, controlled experiments, and learning all stay linked to one durable campaign.</p></div><div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><button onClick={() => setRenderQuoteOpen(true)} disabled={Boolean(renderProgress && renderProgress.complete < renderProgress.total)} className="studio-button">{renderProgress ? `Rendering ${renderProgress.complete}/${renderProgress.total}` : 'Quote 3 campaign visuals · 30'}</button><button onClick={() => openMomentumAction('review')} className="studio-button studio-button--soft">Open Review Queue →</button></div></div>
             {selectedConcept && <div style={{ padding:'15px 16px', marginTop:20, borderRadius:13, background:'rgba(114,114,114,.16)', border:'1px solid rgba(197,197,197,.18)' }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>SELECTED CREATIVE THESIS</div><div style={{ color:'#ffffff', fontSize:17, fontWeight:800, marginTop:5 }}>{selectedConcept.title}</div><div style={{ color:'#dbdbdb', fontFamily:'Playfair Display,serif', fontSize:18, marginTop:6 }}>“{selectedConcept.hook}”</div><div style={{ color:'rgba(232,232,232,.68)', fontSize:11.5, marginTop:8, lineHeight:1.55 }}>{selectedConcept.visual_recipe?.direction}</div></div>}
-            <div className="engine-board-grid" style={{ display:'grid', gridTemplateColumns:'1fr .94fr', gap:15, marginTop:17 }}><div style={{ border:'1px solid rgba(255,255,255,.11)', borderRadius:13, overflow:'hidden' }}><div style={{ padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,.1)', color:'#ffffff', fontSize:12, fontWeight:800 }}>Platform delivery plan</div>{campaignPosts.map(post => <div key={post.id} style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'13px 14px', borderBottom:'1px solid rgba(255,255,255,.08)' }}><div><div style={{ color:'#e9e9e9', font:'600 9px DM Mono,monospace', letterSpacing:'.08em' }}>{platformLabel[post.platform]?.toUpperCase() || post.platform}</div><div style={{ color:'rgba(232,232,232,.76)', fontSize:11, lineHeight:1.48, marginTop:4, maxWidth:360 }}>{post.content}</div></div><span style={{ color:'#ededed', fontSize:10, fontWeight:750, flexShrink:0 }}>{post.status}</span></div>)}</div><div style={{ border:'1px solid rgba(255,255,255,.11)', borderRadius:13, overflow:'hidden' }}><div style={{ padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,.1)', color:'#ffffff', fontSize:12, fontWeight:800 }}>Creative variants</div>{campaignAssets.length ? <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7, padding:10 }}>{campaignAssets.map(asset => <div key={asset.id} style={{ aspectRatio:'4/5', borderRadius:9, overflow:'hidden', background:'rgba(255,255,255,.07)' }}><img src={asset.asset_url} alt="Campaign creative variant" style={{ width:'100%', height:'100%', objectFit:'cover' }} /></div>)}</div> : <div style={{ padding:20, minHeight:180, display:'grid', placeItems:'center', textAlign:'center', color:'rgba(232,232,232,.55)', fontSize:11.5, lineHeight:1.55 }}>Your selected campaign angle is ready for visual production. Render the first three real image variants when you are ready to spend 30 tokens.</div>}</div></div>
+            <div style={{ marginTop:17 }}><CampaignMomentumMap runbook={runbookContext?.runbook} checkpoints={runbookContext?.checkpoints || []} nextAction={runbookContext?.nextAction} onNavigate={openMomentumAction} onChanged={() => refreshRunbook(campaign, campaign?.product_id || activeApp?.id)} /></div>
+            <div className="engine-board-grid" style={{ display:'grid', gridTemplateColumns:'1fr .94fr', gap:15, marginTop:17 }}><div style={{ border:'1px solid rgba(255,255,255,.11)', borderRadius:13, overflow:'hidden' }}><div style={{ padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,.1)', color:'#ffffff', fontSize:12, fontWeight:800 }}>Platform delivery plan</div>{campaignPosts.map(post => <div key={post.id} style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'13px 14px', borderBottom:'1px solid rgba(255,255,255,.08)' }}><div><div style={{ color:'#e9e9e9', font:'600 9px DM Mono,monospace', letterSpacing:'.08em' }}>{platformLabel[post.platform]?.toUpperCase() || post.platform}</div><div style={{ color:'rgba(232,232,232,.76)', fontSize:11, lineHeight:1.48, marginTop:4, maxWidth:360 }}>{post.content}</div></div><span style={{ color:'#ededed', fontSize:10, fontWeight:750, flexShrink:0 }}>{post.status}</span></div>)}</div><div style={{ border:'1px solid rgba(255,255,255,.11)', borderRadius:13, overflow:'hidden' }}><div style={{ padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,.1)', color:'#ffffff', fontSize:12, fontWeight:800 }}>Creative variants</div>{campaignAssets.length ? <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7, padding:10 }}>{campaignAssets.map(asset => <div key={asset.id} style={{ aspectRatio:'4/5', borderRadius:9, overflow:'hidden', background:'rgba(255,255,255,.07)' }}><img src={asset.asset_url} alt="Campaign creative variant" style={{ width:'100%', height:'100%', objectFit:'cover' }} /></div>)}</div> : <div style={{ padding:20, minHeight:180, display:'grid', placeItems:'center', textAlign:'center', color:'rgba(232,232,232,.55)', fontSize:11.5, lineHeight:1.55 }}>A queued or failed render is not campaign progress. Generate or attach real completed assets when you are ready.</div>}</div></div>
+            <div style={{ marginTop:15 }}><CreativeFamilyPanel workspaceId={campaign?.workspace_id || workspaceId} userId={userId} productId={campaign?.product_id || activeApp?.id} campaign={campaign} selectedConcept={selectedConcept} assets={campaignAssets} reviews={runbookContext?.reviews || []} runbook={runbookContext?.runbook} onGenerate={() => setRenderQuoteOpen(true)} onOpenLibrary={() => openMomentumAction('review')} onChanged={async () => { const assets = await listCampaignMedia(campaign.id); setCampaignAssets(assets); await refreshRunbook(campaign, campaign?.product_id || activeApp?.id) }} /></div>
+            {renderQuoteOpen && <div style={{ marginTop:15, padding:14, borderRadius:12, background:'rgba(207,203,255,.1)', border:'1px solid rgba(207,203,255,.25)' }}><div className="studio-kicker" style={{ color:'#dedaff' }}>VARIABLE-COST RENDER QUOTE</div><h3 style={{ color:'#fff', fontSize:15, marginTop:5 }}>Three campaign visuals · 30 tokens</h3><p style={{ color:'rgba(242,241,255,.67)', fontSize:10.5, lineHeight:1.55, marginTop:5 }}>Provider: OpenAI image generation. Estimated output: up to three sequential 4:5 visuals. A render that fails after a token debit should be handled by the existing refund route; completed but unreviewed outputs remain drafts and do not complete a runbook stage.</p><div style={{ display:'flex', gap:7, marginTop:10 }}><button onClick={() => { setRenderQuoteOpen(false); renderVariants() }} className="studio-button" style={{ padding:'8px 10px', fontSize:10 }}>Confirm render request</button><button onClick={() => setRenderQuoteOpen(false)} className="studio-button studio-button--soft" style={{ padding:'8px 10px', fontSize:10 }}>Not now</button></div></div>}
           </section>}
           {error && <div style={{ margin:'0 28px 24px', padding:'10px 12px', borderRadius:10, background:'rgba(123,123,123,.15)', color:'#d2d2d2', border:'1px solid rgba(123,123,123,.25)', fontSize:11.5 }}>{error}</div>}
         </main>
