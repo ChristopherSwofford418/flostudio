@@ -3,11 +3,27 @@ import crypto from 'node:crypto'
 const SUPABASE_URL = 'https://jtogllurcrxxaguoxeus.supabase.co'
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0b2dsbHVyY3J4eGFndW94ZXVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MDE2OTEsImV4cCI6MjEwMjM3NzY5MX0.2BanYaDFNpDMrwaBfz4vSa-CroeOhynemXh7m5YmBYM'
 
+// This is Supabase's public project key, never a privileged credential.
+const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY
+
 export function providerKeyError(code, message, status = 400) {
   const error = new Error(message)
   error.code = code
   error.status = status
   return error
+}
+
+function anonymousKey() {
+  // The Vercel environment retains the legacy publishable key used by production routes.
+  // If the environment value is not set, callers should configure it rather than exposing a key here.
+  if (!SUPABASE_PUBLISHABLE_KEY) throw providerKeyError('SUPABASE_PUBLIC_KEY_MISSING', 'FloStudio server authentication is not configured.', 503)
+  return SUPABASE_PUBLISHABLE_KEY
+}
+
+function serviceRoleKey() {
+  const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '')
+  if (!key) throw providerKeyError('SUPABASE_SERVICE_ROLE_MISSING', 'FloStudio secure storage is not configured in production.', 503)
+  return key
 }
 
 function rootKey() {
@@ -45,15 +61,17 @@ export async function authenticatedProviderUser(req) {
   const authorization = req.headers.authorization || ''
   const accessToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
   if (!accessToken) throw providerKeyError('AUTH_REQUIRED', 'Sign in to FloStudio before using a workspace provider key.', 401)
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers:{ Authorization:`Bearer ${accessToken}`, apikey:SUPABASE_ANON_KEY } })
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers:{ Authorization:`Bearer ${accessToken}`, apikey:anonymousKey() } })
   const user = await response.json().catch(() => null)
   if (!response.ok || !user?.id) throw providerKeyError('AUTH_REQUIRED', 'Your FloStudio session has expired. Sign in again and retry.', 401)
   return { user, accessToken }
 }
 
-export async function providerRpc(name, args, accessToken) {
+async function rpcWithKey(name, args, key, authorization) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
-    method:'POST', headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' }, body:JSON.stringify(args),
+    method:'POST',
+    headers:{ apikey:key, Authorization:authorization, 'Content-Type':'application/json' },
+    body:JSON.stringify(args),
   })
   const text = await response.text()
   const payload = text ? (() => { try { return JSON.parse(text) } catch { return null } })() : null
@@ -61,9 +79,29 @@ export async function providerRpc(name, args, accessToken) {
   return payload
 }
 
+// User-JWT RPCs are restricted to authorization checks and never return credential material.
+export async function authorizationRpc(name, args, accessToken) {
+  return rpcWithKey(name, args, anonymousKey(), `Bearer ${accessToken}`)
+}
+
+// Credential material is read or changed only through the server's service role after an
+// authorizationRpc check has verified the caller's workspace-admin membership.
+export async function privilegedProviderRpc(name, args) {
+  const key = serviceRoleKey()
+  return rpcWithKey(name, args, key, `Bearer ${key}`)
+}
+
+export async function assertWorkspaceAdmin({ workspaceId, accessToken }) {
+  if (!workspaceId) throw providerKeyError('WORKSPACE_REQUIRED', 'Select a workspace before using a provider key.', 400)
+  const allowed = await authorizationRpc('is_workspace_admin', { target_workspace_id:workspaceId }, accessToken)
+  if (allowed !== true) throw providerKeyError('WORKSPACE_ADMIN_REQUIRED', 'Only a workspace admin can manage this provider key.', 403)
+  return true
+}
+
 export async function resolveWorkspaceOpenAIKey({ workspaceId, accessToken }) {
   if (!workspaceId || !accessToken) return null
-  const rows = await providerRpc('get_workspace_openai_provider_credential', { target_workspace_id:workspaceId }, accessToken)
+  await assertWorkspaceAdmin({ workspaceId, accessToken })
+  const rows = await privilegedProviderRpc('get_workspace_openai_provider_credential', { target_workspace_id:workspaceId })
   const envelope = Array.isArray(rows) ? rows[0]?.encrypted_api_key : null
   return envelope ? decryptProviderKey(envelope) : null
 }

@@ -106,6 +106,26 @@ async function rpc(name, args, accessToken) {
   return payload
 }
 
+async function privilegedRpc(name, args) {
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '')
+  if (!serviceRoleKey) throw apiError('ASC_SECURE_STORAGE_UNAVAILABLE', 'FloStudio secure App Store storage is not configured in production.', 503)
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(args) })
+  const text = await response.text()
+  const payload = text ? (() => { try { return JSON.parse(text) } catch { return null } })() : null
+  if (!response.ok) throw apiError('ASC_DATABASE_ERROR', payload?.message || payload?.hint || 'FloStudio could not access the protected App Store connection.', 500)
+  return payload
+}
+
+async function assertAppStoreAdmin(productId, accessToken) {
+  if (!productId) throw apiError('ASC_APP_ID_REQUIRED', 'Select a portfolio app first.')
+  await rpc('assert_app_store_connect_admin', { target_product_id:productId }, accessToken)
+}
+
+async function authorizedVaultRpc(name, args, productId, accessToken) {
+  await assertAppStoreAdmin(productId, accessToken)
+  return privilegedRpc(name, args)
+}
+
 async function appleRequest(path, token, { method = 'GET', body } = {}) {
   const response = await fetch(`${APPLE_API}${path}`, {
     method,
@@ -866,10 +886,11 @@ async function connectionFromInput(body, accessToken) {
   const vendorNumber = String(body.vendorNumber || '').trim() || null
   const privateKey = normalizePrivateKey(body.privateKey)
   if (!productId || !appStoreAppId) throw apiError('ASC_APP_ID_REQUIRED', 'Choose the FloStudio portfolio app and enter its App Store Connect App ID before testing the connection.')
+  await assertAppStoreAdmin(productId, accessToken)
   validateCredentials({ issuerId, keyId, privateKey, keyType })
   const connection = { product_id: productId, app_store_app_id: appStoreAppId, issuer_id: keyType === 'individual' ? null : issuerId, key_id: keyId, key_type: keyType, vendor_number: vendorNumber }
   const metrics = await syncMetrics({ connection, privateKey })
-  await rpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: appStoreAppId, target_issuer_id: connection.issuer_id, target_key_id: keyId, target_key_type: keyType, target_vendor_number: vendorNumber, target_encrypted_private_key: encryptPrivateKey(privateKey), target_metrics: metrics, target_status: 'connected', target_error: null }, accessToken)
+  await privilegedRpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: appStoreAppId, target_issuer_id: connection.issuer_id, target_key_id: keyId, target_key_type: keyType, target_vendor_number: vendorNumber, target_encrypted_private_key: encryptPrivateKey(privateKey), target_metrics: metrics, target_status: 'connected', target_error: null })
   return { productId, appStoreAppId, metrics }
 }
 
@@ -882,7 +903,7 @@ export default async function handler(req, res) {
     if (action === 'status') {
       const productId = String(body.productId || '').trim()
       if (!productId) throw apiError('ASC_APP_ID_REQUIRED', 'Select a portfolio app first.')
-      const status = await rpc('get_app_store_connect_status', { target_product_id: productId }, accessToken)
+      const status = await authorizedVaultRpc('get_app_store_connect_status', { target_product_id: productId }, productId, accessToken)
       return res.status(200).json({ success: true, connection: status?.[0] || null })
     }
     if (action === 'test') {
@@ -892,23 +913,23 @@ export default async function handler(req, res) {
     if (action === 'sync') {
       const productId = String(body.productId || '').trim()
       if (!productId) throw apiError('ASC_APP_ID_REQUIRED', 'Select a portfolio app first.')
-      const rows = await rpc('get_app_store_connect_connection', { target_product_id: productId }, accessToken)
+      const rows = await authorizedVaultRpc('get_app_store_connect_connection', { target_product_id: productId }, productId, accessToken)
       const connection = rows?.[0]
       if (!connection?.encrypted_private_key) throw apiError('ASC_NOT_CONNECTED', 'Connect this app’s App Store Connect key before syncing.', 409)
       const metrics = await syncMetrics({ connection, privateKey: decryptPrivateKey(connection.encrypted_private_key) })
-      await rpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: connection.app_store_app_id, target_issuer_id: connection.issuer_id, target_key_id: connection.key_id, target_key_type: connection.key_type, target_vendor_number: connection.vendor_number, target_encrypted_private_key: connection.encrypted_private_key, target_metrics: metrics, target_status: 'connected', target_error: null }, accessToken)
+      await privilegedRpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: connection.app_store_app_id, target_issuer_id: connection.issuer_id, target_key_id: connection.key_id, target_key_type: connection.key_type, target_vendor_number: connection.vendor_number, target_encrypted_private_key: connection.encrypted_private_key, target_metrics: metrics, target_status: 'connected', target_error: null })
       return res.status(200).json({ success: true, status: 'connected', productId, metrics, syncedAt: new Date().toISOString() })
     }
     if (action === 'update_vendor_number') {
       const productId = String(body.productId || '').trim()
       const vendorNumber = String(body.vendorNumber || '').trim()
       if (!productId || !vendorNumber) throw apiError('ASC_VENDOR_NUMBER_REQUIRED', 'Enter the Vendor Number shown in App Store Connect → Reports.')
-      const rows = await rpc('get_app_store_connect_connection', { target_product_id: productId }, accessToken)
+      const rows = await authorizedVaultRpc('get_app_store_connect_connection', { target_product_id: productId }, productId, accessToken)
       const connection = rows?.[0]
       if (!connection?.encrypted_private_key) throw apiError('ASC_NOT_CONNECTED', 'Connect this app’s App Store Connect key before adding its Vendor Number.', 409)
-      const statusRows = await rpc('get_app_store_connect_status', { target_product_id:productId }, accessToken)
+      const statusRows = await authorizedVaultRpc('get_app_store_connect_status', { target_product_id:productId }, productId, accessToken)
       const publicConnection = statusRows?.[0]
-      await rpc('save_app_store_connect_connection', { target_product_id:productId, target_app_store_app_id:connection.app_store_app_id, target_issuer_id:connection.issuer_id, target_key_id:connection.key_id, target_key_type:connection.key_type, target_vendor_number:vendorNumber, target_encrypted_private_key:connection.encrypted_private_key, target_metrics:publicConnection?.metrics || {}, target_status:'connected', target_error:null }, accessToken)
+      await privilegedRpc('save_app_store_connect_connection', { target_product_id:productId, target_app_store_app_id:connection.app_store_app_id, target_issuer_id:connection.issuer_id, target_key_id:connection.key_id, target_key_type:connection.key_type, target_vendor_number:vendorNumber, target_encrypted_private_key:connection.encrypted_private_key, target_metrics:publicConnection?.metrics || {}, target_status:'connected', target_error:null })
       return res.status(200).json({ success:true, productId, vendorNumber })
     }
     throw apiError('ASC_ACTION_INVALID', 'FloStudio did not recognize that App Store Connect action.')

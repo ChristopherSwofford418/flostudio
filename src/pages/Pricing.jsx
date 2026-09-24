@@ -1,20 +1,15 @@
 import { useState } from 'react'
 import Layout from '../components/Layout'
 import { PRICING_TIERS, initiateStripeCheckout } from '../lib/billing'
-import { useWorkspace } from '../context/WorkspaceContext'
-import { useNavigate } from 'react-router-dom'
 
 export default function Pricing() {
   const [loadingTier, setLoadingTier] = useState(null)
-  const { addTokens } = useWorkspace()
-  const navigate = useNavigate()
 
   const handleSubscribe = async (tier) => {
     setLoadingTier(tier.id)
     try {
-      await initiateStripeCheckout(tier.id, tier.price, tier.tokens)
-      addTokens(tier.tokens)
-      alert(`Successfully subscribed to ${tier.name}. Added ${tier.tokens} tokens to your FloStudio account via Stripe.`)
+      const result = await initiateStripeCheckout(tier.id, tier.price, tier.tokens)
+      alert(result.message || 'Paid checkout is not configured yet. No payment was started and no FloStudio credits were added.')
     } catch (err) {
       alert(`Payment error: ${err.message}`)
     } finally {
@@ -29,7 +24,7 @@ export default function Pricing() {
 
         {/* Hero */}
         <section className="abundance-shell" style={{ textAlign:'center', padding:'42px 24px', marginBottom:32 }}>
-          <div style={{ position:'relative', zIndex:1 }}><div className="abundance-eyebrow">Creative fuel / Usage designed to scale</div><h1 className="abundance-title" style={{ marginTop:12 }}>More momentum. <em>More work in market.</em></h1><p className="abundance-copy" style={{ maxWidth:640, margin:'16px auto 0' }}>Choose the creative fuel your team needs for high-converting ads, polished scripts, and a channel-ready publishing cadence.</p><div className="abundance-rail" style={{ justifyContent:'center', marginTop:20 }}><span className="abundance-pill"><i/> token-based usage</span><span className="abundance-pill">scale when demand arrives</span></div></div>
+          <div style={{ position:'relative', zIndex:1 }}><div className="abundance-eyebrow">Creative fuel / Usage designed to scale</div><h1 className="abundance-title" style={{ marginTop:12 }}>More momentum. <em>More work in market.</em></h1><p className="abundance-copy" style={{ maxWidth:640, margin:'16px auto 0' }}>Plan options are shown for product planning only. Paid checkout and credit fulfillment are not configured in this FloStudio environment, so no plan can charge you or add credits yet.</p><div className="abundance-rail" style={{ justifyContent:'center', marginTop:20 }}><span className="abundance-pill"><i/> token-based usage</span><span className="abundance-pill">checkout pending configuration</span></div></div>
         </section>
 
         {/* Pricing Cards Grid */}
@@ -68,7 +63,7 @@ export default function Pricing() {
               </div>
 
               <button onClick={() => handleSubscribe(tier)} disabled={loadingTier === tier.id} style={{ width: '100%', padding: '14px 20px', borderRadius: 12, border: tier.popular ? 'none' : '1px solid rgba(255,255,255,.15)', background: tier.popular ? 'linear-gradient(135deg,#878787,#727272)' : 'rgba(255,255,255,.08)', color: '#ffffff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', boxShadow: tier.popular ? '0 10px 22px rgba(122,122,122,.25)' : 'none', transition: 'all 0.15s' }}>
-                {loadingTier === tier.id ? 'Processing...' : `Get ${tier.name}`}
+                {loadingTier === tier.id ? 'Checking...' : 'Checkout unavailable'}
               </button>
             </div>
           ))}

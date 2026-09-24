@@ -19,6 +19,7 @@ export function WorkspaceProvider({ children }) {
   const [workspaceLoading, setWorkspaceLoading] = useState(true)
   const [workspaceError, setWorkspaceError] = useState('')
   const initializationRef = useRef(0)
+  const latestTokenChargeRef = useRef(null)
 
   const refreshApps = useCallback(async (preferredId = null) => {
     if (!workspaceId) return []
@@ -119,9 +120,10 @@ export function WorkspaceProvider({ children }) {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       try {
-        const newBal = await backendConsumeTokens(user.id, cost, actionName)
-        setTokens(newBal)
-        notify(`Used ${cost} tokens for ${actionName} (${newBal} remaining)`)
+        const result = await backendConsumeTokens(user.id, cost, actionName)
+        latestTokenChargeRef.current = result.transactionId ? { transactionId:result.transactionId, amount:Number(cost), actionName } : null
+        setTokens(result.balance)
+        notify(`Used ${cost} tokens for ${actionName} (${result.balance} remaining)`)
         return true
       } catch (err) {
         notify(err.message)
@@ -129,24 +131,23 @@ export function WorkspaceProvider({ children }) {
         return false
       }
     }
-    setTokens(prev => prev - cost)
-    notify(`Used ${cost} tokens for ${actionName}`)
-    return true
+    notify('Sign in to FloStudio before starting a token-billed render.')
+    return false
   }
 
   const refundTokens = async (amount, actionName) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
-    const newBalance = await backendRefundTokens(user.id, amount, actionName)
-    setTokens(newBalance)
+    const charge = latestTokenChargeRef.current
+    if (!charge?.transactionId) return null
+    const result = await backendRefundTokens({ transactionId:charge.transactionId, amount, actionName })
+    latestTokenChargeRef.current = null
+    setTokens(result.balance)
     notify(`Restored ${amount} tokens because ${actionName} did not produce an output.`)
-    return newBalance
+    return result.balance
   }
 
-  const addTokens = (amount) => {
-    setTokens(prev => prev + amount)
+  const addTokens = () => {
     setShowTopUp(false)
-    notify(`Successfully added ${amount} tokens to your balance.`)
+    notify('Paid credits are not configured yet. No FloStudio tokens were added.')
   }
 
   return (

@@ -1,6 +1,5 @@
 import { supabase } from '../supabase'
 
-// Pricing tiers inspired by Creatify AI & Holo AI
 export const PRICING_TIERS = [
   {
     id: 'starter',
@@ -26,20 +25,18 @@ export const PRICING_TIERS = [
   }
 ]
 
-// Fetch user token balance from Supabase
 export async function fetchUserTokens(userId) {
-  if (!userId) return { balance: 50, tier: 'free', unlimited: false }
+  if (!userId) return { balance:50, tier:'free', unlimited:false }
   const { data, error } = await supabase
     .from('user_tokens')
     .select('balance, tier, unlimited')
     .eq('user_id', userId)
     .single()
-  
   if (error && error.code !== 'PGRST116') throw error
   if (!data) {
     const { data:created, error:insertError } = await supabase
       .from('user_tokens')
-      .insert([{ user_id: userId, balance: 50, tier: 'free', unlimited: false }])
+      .insert([{ user_id:userId, balance:50, tier:'free', unlimited:false }])
       .select('balance, tier, unlimited')
       .single()
     if (insertError) throw insertError
@@ -48,71 +45,46 @@ export async function fetchUserTokens(userId) {
   return data
 }
 
-// Deduct tokens or trigger progressive payment gate if balance < cost
+async function authHeaders() {
+  const { data:{ session } } = await supabase.auth.getSession()
+  if (!session?.access_token) throw new Error('Sign in to FloStudio before starting a token-billed render.')
+  return { Authorization:`Bearer ${session.access_token}` }
+}
+
+async function tokenLedger(payload) {
+  const response = await fetch('/api/token-ledger', {
+    method:'POST',
+    headers:{ ...(await authHeaders()), 'Content-Type':'application/json' },
+    body:JSON.stringify(payload),
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || data.error) throw new Error(data.error || 'FloStudio could not update the token ledger.')
+  return data
+}
+
+// Every debited render is settled by the server with a short-lived lineage id. The browser
+// never receives write access to balances, entitlements, positive ledger entries, or tiers.
 export async function consumeTokens(userId, cost, actionName) {
-  const current = await fetchUserTokens(userId)
-  if (current.unlimited) return current.balance
-  if (current.balance < cost) {
-    throw new Error(`INSUFFICIENT_TOKENS: Need ${cost} tokens for ${actionName}, but you have ${current.balance}. Please top up your token balance to proceed.`)
-  }
-
-  const newBalance = current.balance - cost
-  await supabase
-    .from('user_tokens')
-    .update({ balance: newBalance })
-    .eq('user_id', userId)
-
-  await supabase
-    .from('token_transactions')
-    .insert([{ user_id: userId, amount: -cost, action_type: actionName, description: `Executed ${actionName}` }])
-
-  return newBalance
+  const { data:{ user } } = await supabase.auth.getUser()
+  if (!user?.id || user.id !== userId) throw new Error('Sign in to FloStudio before starting a token-billed render.')
+  const result = await tokenLedger({ action:'charge', cost:Number(cost), label:actionName })
+  return { balance:Number(result.balance), transactionId:result.transactionId || null, unlimited:Boolean(result.unlimited) }
 }
 
-// Restore credits only when FloStudio failed before delivering a usable output.
-export async function refundTokens(userId, amount, actionName) {
-  const credit = Math.max(0, Number(amount) || 0)
-  if (!credit) return (await fetchUserTokens(userId)).balance
-  const current = await fetchUserTokens(userId)
-  if (current.unlimited) return current.balance
-  const newBalance = current.balance + credit
-  const { error } = await supabase
-    .from('user_tokens')
-    .update({ balance: newBalance })
-    .eq('user_id', userId)
-  if (error) throw error
-  await supabase
-    .from('token_transactions')
-    .insert([{ user_id: userId, amount: credit, action_type: 'generation_refund', description: `Restored after unsuccessful ${actionName}` }])
-  return newBalance
+// A refund must name the exact debit returned by consumeTokens. The database prevents
+// double or over-refunds and associates the compensating credit with that debit.
+export async function refundTokens({ transactionId, amount, actionName }) {
+  if (!transactionId) throw new Error('FloStudio could not identify the render charge eligible for a refund.')
+  const result = await tokenLedger({ action:'refund', transactionId, amount:Number(amount), reason:actionName })
+  return { balance:Number(result.balance), unlimited:Boolean(result.unlimited) }
 }
 
-// Simulate Stripe Checkout redirection for web
-export async function initiateStripeCheckout(tierId, price, tokens) {
-  // In production, this calls backend to create Stripe Checkout Session.
-  // For web demo simulation with live Stripe link or hosted checkout:
-  const stripeTestLinks = {
-    starter: 'https://buy.stripe.com/test_starter_100_tokens',
-    pro: 'https://buy.stripe.com/test_pro_500_tokens',
-    enterprise: 'https://buy.stripe.com/test_enterprise_2500_tokens'
+// Billing is intentionally not simulated. A real Stripe server route and webhook must be
+// configured before an account can receive paid credits or entitlement changes.
+export async function initiateStripeCheckout() {
+  return {
+    success:false,
+    code:'CHECKOUT_NOT_CONFIGURED',
+    message:'Paid checkout is not configured yet. No payment was started and no FloStudio credits were added.'
   }
-  
-  const paymentUrl = stripeTestLinks[tierId] || 'https://billing.stripe.com/p/login/test'
-  
-  // Also record a pending transaction in Supabase if user is logged in
-  const { data: { user } } = await supabase.auth.getUser()
-  if (user) {
-    await supabase.from('token_transactions').insert([{
-      user_id: user.id,
-      amount: tokens,
-      action_type: 'stripe_refill',
-      description: `Purchased ${tierId} (${tokens} tokens) for $${price}`
-    }])
-    
-    // Top up balance immediately for seamless UX
-    const current = await fetchUserTokens(user.id)
-    await supabase.from('user_tokens').update({ balance: current.balance + tokens, tier: tierId }).eq('user_id', user.id)
-  }
-
-  return { success: true, tokensAdded: tokens, redirectUrl: paymentUrl }
 }
