@@ -14,13 +14,13 @@ Then run the production build:
 npm run build
 ```
 
-The unit suite covers product truth, creative thesis, creative family, review, controlled experiment, verified learning, next-action selection, learning summaries, and pause/archive state handling. Its fixtures contain no calls to AI, Stripe, App Store Connect, provider APIs, or social APIs.
+The unit suite covers product truth, creative thesis, creative family, review, controlled experiment, verified learning, next-action selection, learning summaries, runbook export structure, and pause/archive state handling. Its fixtures contain no calls to AI, Stripe, App Store Connect, provider APIs, or social APIs.
 
 ## Manual acceptance loop
 
-A signed-in operator must be able to select a portfolio app, confirm product facts and Brand DNA, create a campaign, select and edit a thesis, attach two completed variants with change summaries, save a review decision, create a control/challenger experiment, record sourced numeric observations, save a Learning Statement, explicitly promote it to Creative Memory, inspect the completed runbook, and archive/reopen it.
+A signed-in operator must be able to select a portfolio app, confirm product facts and Brand DNA, create a campaign, select and edit a thesis, optionally save a free deterministic thesis starter, attach two completed variants with change summaries, save a review decision, create a control/challenger experiment, record sourced numeric observations, save a Learning Statement, explicitly promote it to Creative Memory, inspect the completed runbook, export its evidence as JSON, and archive/reopen it. A destructive-delete QA pass must confirm the warning, preserve the separate campaign/posts/assets/product records, and allow an operator to create a fresh blank runbook only by explicit action.
 
-The QA pass must verify desktop and narrow layouts, keyboard focus, labels, high contrast, empty states, no portfolio app, no campaign, missing metrics, failed renders, insufficient tokens, inconclusive experiments, app isolation, reload persistence, and archive/reopen. It must also verify that the flow never publishes a social post, initiates checkout, creates a background job, or reports a stage complete without linked evidence.
+The QA pass must verify desktop and narrow layouts, keyboard focus, labels, high contrast, empty states, no portfolio app, no campaign, missing metrics, failed renders, insufficient tokens, inconclusive experiments, app isolation, reload persistence, archive/reopen, export, delete/recreate, and selected-app stability. It must also verify that the flow never publishes a social post, initiates checkout, creates a background job, or reports a stage complete without linked evidence.
 
 ## Deployment sequence
 

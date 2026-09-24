@@ -5,7 +5,7 @@ import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { createCampaign, createCampaignPosts, generateCampaignVariant, listCampaignMedia, loadCampaignWorkspace, saveBrandAndProduct, saveCampaignConcepts, selectCampaignConcept, updateCampaignConcept } from '../lib/campaignEngine'
 import { buildNextBestCreative, recordMemoryEvent } from '../lib/creativeMemory'
-import { ensureCampaignRunbook, loadCampaignRunbookContext } from '../lib/campaignRunbook'
+import { ensureCampaignRunbook, loadCampaignRunbookContext, recreateCampaignRunbook } from '../lib/campaignRunbook'
 import CampaignMomentumMap from '../components/CampaignMomentumMap'
 import CreativeFamilyPanel from '../components/CreativeFamilyPanel'
 
@@ -56,6 +56,41 @@ function fallbackConcepts({ brand, product, offer }) {
   return briefs.map(([title, angle, hook, direction]) => ({ title, angle, hook, proof:`${brand || 'This product'} turns a real moment of friction into a clearer, more useful next step without unsupported promises.`, cta:offer || 'See the next step.', visual_recipe:{ direction }, script:{ fifteen_second:`Hook: ${hook}\nProof: Show the product making the outcome concrete.\nCTA: ${offer || 'See the next step.'}` } }))
 }
 
+function buildThesisStarter({ base, route, productName, audience }) {
+  const direction = base?.visual_recipe?.direction || 'Editorial product storytelling'
+  const shared = {
+    hook:base?.hook || `What would a clearer next step with ${productName || 'this product'} feel like?`,
+    proof:base?.proof || safeProof,
+    cta:base?.cta || safeCta,
+    visual_recipe:{ ...(base?.visual_recipe || {}) },
+    script:{ ...(base?.script || {}) },
+  }
+  if (route === 'switch_proof') return {
+    ...shared,
+    title:`${base?.title || 'Thesis'} — proof alternative`,
+    angle:'Switch the proof',
+    proof:`Show one observable ${productName || 'product'} step that makes the intended next action clearer. Keep broader outcomes and claims out until they are verified.`,
+    visual_recipe:{ ...shared.visual_recipe, direction:`${direction}. Make the product action itself the proof beat.` },
+    script:{ ...shared.script, starter_route:'switch_proof' },
+  }
+  if (route === 'opening_visual') return {
+    ...shared,
+    title:`${base?.title || 'Thesis'} — new opening visual`,
+    angle:'Change the opening visual',
+    visual_recipe:{ ...shared.visual_recipe, direction:`Open on the friction moment, then reveal the ${productName || 'product'} step. ${direction}` },
+    script:{ ...shared.script, starter_route:'opening_visual' },
+  }
+  return {
+    ...shared,
+    title:`${base?.title || 'Thesis'} — narrower audience`,
+    angle:'Narrow the audience',
+    hook:`For the person facing this specific ${audience || 'product'} moment: ${shared.hook}`,
+    proof:`Focus on one specific audience context before showing the same observable ${productName || 'product'} step.`,
+    visual_recipe:{ ...shared.visual_recipe, direction:`${direction}. Frame one specific audience context rather than a broad lifestyle claim.` },
+    script:{ ...shared.script, starter_route:'narrow_audience' },
+  }
+}
+
 export default function AgentHQ() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -91,6 +126,8 @@ export default function AgentHQ() {
   const [compareIds, setCompareIds] = useState([])
   const [renderQuoteOpen, setRenderQuoteOpen] = useState(false)
   const [angleNotice, setAngleNotice] = useState('')
+  const [starterDraft, setStarterDraft] = useState(null)
+  const [savingStarter, setSavingStarter] = useState(false)
 
   const stageIndex = stageOrder.indexOf(stage)
   const campaignName = useMemo(() => `${brandName || 'New brand'} — ${offerText || objective || 'Campaign'}`, [brandName, offerText, objective])
@@ -136,6 +173,15 @@ export default function AgentHQ() {
     setRunbookContext(context)
     return context
   }
+  const recreateRunbook = async () => {
+    if (!userId || !campaign?.id || !campaign?.product_id || !(campaign.workspace_id || workspaceId)) return
+    setBusy('recreate-runbook'); setError('')
+    try {
+      await recreateCampaignRunbook({ workspaceId:campaign.workspace_id || workspaceId, userId, productId:campaign.product_id, campaignId:campaign.id })
+      await refreshRunbook(campaign, campaign.product_id)
+    } catch (recreateError) { setError(recreateError.message || 'Flo could not create a new Campaign Runbook.') }
+    finally { setBusy('') }
+  }
   const togglePlatform = platform => setSelectedPlatforms(previous => previous.includes(platform) ? previous.filter(item => item !== platform) : [...previous, platform])
   const beginEditConcept = concept => { setEditingConcept({ ...concept, visual_recipe:{ ...(concept.visual_recipe || {}) }, script:{ ...(concept.script || {}) } }); setScriptDraft(concept.script?.fifteen_second || concept.script?.['15_second'] || '') }
   const cancelEditConcept = () => { setEditingConcept(null); setScriptDraft('') }
@@ -173,6 +219,24 @@ export default function AgentHQ() {
       setCompareIds(previous => previous.filter(id => id !== saved.id))
       setAngleNotice(`“${concept.title}” was set aside. It does not count as progress or failure.`)
     } catch (dismissError) { setAngleNotice(dismissError.message || 'Flo could not set this thesis aside.') }
+  }
+  const openStarter = route => {
+    const base = selectedConcept || concepts.find(item => item.status !== 'archived') || null
+    setStarterDraft(buildThesisStarter({ base, route, productName, audience }))
+    setAngleNotice('This is an editable, deterministic starting draft. Nothing has been selected, generated, or charged.')
+  }
+  const saveStarter = async () => {
+    if (!starterDraft || !campaign || !userId) return
+    if (![starterDraft.title, starterDraft.hook, starterDraft.proof, starterDraft.cta, starterDraft.visual_recipe?.direction].every(value => String(value || '').trim())) { setAngleNotice('Complete the title, hook, proof, CTA, and visual direction before saving this thesis draft.'); return }
+    setSavingStarter(true); setAngleNotice('')
+    try {
+      const stored = await saveCampaignConcepts({ userId, campaignId:campaign.id, concepts:[normalizeConceptClaims(starterDraft, `${description}\n${sourceFacts}\n${brandDna.proofPoints || ''}`)] })
+      setConcepts(previous => [...previous, ...(stored || [])])
+      setStarterDraft(null)
+      setAngleNotice('Editable thesis draft saved. It is not selected until you explicitly choose it.')
+      await refreshRunbook(campaign, campaign.product_id)
+    } catch (starterError) { setAngleNotice(starterError.message || 'Flo could not save this thesis draft.') }
+    finally { setSavingStarter(false) }
   }
 
   const analyzeUrl = async () => {
@@ -337,6 +401,7 @@ export default function AgentHQ() {
               const [left, right] = compared
               return <section style={{ marginTop:17, padding:14, borderRadius:13, background:'rgba(141,127,255,.12)', border:'1px solid rgba(186,179,255,.27)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center' }}><div><div className="studio-kicker" style={{ color:'#d8d2ff' }}>COMPARE TWO THESES</div><b style={{ color:'#fff', fontSize:13, display:'block', marginTop:4 }}>{left.title} ↔ {right.title}</b></div><button onClick={() => setCompareIds([])} className="studio-chip" style={{ color:'#e6e2ff', borderColor:'rgba(220,216,255,.25)' }}>Close compare</button></div><div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:10, marginTop:11 }}>{compared.map(item => <article key={item.id} style={{ padding:11, borderRadius:9, background:'rgba(0,0,0,.16)' }}><b style={{ color:'#fff', fontSize:11 }}>{item.title}</b><p style={{ color:'#dcd8ff', fontSize:10, lineHeight:1.5, marginTop:7 }}><b>Hook:</b> {item.hook}</p><p style={{ color:'rgba(242,241,255,.67)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>Proof:</b> {item.proof}</p><p style={{ color:'rgba(242,241,255,.67)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>CTA:</b> {item.cta}</p><p style={{ color:'rgba(242,241,255,.67)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>Visual:</b> {item.visual_recipe?.direction || 'Not specified'}</p><p style={{ color:'rgba(242,241,255,.55)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>Claim notes:</b> {brandDna.restrictedClaims || 'No additional restriction entered.'}</p><p style={{ color:'rgba(242,241,255,.55)', fontSize:9.5, lineHeight:1.5, marginTop:5 }}><b>Platform fit:</b> {(selectedPlatforms || []).map(platform => platformLabel[platform]).join(', ') || 'Choose platforms in Brand DNA.'}</p></article>)}</div><p style={{ color:'rgba(242,241,255,.7)', fontSize:10, lineHeight:1.55, marginTop:10 }}><b style={{ color:'#f0eeff' }}>Meaningful difference:</b> {left.angle || left.hook} emphasizes a different audience tension or proof style from {right.angle || right.hook}. Edit either thesis to make that trade-off explicit before selecting one.</p></section>
             })()}
+            <section style={{ marginTop:17, padding:14, borderRadius:13, background:'rgba(255,255,255,.035)', border:'1px solid rgba(255,255,255,.12)' }}><div className="studio-kicker" style={{ color:'#d8d2ff' }}>NEED A DIFFERENT STARTING POINT?</div><p style={{ color:'rgba(242,241,255,.66)', fontSize:10, lineHeight:1.55, marginTop:5 }}>These free routes make an editable thesis draft from the current product context. They do not call AI, spend tokens, select a thesis, or claim a likely winner.</p><div style={{ display:'flex', gap:7, flexWrap:'wrap', marginTop:10 }}><button onClick={() => openStarter('switch_proof')} className="studio-chip" style={{ color:'#e6e2ff', borderColor:'rgba(220,216,255,.25)' }}>Switch the proof</button><button onClick={() => openStarter('opening_visual')} className="studio-chip" style={{ color:'#e6e2ff', borderColor:'rgba(220,216,255,.25)' }}>Change opening visual</button><button onClick={() => openStarter('narrow_audience')} className="studio-chip" style={{ color:'#e6e2ff', borderColor:'rgba(220,216,255,.25)' }}>Narrow the audience</button></div>{starterDraft && <div style={{ display:'grid', gap:9, marginTop:13, paddingTop:13, borderTop:'1px solid rgba(255,255,255,.1)' }}><div style={{ color:'#eceaff', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>EDITABLE THESIS STARTER</div><input value={starterDraft.title || ''} onChange={event => setStarterDraft(current => ({ ...current, title:event.target.value }))} placeholder="Thesis title" style={fieldStyle}/><input value={starterDraft.hook || ''} onChange={event => setStarterDraft(current => ({ ...current, hook:event.target.value }))} placeholder="Opening hook" style={fieldStyle}/><textarea value={starterDraft.proof || ''} onChange={event => setStarterDraft(current => ({ ...current, proof:event.target.value }))} rows={2} placeholder="Proof beat" style={{ ...fieldStyle, resize:'vertical' }}/><input value={starterDraft.cta || ''} onChange={event => setStarterDraft(current => ({ ...current, cta:event.target.value }))} placeholder="Call to action" style={fieldStyle}/><input value={starterDraft.visual_recipe?.direction || ''} onChange={event => setStarterDraft(current => ({ ...current, visual_recipe:{ ...(current.visual_recipe || {}), direction:event.target.value } }))} placeholder="Visual direction" style={fieldStyle}/><div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}><button onClick={() => setStarterDraft(null)} className="studio-button studio-button--soft" style={{ fontSize:10 }}>Not now</button><button onClick={saveStarter} disabled={savingStarter} className="studio-button" style={{ fontSize:10 }}>{savingStarter ? 'Saving…' : 'Save as new thesis'}</button></div></div>}</section>
             {angleNotice && <div role="status" style={{ marginTop:13, padding:'9px 11px', borderRadius:9, background:'rgba(255,255,255,.06)', color:'#dedaff', fontSize:10.5 }}>{angleNotice}</div>}
             <div style={{ display:'grid', gap:11, marginTop:22 }}>{concepts.filter(concept => concept.status !== 'archived').map((concept, index) => <article key={concept.id} style={{ padding:'17px 18px', borderRadius:14, border:`1px solid ${compareIds.includes(concept.id) ? 'rgba(202,195,255,.58)' : 'rgba(255,255,255,.13)'}`, background:compareIds.includes(concept.id) ? 'linear-gradient(120deg,rgba(119,105,221,.24),rgba(123,123,123,.08))' : index === 0 ? 'linear-gradient(120deg,rgba(114,114,114,.22),rgba(123,123,123,.1))' : 'rgba(255,255,255,.035)' }}><div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:15 }}><div style={{ flex:1, minWidth:0 }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>THESIS {String(index + 1).padStart(2,'0')} / {concept.angle}</div><h3 style={{ color:'#ffffff', fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>{concept.title}</h3><div style={{ color:'#dbdbdb', fontFamily:'Playfair Display,serif', fontSize:17, marginTop:10 }}>“{concept.hook}”</div><p style={{ color:'rgba(232,232,232,.7)', fontSize:11.5, lineHeight:1.6, marginTop:8, maxWidth:610 }}>{concept.proof}</p><div style={{ color:'#e9e9e9', fontSize:11, fontWeight:750, marginTop:9 }}>CTA: {concept.cta}</div><div style={{ color:'rgba(232,232,232,.5)', fontSize:10.5, marginTop:8 }}>Visual lens: {concept.visual_recipe?.direction || 'Editorial product story'}</div></div><div style={{ display:'grid', gap:7, flexShrink:0 }}><button onClick={() => toggleThesisComparison(concept.id)} className="studio-button studio-button--soft" style={{ fontSize:10 }}>{compareIds.includes(concept.id) ? 'Remove compare' : compareIds.length >= 2 ? 'Compare full' : 'Compare thesis'}</button><button onClick={() => beginEditConcept(concept)} className="studio-button studio-button--soft" style={{ fontSize:10 }}>{editingConcept?.id === concept.id ? 'Editing' : 'Edit thesis'}</button><button onClick={() => chooseConcept(concept)} disabled={busy === `choose-${concept.id}`} className="studio-button" style={{ fontSize:10 }}>{busy === `choose-${concept.id}` ? 'Selecting…' : 'Select this thesis'}</button><button onClick={() => saveConceptReference(concept)} className="studio-chip" style={{ color:'#ddd9ff', borderColor:'rgba(218,212,255,.23)', fontSize:9 }}>Save as reference</button><button onClick={() => dismissConcept(concept)} className="studio-chip" style={{ color:'rgba(233,232,244,.62)', borderColor:'rgba(255,255,255,.13)', fontSize:9 }}>Dismiss</button></div></div>{editingConcept?.id === concept.id && <div style={{ display:'grid', gap:10, marginTop:16, paddingTop:15, borderTop:'1px solid rgba(255,255,255,.12)' }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>EDITABLE CREATIVE DIRECTION</div><input value={editingConcept.hook || ''} onChange={event => setEditingConcept(previous => ({ ...previous, hook:event.target.value }))} placeholder="Opening hook" style={fieldStyle} /><textarea value={editingConcept.proof || ''} onChange={event => setEditingConcept(previous => ({ ...previous, proof:event.target.value }))} rows={2} placeholder="Proof beat" style={{ ...fieldStyle, resize:'vertical' }} /><input value={editingConcept.cta || ''} onChange={event => setEditingConcept(previous => ({ ...previous, cta:event.target.value }))} placeholder="Call to action" style={fieldStyle} /><input value={editingConcept.visual_recipe?.direction || ''} onChange={event => setEditingConcept(previous => ({ ...previous, visual_recipe:{ ...(previous.visual_recipe || {}), direction:event.target.value } }))} placeholder="Visual direction" style={fieldStyle} /><textarea value={scriptDraft} onChange={event => setScriptDraft(event.target.value)} rows={5} placeholder="Hook: ...
 Proof: ...
@@ -346,7 +411,7 @@ CTA: ..." style={{ ...fieldStyle, resize:'vertical' }} /><div style={{ display:'
           {stage === 'board' && <section style={{ padding:'26px 28px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'#ededed' }}>04 / Campaign board</div><h2 style={{ color:'#ffffff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>{campaign?.name}</h2><p style={{ color:'rgba(232,232,232,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>One selected concept, connected posts, reviewable creative family, controlled experiments, and learning all stay linked to one durable campaign.</p></div><div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><button onClick={() => setRenderQuoteOpen(true)} disabled={Boolean(renderProgress && renderProgress.complete < renderProgress.total)} className="studio-button">{renderProgress ? `Rendering ${renderProgress.complete}/${renderProgress.total}` : 'Quote 3 campaign visuals · 30'}</button><button onClick={() => openMomentumAction('review')} className="studio-button studio-button--soft">Open Review Queue →</button></div></div>
             {selectedConcept && <div style={{ padding:'15px 16px', marginTop:20, borderRadius:13, background:'rgba(114,114,114,.16)', border:'1px solid rgba(197,197,197,.18)' }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>SELECTED CREATIVE THESIS</div><div style={{ color:'#ffffff', fontSize:17, fontWeight:800, marginTop:5 }}>{selectedConcept.title}</div><div style={{ color:'#dbdbdb', fontFamily:'Playfair Display,serif', fontSize:18, marginTop:6 }}>“{selectedConcept.hook}”</div><div style={{ color:'rgba(232,232,232,.68)', fontSize:11.5, marginTop:8, lineHeight:1.55 }}>{selectedConcept.visual_recipe?.direction}</div></div>}
-            <div style={{ marginTop:17 }}><CampaignMomentumMap runbook={runbookContext?.runbook} checkpoints={runbookContext?.checkpoints || []} nextAction={runbookContext?.nextAction} onNavigate={openMomentumAction} onChanged={() => refreshRunbook(campaign, campaign?.product_id || activeApp?.id)} /></div>
+            <div style={{ marginTop:17 }}><CampaignMomentumMap runbook={runbookContext?.runbook} checkpoints={runbookContext?.checkpoints || []} nextAction={runbookContext?.nextAction} context={runbookContext} deletedAt={runbookContext?.runbookDeletedAt} onNavigate={openMomentumAction} onChanged={() => refreshRunbook(campaign, campaign?.product_id || activeApp?.id)} onRecreate={recreateRunbook} onDeleted={() => refreshRunbook(campaign, campaign?.product_id || activeApp?.id)} /></div>
             <div className="engine-board-grid" style={{ display:'grid', gridTemplateColumns:'1fr .94fr', gap:15, marginTop:17 }}><div style={{ border:'1px solid rgba(255,255,255,.11)', borderRadius:13, overflow:'hidden' }}><div style={{ padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,.1)', color:'#ffffff', fontSize:12, fontWeight:800 }}>Platform delivery plan</div>{campaignPosts.map(post => <div key={post.id} style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'13px 14px', borderBottom:'1px solid rgba(255,255,255,.08)' }}><div><div style={{ color:'#e9e9e9', font:'600 9px DM Mono,monospace', letterSpacing:'.08em' }}>{platformLabel[post.platform]?.toUpperCase() || post.platform}</div><div style={{ color:'rgba(232,232,232,.76)', fontSize:11, lineHeight:1.48, marginTop:4, maxWidth:360 }}>{post.content}</div></div><span style={{ color:'#ededed', fontSize:10, fontWeight:750, flexShrink:0 }}>{post.status}</span></div>)}</div><div style={{ border:'1px solid rgba(255,255,255,.11)', borderRadius:13, overflow:'hidden' }}><div style={{ padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,.1)', color:'#ffffff', fontSize:12, fontWeight:800 }}>Creative variants</div>{campaignAssets.length ? <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7, padding:10 }}>{campaignAssets.map(asset => <div key={asset.id} style={{ aspectRatio:'4/5', borderRadius:9, overflow:'hidden', background:'rgba(255,255,255,.07)' }}><img src={asset.asset_url} alt="Campaign creative variant" style={{ width:'100%', height:'100%', objectFit:'cover' }} /></div>)}</div> : <div style={{ padding:20, minHeight:180, display:'grid', placeItems:'center', textAlign:'center', color:'rgba(232,232,232,.55)', fontSize:11.5, lineHeight:1.55 }}>A queued or failed render is not campaign progress. Generate or attach real completed assets when you are ready.</div>}</div></div>
             <div style={{ marginTop:15 }}><CreativeFamilyPanel workspaceId={campaign?.workspace_id || workspaceId} userId={userId} productId={campaign?.product_id || activeApp?.id} campaign={campaign} selectedConcept={selectedConcept} assets={campaignAssets} reviews={runbookContext?.reviews || []} runbook={runbookContext?.runbook} onGenerate={() => setRenderQuoteOpen(true)} onOpenLibrary={() => openMomentumAction('review')} onChanged={async () => { const assets = await listCampaignMedia(campaign.id); setCampaignAssets(assets); await refreshRunbook(campaign, campaign?.product_id || activeApp?.id) }} /></div>
             {renderQuoteOpen && <div style={{ marginTop:15, padding:14, borderRadius:12, background:'rgba(207,203,255,.1)', border:'1px solid rgba(207,203,255,.25)' }}><div className="studio-kicker" style={{ color:'#dedaff' }}>VARIABLE-COST RENDER QUOTE</div><h3 style={{ color:'#fff', fontSize:15, marginTop:5 }}>Three campaign visuals · 30 tokens</h3><p style={{ color:'rgba(242,241,255,.67)', fontSize:10.5, lineHeight:1.55, marginTop:5 }}>Provider: OpenAI image generation. Estimated output: up to three sequential 4:5 visuals. A render that fails after a token debit should be handled by the existing refund route; completed but unreviewed outputs remain drafts and do not complete a runbook stage.</p><div style={{ display:'flex', gap:7, marginTop:10 }}><button onClick={() => { setRenderQuoteOpen(false); renderVariants() }} className="studio-button" style={{ padding:'8px 10px', fontSize:10 }}>Confirm render request</button><button onClick={() => setRenderQuoteOpen(false)} className="studio-button studio-button--soft" style={{ padding:'8px 10px', fontSize:10 }}>Not now</button></div></div>}

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildLearningSummary, buildRunbookCheckpoints, canPromoteLearning, getNextMeaningfulAction } from '../src/lib/campaignMomentum.js'
+import { buildRunbookExportData } from '../src/lib/campaignRunbook.js'
 
 const brand = { id:'brand-1', name:'Sample Brand', brand_dna:{ voice:'Specific', visualDirection:'Editorial', proofPoints:'Verified product fact', restrictedClaims:'No guarantees' } }
 const product = { id:'product-1', name:'Sample Product', description:'Helps an operator organize campaign work.', audience:'Founders', offer_text:'Explore the workflow', source_facts:{ publicListing:'verified' } }
@@ -118,4 +119,19 @@ test('No token, route, local fake run, or simulated success fields can advance a
   const baseline = checkpoints({ mediaAssets:[], reviews:[], experiments:[], memoryEvents:[] })
   const injected = buildRunbookCheckpoints({ brand, product, campaign, concepts:[concept], campaignPosts:[], mediaAssets:[], reviews:[], experiments:[], memoryEvents:[], learningStatements:[], tokensSpent:9999, localRun:{ status:'success' }, simulatedSuccess:true, pageVisits:100 })
   assert.deepEqual(injected.map(item => item.status), baseline.map(item => item.status))
+})
+
+test('Runbook export preserves scoped evidence and never invents a performance result', () => {
+  const exported = buildRunbookExportData({
+    runbook:{ id:'runbook-1', workspace_id:'workspace-1', product_id:product.id, campaign_id:campaign.id, status:'active', created_at:'2026-09-24T00:00:00.000Z', updated_at:'2026-09-24T00:00:00.000Z' },
+    product, brand, campaign, concepts:[concept], campaignPosts:[{ id:'post-1', platform:'instagram', content:'Review-only post', status:'pending' }], mediaAssets:completedAssets,
+    reviews:completeReviews, experiments:[experiment], reflections:[], learningStatements:[reflection], checkpoints:checkpoints({ reviews:completeReviews, learningStatements:[reflection] }),
+  })
+  assert.equal(exported.export_version, 'flo-campaign-runbook/v1')
+  assert.equal(exported.scope.product_id, product.id)
+  assert.equal(exported.selected_thesis.id, concept.id)
+  assert.equal(exported.review_decisions.length, 2)
+  assert.equal(exported.experiments[0].variants[1].metrics.latest.value, 42)
+  assert.equal(exported.learning_statements[0].next_action, reflection.next_action)
+  assert.equal(exported.campaign_posts[0].status, 'pending')
 })

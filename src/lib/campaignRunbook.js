@@ -1,6 +1,6 @@
-import { supabase } from '../supabase'
-import { recordMemoryEvent } from './creativeMemory'
-import { buildRunbookCheckpoints, buildLearningSummary, getNextMeaningfulAction } from './campaignMomentum'
+import { supabase } from '../supabase.js'
+import { recordMemoryEvent } from './creativeMemory.js'
+import { buildRunbookCheckpoints, buildLearningSummary, getNextMeaningfulAction } from './campaignMomentum.js'
 
 const one = async query => {
   const { data, error } = await query
@@ -8,14 +8,88 @@ const one = async query => {
   return data
 }
 
-export async function ensureCampaignRunbook({ workspaceId, userId, productId, campaignId }) {
+async function getRunbookDeletionMarker({ workspaceId, userId, productId, campaignId }) {
+  if (!workspaceId || !userId || !productId || !campaignId) return null
+  return one(supabase.from('campaign_runbook_deletions').select('*')
+    .eq('workspace_id', workspaceId).eq('user_id', userId).eq('product_id', productId).eq('campaign_id', campaignId).maybeSingle())
+}
+
+export async function ensureCampaignRunbook({ workspaceId, userId, productId, campaignId, recreate = false }) {
   if (!workspaceId || !userId || !productId || !campaignId) throw new Error('A workspace, owner, product, and campaign are required for a Campaign Runbook.')
   const existing = await one(supabase.from('campaign_runbooks').select('*').eq('campaign_id', campaignId).maybeSingle())
   if (existing) return existing
+  const deletionMarker = await getRunbookDeletionMarker({ workspaceId, userId, productId, campaignId })
+  if (deletionMarker && !recreate) return null
+  if (deletionMarker && recreate) {
+    await one(supabase.from('campaign_runbook_deletions').delete()
+      .eq('id', deletionMarker.id).eq('workspace_id', workspaceId).eq('user_id', userId))
+  }
   const runbook = await one(supabase.from('campaign_runbooks').insert([{
     workspace_id:workspaceId, user_id:userId, product_id:productId, campaign_id:campaignId, status:'active',
   }]).select().single())
+  if (recreate) await recordMemoryEvent({ userId, productId, campaignId, eventType:'runbook_recreated', attributes:{ runbookId:runbook.id }, note:'The operator created a new Campaign Runbook after deleting an earlier one.' })
   return runbook
+}
+
+export async function recreateCampaignRunbook({ workspaceId, userId, productId, campaignId }) {
+  return ensureCampaignRunbook({ workspaceId, userId, productId, campaignId, recreate:true })
+}
+
+export async function deleteCampaignRunbook({ runbook }) {
+  if (!runbook?.id || !runbook.workspace_id || !runbook.user_id || !runbook.product_id || !runbook.campaign_id) throw new Error('This Campaign Runbook no longer has enough scope information to delete safely.')
+  const marker = await one(supabase.from('campaign_runbook_deletions').upsert({
+    workspace_id:runbook.workspace_id, user_id:runbook.user_id, product_id:runbook.product_id, campaign_id:runbook.campaign_id, deleted_at:new Date().toISOString(),
+  }, { onConflict:'campaign_id' }).select().single())
+  try {
+    await one(supabase.from('campaign_runbooks').delete().eq('id', runbook.id)
+      .eq('workspace_id', runbook.workspace_id).eq('user_id', runbook.user_id).select().single())
+  } catch (deleteError) {
+    await supabase.from('campaign_runbook_deletions').delete().eq('id', marker.id).eq('workspace_id', runbook.workspace_id).eq('user_id', runbook.user_id)
+    throw deleteError
+  }
+  try {
+    await recordMemoryEvent({ userId:runbook.user_id, productId:runbook.product_id, campaignId:runbook.campaign_id, eventType:'runbook_deleted', attributes:{ deletionMarkerId:marker.id }, note:'The operator deleted this Campaign Runbook. Campaign, assets, posts, and existing review records remain separate.' })
+  } catch {}
+  return marker
+}
+
+export function buildRunbookExportData(context = {}) {
+  const { runbook, product, campaign, brand, concepts = [], campaignPosts = [], mediaAssets = [], reviews = [], experiments = [], reflections = [], learningStatements = [], checkpoints = [] } = context
+  if (!runbook?.id || !campaign?.id) throw new Error('Load a saved Campaign Runbook before exporting it.')
+  const selectedConcept = concepts.find(concept => concept.id === campaign.selected_concept_id) || concepts.find(concept => concept.status === 'selected') || null
+  return {
+    export_version:'flo-campaign-runbook/v1',
+    exported_at:new Date().toISOString(),
+    scope:{ workspace_id:runbook.workspace_id, product_id:runbook.product_id, campaign_id:runbook.campaign_id, runbook_id:runbook.id },
+    runbook:{ status:runbook.status, chosen_focus:runbook.chosen_focus || null, outcome_statement:runbook.outcome_statement || null, created_at:runbook.created_at, updated_at:runbook.updated_at },
+    product:{ id:product?.id || runbook.product_id, name:product?.name || null, description:product?.description || null, audience:product?.audience || null, offer_text:product?.offer_text || null, source_facts:product?.source_facts || product?.sourceFacts || {} },
+    brand:{ id:brand?.id || null, name:brand?.name || null, brand_dna:brand?.brand_dna || brand?.brandDna || {} },
+    campaign:{ id:campaign.id, name:campaign.name || null, objective:campaign.objective || null, platforms:campaign.platforms || [], selected_concept_id:campaign.selected_concept_id || null },
+    selected_thesis:selectedConcept ? { id:selectedConcept.id, title:selectedConcept.title, angle:selectedConcept.angle, hook:selectedConcept.hook, proof:selectedConcept.proof, cta:selectedConcept.cta, visual_recipe:selectedConcept.visual_recipe || {}, script:selectedConcept.script || {} } : null,
+    evidence_backed_stages:checkpoints.map(item => ({ key:item.key, label:item.label, status:item.status, completion_reason:item.completionReason, blocked_reason:item.blockedReason || null, evidence:item.evidence || [] })),
+    campaign_posts:campaignPosts.map(post => ({ id:post.id, platform:post.platform, content:post.content, status:post.status, scheduled_at:post.scheduled_at, concept_id:post.concept_id || null })),
+    creative_family:mediaAssets.map(asset => ({ id:asset.id, kind:asset.kind, asset_url:asset.asset_url, render_status:asset.render_status, campaign_post_id:asset.campaign_post_id || null, concept_id:asset.concept_id || null, change_summary:asset.metadata?.change_summary || null, completed_at:asset.completed_at || null })),
+    review_decisions:reviews.map(review => ({ id:review.id, target_type:review.target_type, target_id:review.media_asset_id || review.campaign_post_id || null, decision:review.decision, reason:review.reason || null, created_at:review.created_at })),
+    experiments:experiments.map(experiment => ({ id:experiment.id, title:experiment.title, hypothesis:experiment.hypothesis, primary_metric:experiment.primary_metric, status:experiment.status, variants:(experiment.experiment_variants || []).map(variant => ({ id:variant.id, label:variant.label, is_control:Boolean(variant.is_control), change_summary:variant.change_summary, hypothesis:variant.hypothesis || null, status:variant.status, metrics:variant.metrics || {} })) })),
+    learning_statements:learningStatements.map(statement => ({ id:statement.id, experiment_id:statement.experiment_id, what_changed:statement.what_changed, evidence_summary:statement.evidence_summary, next_action:statement.next_action, promoted_at:statement.promoted_at || null, created_at:statement.created_at, updated_at:statement.updated_at })),
+    reflections:reflections.map(reflection => ({ id:reflection.id, kind:reflection.kind, prompt:reflection.prompt, response:reflection.response, created_at:reflection.created_at })),
+  }
+}
+
+export function downloadRunbookExport(context = {}) {
+  const payload = buildRunbookExportData(context)
+  const title = String(payload.campaign?.name || payload.product?.name || 'campaign-runbook')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'campaign-runbook'
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${title}-runbook.json`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+  return payload
 }
 
 export async function listCampaignRunbooks({ workspaceId, userId, productId }) {
@@ -93,8 +167,9 @@ export async function promoteLearningToCreativeMemory({ runbook, learningStateme
 
 export async function loadCampaignRunbookContext({ workspaceId, userId, productId, campaignId }) {
   if (!workspaceId || !userId || !productId || !campaignId) return null
-  const [runbook, campaign, product, concepts, posts, assets, reviews, experiments, reflections, learningStatements, memoryEvents] = await Promise.all([
+  const [runbook, deletionMarker, campaign, product, concepts, posts, assets, reviews, experiments, reflections, learningStatements, memoryEvents] = await Promise.all([
     one(supabase.from('campaign_runbooks').select('*').eq('campaign_id', campaignId).maybeSingle()),
+    getRunbookDeletionMarker({ workspaceId, userId, productId, campaignId }),
     one(supabase.from('campaigns').select('*').eq('id', campaignId).eq('workspace_id', workspaceId).eq('user_id', userId).maybeSingle()),
     one(supabase.from('products').select('*').eq('id', productId).eq('workspace_id', workspaceId).eq('user_id', userId).maybeSingle()),
     one(supabase.from('campaign_concepts').select('*').eq('campaign_id', campaignId).eq('user_id', userId).order('created_at')),
@@ -109,7 +184,7 @@ export async function loadCampaignRunbookContext({ workspaceId, userId, productI
   const campaignReflections = (reflections || []).filter(reflection => reflection.runbook_id === runbook?.id)
   const brand = campaign?.brand_id ? await one(supabase.from('brands').select('*').eq('id', campaign.brand_id).eq('user_id', userId).maybeSingle()) : null
   const checkpoints = buildRunbookCheckpoints({ brand, product, campaign, concepts, campaignPosts:posts, mediaAssets:assets, reviews, experiments, memoryEvents, reflections:campaignReflections, learningStatements, runbook })
-  return { runbook, brand, product, campaign, concepts:concepts || [], campaignPosts:posts || [], mediaAssets:assets || [], reviews:reviews || [], experiments:experiments || [], reflections:campaignReflections, learningStatements:learningStatements || [], memoryEvents:memoryEvents || [], checkpoints, nextAction:getNextMeaningfulAction({ checkpoints, campaign, experiments, runbook }) }
+  return { runbook, runbookDeletedAt:deletionMarker?.deleted_at || null, brand, product, campaign, concepts:concepts || [], campaignPosts:posts || [], mediaAssets:assets || [], reviews:reviews || [], experiments:experiments || [], reflections:campaignReflections, learningStatements:learningStatements || [], memoryEvents:memoryEvents || [], checkpoints, nextAction:getNextMeaningfulAction({ checkpoints, campaign, experiments, runbook }) }
 }
 
 export async function loadPortfolioMomentumOverview({ workspaceId, userId, apps }) {
