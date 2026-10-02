@@ -16,6 +16,8 @@ npm run build
 
 The unit suite covers product truth, creative thesis, creative family, review, controlled experiment, verified learning, next-action selection, learning summaries, runbook export structure, and pause/archive state handling. Its fixtures contain no calls to AI, Stripe, App Store Connect, provider APIs, or social APIs.
 
+Optional TypeSafe / Jev decision support is tested separately with deterministic request/response fixtures. A Jev decision can surface a claim, proof, audience, visual, CTA, or controlled-test review priority, but must never publish, spend Flo tokens, write campaign progress, or replace human claim review.
+
 ## Manual acceptance loop
 
 A signed-in operator must be able to select a portfolio app, confirm product facts and Brand DNA, create a campaign, select and edit a thesis, optionally save a free deterministic thesis starter, attach two completed variants with change summaries, save a review decision, create a control/challenger experiment, record sourced numeric observations, save a Learning Statement, explicitly promote it to Creative Memory, inspect the completed runbook, export its evidence as JSON, and archive/reopen it. A destructive-delete QA pass must confirm the warning, preserve the separate campaign/posts/assets/product records, and allow an operator to create a fresh blank runbook only by explicit action.
