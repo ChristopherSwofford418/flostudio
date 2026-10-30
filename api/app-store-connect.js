@@ -107,16 +107,6 @@ async function rpc(name, args, accessToken) {
   return payload
 }
 
-async function privilegedRpc(name, args) {
-  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '')
-  if (!serviceRoleKey) throw apiError('ASC_SECURE_STORAGE_UNAVAILABLE', 'FloStudio secure App Store storage is not configured in production.', 503)
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(args) })
-  const text = await response.text()
-  const payload = text ? (() => { try { return JSON.parse(text) } catch { return null } })() : null
-  if (!response.ok) throw apiError('ASC_DATABASE_ERROR', payload?.message || payload?.hint || 'FloStudio could not access the protected App Store connection.', 500)
-  return payload
-}
-
 async function assertAppStoreAdmin(productId, accessToken) {
   if (!productId) throw apiError('ASC_APP_ID_REQUIRED', 'Select a portfolio app first.')
   await rpc('assert_app_store_connect_admin', { target_product_id:productId }, accessToken)
@@ -124,7 +114,7 @@ async function assertAppStoreAdmin(productId, accessToken) {
 
 async function authorizedVaultRpc(name, args, productId, accessToken) {
   await assertAppStoreAdmin(productId, accessToken)
-  return privilegedRpc(name, args)
+  return rpc(name, args, accessToken)
 }
 
 async function appleRequest(path, token, { method = 'GET', body } = {}) {
@@ -143,17 +133,11 @@ async function appleRequest(path, token, { method = 'GET', body } = {}) {
   return payload
 }
 
-function serviceRoleKey() {
-  const value = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '')
-  if (!value) throw apiError('ASC_SECURE_STORAGE_UNAVAILABLE', 'FloStudio secure App Store storage is not configured in production.', 503)
-  return value
-}
-
-async function serviceRequest(path, { method = 'GET', body, headers = {} } = {}) {
-  const key = serviceRoleKey()
+async function authenticatedDataRequest(path, accessToken, { method = 'GET', body, headers = {} } = {}) {
+  if (!accessToken) throw apiError('AUTH_REQUIRED', 'Sign in to FloStudio before managing App Store Connect.', 401)
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     method,
-    headers: { apikey:key, Authorization:`Bearer ${key}`, ...headers },
+    headers: { apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${accessToken}`, ...headers },
     ...(body === undefined ? {} : { body }),
   })
   const text = await response.text()
@@ -232,14 +216,14 @@ function sanitizeContentType(value, kind) {
   return kind === 'video' ? 'video/mp4' : 'image/jpeg'
 }
 
-async function mediaAlreadyImported({ productId, assetId, placementId }) {
+async function mediaAlreadyImported({ productId, assetId, placementId, accessToken }) {
   const params = new URLSearchParams({ select:'id,asset_url,storage_path', product_id:`eq.${productId}`, asc_asset_id:`eq.${assetId}`, asc_placement_id:`eq.${placementId}`, limit:'1' })
-  const rows = await serviceRequest(`/rest/v1/media_assets?${params}`)
+  const rows = await authenticatedDataRequest(`/rest/v1/media_assets?${params}`, accessToken)
   return Array.isArray(rows) ? rows[0] || null : null
 }
 
-async function importOneAppleProductionAsset({ candidate, productId, workspaceId, userId }) {
-  const existing = await mediaAlreadyImported({ productId, assetId:candidate.id, placementId:candidate.placement.id })
+async function importOneAppleProductionAsset({ candidate, productId, workspaceId, userId, accessToken }) {
+  const existing = await mediaAlreadyImported({ productId, assetId:candidate.id, placementId:candidate.placement.id, accessToken })
   if (existing) return { status:'already_imported', candidate, asset:existing }
   const remoteUrl = candidate.kind === 'video' ? candidate.videoUrl : candidate.imageUrl
   if (!remoteUrl) throw apiError('ASC_MEDIA_URL_MISSING', 'Apple did not return an importable media URL for this approved asset.', 409)
@@ -258,10 +242,10 @@ async function importOneAppleProductionAsset({ candidate, productId, workspaceId
   const extension = extensionForImportedMedia(candidate, contentType)
   const path = `${userId}/app-store-connect/${productId}/${candidate.kind}-${safeFileStem(candidate.fileName, candidate.id)}-${candidate.id}-${candidate.placement.id}.${extension}`
   const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/')
-  await serviceRequest(`/storage/v1/object/marketing-assets/${encodedPath}`, { method:'POST', body:bytes, headers:{ 'Content-Type':contentType, 'x-upsert':'false' } })
+  await authenticatedDataRequest(`/storage/v1/object/marketing-assets/${encodedPath}`, accessToken, { method:'POST', body:bytes, headers:{ 'Content-Type':contentType, 'x-upsert':'false' } })
   const assetUrl = `${SUPABASE_URL}/storage/v1/object/public/marketing-assets/${encodedPath}`
   try {
-    const rows = await serviceRequest('/rest/v1/media_assets', {
+    const rows = await authenticatedDataRequest('/rest/v1/media_assets', accessToken, {
       method:'POST',
       body:JSON.stringify({
         user_id:userId,
@@ -299,7 +283,7 @@ async function importOneAppleProductionAsset({ candidate, productId, workspaceId
     })
     return { status:'imported', candidate, asset:Array.isArray(rows) ? rows[0] : rows }
   } catch (error) {
-    await serviceRequest('/storage/v1/object/marketing-assets', { method:'DELETE', body:JSON.stringify({ prefixes:[path] }), headers:{ 'Content-Type':'application/json' } }).catch(() => null)
+    await authenticatedDataRequest('/storage/v1/object/marketing-assets', accessToken, { method:'DELETE', body:JSON.stringify({ prefixes:[path] }), headers:{ 'Content-Type':'application/json' } }).catch(() => null)
     throw error
   }
 }
@@ -1052,7 +1036,7 @@ async function connectionFromInput(body, accessToken) {
   validateCredentials({ issuerId, keyId, privateKey, keyType })
   const connection = { product_id: productId, app_store_app_id: appStoreAppId, issuer_id: keyType === 'individual' ? null : issuerId, key_id: keyId, key_type: keyType, vendor_number: vendorNumber }
   const metrics = await syncMetrics({ connection, privateKey })
-  await privilegedRpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: appStoreAppId, target_issuer_id: connection.issuer_id, target_key_id: keyId, target_key_type: keyType, target_vendor_number: vendorNumber, target_encrypted_private_key: encryptPrivateKey(privateKey), target_metrics: metrics, target_status: 'connected', target_error: null })
+  await rpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: appStoreAppId, target_issuer_id: connection.issuer_id, target_key_id: keyId, target_key_type: keyType, target_vendor_number: vendorNumber, target_encrypted_private_key: encryptPrivateKey(privateKey), target_metrics: metrics, target_status: 'connected', target_error: null }, accessToken)
   return { productId, appStoreAppId, metrics }
 }
 
@@ -1064,9 +1048,9 @@ async function connectedAppStoreConnection(productId, accessToken) {
   return connection
 }
 
-async function productMediaScope(productId) {
+async function productMediaScope(productId, accessToken) {
   const params = new URLSearchParams({ select:'id,workspace_id', id:`eq.${productId}`, limit:'1' })
-  const rows = await serviceRequest(`/rest/v1/products?${params}`)
+  const rows = await authenticatedDataRequest(`/rest/v1/products?${params}`, accessToken)
   const product = Array.isArray(rows) ? rows[0] : null
   if (!product?.workspace_id) throw apiError('ASC_APP_NOT_FOUND', 'The selected FloStudio portfolio app is unavailable for this import.', 404)
   return product
@@ -1095,7 +1079,7 @@ export default async function handler(req, res) {
       const connection = rows?.[0]
       if (!connection?.encrypted_private_key) throw apiError('ASC_NOT_CONNECTED', 'Connect this app’s App Store Connect key before syncing.', 409)
       const metrics = await syncMetrics({ connection, privateKey: decryptPrivateKey(connection.encrypted_private_key) })
-      await privilegedRpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: connection.app_store_app_id, target_issuer_id: connection.issuer_id, target_key_id: connection.key_id, target_key_type: connection.key_type, target_vendor_number: connection.vendor_number, target_encrypted_private_key: connection.encrypted_private_key, target_metrics: metrics, target_status: 'connected', target_error: null })
+      await rpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: connection.app_store_app_id, target_issuer_id: connection.issuer_id, target_key_id: connection.key_id, target_key_type: connection.key_type, target_vendor_number: connection.vendor_number, target_encrypted_private_key: connection.encrypted_private_key, target_metrics: metrics, target_status: 'connected', target_error: null }, accessToken)
       return res.status(200).json({ success: true, status: 'connected', productId, metrics, syncedAt: new Date().toISOString() })
     }
     if (action === 'list_production_assets') {
@@ -1120,10 +1104,10 @@ export default async function handler(req, res) {
       const candidates = await appStoreProductionAssetCandidates({ connection, token })
       const selected = selectedProductionAssets(candidates, selectedKeys).filter(candidate => candidate.importable)
       if (!selected.length) throw apiError('ASC_MEDIA_SELECTION_STALE', 'The selected Apple media is no longer approved/importable. Refresh the approved-media list and choose again.', 409)
-      const scope = await productMediaScope(productId)
+      const scope = await productMediaScope(productId, accessToken)
       const results = await mapWithConcurrency(selected, 2, async candidate => {
         try {
-          return await importOneAppleProductionAsset({ candidate, productId, workspaceId:scope.workspace_id, userId:user.id })
+          return await importOneAppleProductionAsset({ candidate, productId, workspaceId:scope.workspace_id, userId:user.id, accessToken })
         } catch (error) {
           return { status:'failed', candidate:{ id:candidate.id, placement:candidate.placement, fileName:candidate.fileName, kind:candidate.kind }, error:error.message || 'Import failed.' }
         }
@@ -1146,7 +1130,7 @@ export default async function handler(req, res) {
       if (!connection?.encrypted_private_key) throw apiError('ASC_NOT_CONNECTED', 'Connect this app’s App Store Connect key before adding its Vendor Number.', 409)
       const statusRows = await authorizedVaultRpc('get_app_store_connect_status', { target_product_id:productId }, productId, accessToken)
       const publicConnection = statusRows?.[0]
-      await privilegedRpc('save_app_store_connect_connection', { target_product_id:productId, target_app_store_app_id:connection.app_store_app_id, target_issuer_id:connection.issuer_id, target_key_id:connection.key_id, target_key_type:connection.key_type, target_vendor_number:vendorNumber, target_encrypted_private_key:connection.encrypted_private_key, target_metrics:publicConnection?.metrics || {}, target_status:'connected', target_error:null })
+      await rpc('save_app_store_connect_connection', { target_product_id:productId, target_app_store_app_id:connection.app_store_app_id, target_issuer_id:connection.issuer_id, target_key_id:connection.key_id, target_key_type:connection.key_type, target_vendor_number:vendorNumber, target_encrypted_private_key:connection.encrypted_private_key, target_metrics:publicConnection?.metrics || {}, target_status:'connected', target_error:null }, accessToken)
       return res.status(200).json({ success:true, productId, vendorNumber })
     }
     throw apiError('ASC_ACTION_INVALID', 'FloStudio did not recognize that App Store Connect action.')
