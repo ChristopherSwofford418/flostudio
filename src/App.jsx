@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { supabase } from './supabase'
 import { WorkspaceProvider } from './context/WorkspaceContext.jsx'
+import { identifyFloUser, initializeObservability, resetFloIdentity, trackFloEvent } from './lib/observability'
 import Auth from './pages/Auth.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Compose from './pages/Compose.jsx'
@@ -24,6 +25,19 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [bootMessage, setBootMessage] = useState('Restoring your secure workspace…')
+  const location = useLocation()
+
+  useEffect(() => { initializeObservability() }, [])
+
+  useEffect(() => {
+    if (session?.user) identifyFloUser(session.user)
+    else resetFloIdentity()
+  }, [session?.user?.id])
+
+  useEffect(() => {
+    if (!session?.user || loading) return
+    trackFloEvent('flo_page_viewed', { path:location.pathname, route:location.pathname === '/' ? 'root' : location.pathname.slice(1) })
+  }, [location.pathname, loading, session?.user?.id])
 
   useEffect(() => {
     let active = true

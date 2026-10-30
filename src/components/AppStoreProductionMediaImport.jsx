@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { trackFloEvent } from '../lib/observability'
 
 const selectionKey = (candidate, placement) => `${candidate?.kind || 'image'}:${candidate?.id || ''}:${placement?.id || ''}`
 
@@ -35,6 +36,7 @@ export default function AppStoreProductionMediaImport({ productId, appName, requ
     try {
       const response = await request({ action:'list_production_assets', productId })
       const next = response.candidates || []
+      trackFloEvent('app_store_production_media_discovered', { product_id:productId, candidate_count:next.length })
       setState(current => ({ ...current, loading:false, candidates:next, selected:[], message:next.length ? `${next.length} approved production media placement${next.length === 1 ? '' : 's'} found. Choose what to copy into ${appName || 'this app'}’s Creative Lab.` : 'Apple returned no media that is both APPROVED and placed on a PARENT_APPROVED App Store surface.', error:'' }))
     } catch (error) {
       setState(current => ({ ...current, loading:false, error:error.message || 'FloStudio could not read approved App Store media.', message:'' }))
@@ -50,6 +52,7 @@ export default function AppStoreProductionMediaImport({ productId, appName, requ
     setState(current => ({ ...current, importing:true, error:'', message:'Copying selected Apple-approved media into this app’s Creative Lab only…', finished:false }))
     try {
       const response = await request({ action:'import_production_assets', productId, selectedKeys:state.selected })
+      trackFloEvent('app_store_production_media_imported', { product_id:productId, selected_count:state.selected.length, imported_count:response.imported || 0, already_imported_count:response.alreadyImported || 0, failed_count:response.failed || 0 })
       const pieces = []
       if (response.imported) pieces.push(`${response.imported} imported`)
       if (response.alreadyImported) pieces.push(`${response.alreadyImported} already in library`)
