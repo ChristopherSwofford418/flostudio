@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { useWorkspace } from '../context/WorkspaceContext'
-import { ensurePersonalWorkspace, savePortfolioApp } from '../lib/portfolio'
+import { ensurePersonalWorkspace, listPortfolioApps, savePortfolioApp, setPortfolioArchiveStatus } from '../lib/portfolio'
 import { refreshPortfolioAppIntelligence } from '../lib/appStoreIntelligence'
 import { runMonthlyAutopilotForApp } from '../lib/monthlyAutopilot'
 import { supabase } from '../supabase'
@@ -64,8 +64,22 @@ export default function Portfolio() {
   const [autopilotReport, setAutopilotReport] = useState(null)
   const [intelligenceRefresh, setIntelligenceRefresh] = useState({ running:false, progress:'', report:null })
   const [momentumOverview, setMomentumOverview] = useState([])
+  const [archivedApps, setArchivedApps] = useState([])
+  const [archiveAction, setArchiveAction] = useState('')
 
   useEffect(() => { setLoading(false) }, [apps])
+
+  const refreshArchivedApps = async () => {
+    if (!workspaceId) { setArchivedApps([]); return }
+    try {
+      const allApps = await listPortfolioApps(workspaceId, { includeArchived:true })
+      setArchivedApps(allApps.filter(app => app.archived))
+    } catch {
+      setArchivedApps([])
+    }
+  }
+
+  useEffect(() => { refreshArchivedApps() }, [workspaceId, apps])
 
   const refreshMomentumOverview = async () => {
     if (!workspaceId || !apps.length) { setMomentumOverview([]); return }
@@ -132,6 +146,21 @@ export default function Portfolio() {
     } catch (error) { setNotice(error.message || 'Could not update autopilot.') }
   }
 
+  const restoreArchivedApp = async app => {
+    setArchiveAction(app.id)
+    setNotice('')
+    try {
+      await setPortfolioArchiveStatus({ productId:app.id, sourceFacts:app.sourceFacts, archived:false })
+      await refreshApps(app.id)
+      await refreshArchivedApps()
+      setNotice(`${app.name} restored to the active portfolio. Its existing history and assets were preserved.`)
+    } catch (error) {
+      setNotice(error.message || `Could not restore ${app.name}.`)
+    } finally {
+      setArchiveAction('')
+    }
+  }
+
   const refreshAllStoreIntelligence = async () => {
     if (!apps.length) { setNotice('Add at least one app before refreshing store intelligence.'); return }
     setIntelligenceRefresh({ running:true, progress:'Preparing App Store refresh…', report:null })
@@ -194,6 +223,8 @@ export default function Portfolio() {
       <section className="studio-panel portfolio-ad-room" style={{ marginTop:16, padding:'18px 20px', display:'grid', gridTemplateColumns:'minmax(0,1fr) auto', gap:18, alignItems:'center', borderColor:'rgba(223,223,223,.34)', background:'linear-gradient(100deg,rgba(223,223,223,.12),rgba(132,132,132,.08))' }}><div><div className="studio-kicker" style={{ color:'var(--signal)' }}>NEW / PORTFOLIO AD ROOM</div><h2 style={{ color:'#ffffff', fontSize:21, letterSpacing:'-.055em', marginTop:5 }}>Create a real campaign visual before your portfolio is full.</h2><p style={{ color:'rgba(240,240,240,.68)', fontSize:12, lineHeight:1.55, marginTop:6, maxWidth:720 }}>The Creative Lab now starts from a proven ad format, campaign objective, and visual lens. Upload a product reference or add an app to make every image product-aware, then send the result to Review Queue.</p></div><button onClick={() => navigate('/images')} className="studio-button" style={{ whiteSpace:'nowrap' }}>Build an ad →</button></section>
 
       <AppStoreConnectPanel apps={apps} initialProductId={connectProductId} />
+
+      {archivedApps.length > 0 && <section className="studio-panel flo-dark-surface" style={{ marginTop:16, padding:18, borderColor:'rgba(223,223,223,.24)' }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', gap:12, flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'var(--signal)' }}>ARCHIVED / NOT IN ACTIVE WORKFLOWS</div><h2 style={{ color:'#ffffff', fontSize:19, marginTop:5 }}>Production-status archive</h2><p style={{ color:'rgba(240,240,240,.62)', fontSize:11.5, lineHeight:1.55, marginTop:6, maxWidth:700 }}>These apps are hidden from active app selection, rendering, and portfolio autopilot. Archiving retains every product record, asset, campaign, research item, and audit field. Restore an app when its production status is confirmed.</p></div><span className="studio-chip" style={{ color:'var(--signal)' }}>{archivedApps.length} archived</span></div><div style={{ display:'grid', gap:8, marginTop:13 }}>{archivedApps.map(app => <article key={app.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', padding:11, border:'1px solid rgba(240,240,240,.12)', background:'rgba(255,255,255,.025)' }}><div><b style={{ color:'#ffffff', fontSize:12 }}>{app.name}</b><div style={{ color:'rgba(240,240,240,.55)', fontSize:10, marginTop:4 }}>{app.sourceFacts?.archiveReason === 'app_store_not_production' ? `App Store status: ${app.sourceFacts?.archivedReleaseStatus || 'not production-ready'}` : `Archive reason: ${app.sourceFacts?.archiveReason || 'owner archive'}`}</div></div><button type="button" onClick={() => restoreArchivedApp(app)} disabled={archiveAction === app.id} className="studio-button studio-button--soft" style={{ padding:'7px 9px', fontSize:10 }}>{archiveAction === app.id ? 'Restoring…' : 'Restore to active portfolio'}</button></article>)}</div></section>}
 
       <section className="portfolio-products" style={{ marginTop:30 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'end', gap:12, marginBottom:12 }}><div><div className="studio-kicker" style={{ color:'var(--vermilion)' }}>YOUR PRODUCTS</div><h2 className="portfolio-products__title" style={{ color:'#ffffff', fontSize:24, letterSpacing:'-.05em', marginTop:5 }}>The portfolio, without the hard-coding.</h2></div><button onClick={openCreate} className="studio-button studio-button--soft">+ Add app</button></div>{portfolioLoading ? <div className="studio-panel" style={{ padding:30, color:'rgba(255,255,255,.65)' }}>Loading your workspace…</div> : apps.length === 0 ? <div className="studio-panel" style={{ padding:34, borderStyle:'dashed', textAlign:'center' }}><div style={{ width:56, height:56, borderRadius:3, margin:'0 auto 15px', background:'var(--signal)', display:'grid', placeItems:'center', color:'var(--ink-deep)', fontSize:24, fontWeight:900, boxShadow:'4px 4px 0 var(--vermilion)' }}>+</div><h3 style={{ color:'#ffffff', fontSize:20, margin:0 }}>Your portfolio starts here.</h3><p style={{ color:'rgba(240,240,240,.6)', fontSize:12.5, lineHeight:1.6, maxWidth:430, margin:'10px auto 18px' }}>Add the first app, URL, screenshots, audience, and brand rules. FloStudio will use only the data you provide.</p><button onClick={openCreate} className="studio-button">Add your first app →</button></div> : <div style={{ display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:14 }}>{apps.map(app => <article key={app.id} className="studio-panel portfolio-product-card" style={{ padding:20, position:'relative', overflow:'hidden', borderLeft:`4px solid ${app.accentColor || 'var(--signal)'}` }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', gap:12 }}><div style={{ display:'flex', gap:11, alignItems:'center' }}><PortfolioAppIcon app={app} /><div><div className="portfolio-app-name" style={{ color:'#ffffff', fontWeight:850, fontSize:16 }}>{app.name}</div><div style={{ color:app.accentColor || 'var(--moss)', fontSize:10.5, marginTop:3, fontWeight:600 }}>{app.category}</div></div></div><button onClick={() => toggleAutopilot(app)} className="studio-chip" style={{ color:app.autopilot?.enabled ? 'var(--signal)':'rgba(240,240,240,.65)', borderColor:app.autopilot?.enabled ? 'rgba(223,223,223,.34)':'rgba(240,240,240,.14)', background:app.autopilot?.enabled ? 'rgba(223,223,223,.09)':'rgba(240,240,240,.04)' }}>{app.autopilot?.enabled ? 'AUTOPILOT ON':'AUTOPILOT OFF'}</button></div><p className="portfolio-app-description" style={{ color:'rgba(240,240,240,.66)', fontSize:12, lineHeight:1.55, minHeight:38, margin:'16px 0 13px' }}>{app.description || 'Add the product story FloStudio should use to create relevant marketing.'}</p>{app.sourceFacts?.storeMetadata?.appStoreId && <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12 }}><span className="studio-chip" style={{ fontSize:9, color:'var(--signal)' }}>APP STORE</span>{app.sourceFacts.storeMetadata.version && <span className="studio-chip" style={{ fontSize:9, color:'rgba(240,240,240,.7)' }}>v{app.sourceFacts.storeMetadata.version}</span>}{app.sourceFacts.storeMetadata.rating != null && <span className="studio-chip" style={{ fontSize:9, color:'rgba(240,240,240,.7)' }}>{Number(app.sourceFacts.storeMetadata.rating).toFixed(1)} ★ · {Number(app.sourceFacts.storeMetadata.ratingCount || 0).toLocaleString()}</span>}<span className="studio-chip" style={{ fontSize:9, color:'rgba(240,240,240,.7)' }}>{app.sourceFacts.storeMetadata.screenshots?.length || 0} screenshots</span></div>}<div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>{(app.autopilot?.platforms || ['instagram']).map(platform => <span key={platform} className="studio-chip" style={{ fontSize:9, color:'var(--teal)' }}>{platformLabel[platform]}</span>)}<span className="studio-chip" style={{ fontSize:9, color:'var(--vermilion)' }}>{app.autopilot?.cadence || 20} posts / month</span></div><>{socialLinksForApp(app).length > 0 && <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginTop:13 }}><span style={{ color:'rgba(240,240,240,.45)', fontSize:10 }}>Quick links</span>{socialLinksForApp(app).map(({ platform, url }) => <a key={platform} href={url} target="_blank" rel="noreferrer" className="studio-chip" style={{ fontSize:9, color:'var(--signal)', textDecoration:'none' }}>{platformLabel[platform]} ↗</a>)}</div>}</><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:18, paddingTop:12, borderTop:'1px solid rgba(240,240,240,.1)' }}><span style={{ color:'rgba(240,240,240,.45)', fontSize:10 }}>Image {app.autopilot?.creativeMix?.image || 70}% · Video {app.autopilot?.creativeMix?.video || 30}%</span><div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}><button onClick={() => { setActiveApp(app); navigate(`/seo?app=${encodeURIComponent(app.id)}`) }} className="studio-button studio-button--soft" style={{ padding:'8px 12px', fontSize:10 }}>SEO plan</button><button onClick={() => runAutopilotNow(app)} className="studio-button" style={{ padding:'8px 12px', fontSize:10 }}>Run Month Plan</button><button onClick={() => openEdit(app)} className="studio-button studio-button--soft" style={{ padding:'8px 12px', fontSize:10 }}>Edit</button></div></div>
 </article>)}</div>}</section>

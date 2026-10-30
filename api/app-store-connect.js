@@ -1,7 +1,8 @@
 import crypto, { sign } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
+import { MAX_APP_STORE_IMPORT_BYTES, buildProductionAssetCandidates, selectedProductionAssets } from './app-store-connect-assets.js'
 
-export const config = { maxDuration: 30 }
+export const config = { maxDuration: 60 }
 
 const SUPABASE_URL = 'https://jtogllurcrxxaguoxeus.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0b2dsbHVyY3J4eGFndW94ZXVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MDE2OTEsImV4cCI6MjEwMjM3NzY5MX0.2BanYaDFNpDMrwaBfz4vSa-CroeOhynemXh7m5YmBYM'
@@ -140,6 +141,167 @@ async function appleRequest(path, token, { method = 'GET', body } = {}) {
     throw apiError('ASC_APPLE_REQUEST_FAILED', detail || fallback, response.status, { providerStatus: response.status })
   }
   return payload
+}
+
+function serviceRoleKey() {
+  const value = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '')
+  if (!value) throw apiError('ASC_SECURE_STORAGE_UNAVAILABLE', 'FloStudio secure App Store storage is not configured in production.', 503)
+  return value
+}
+
+async function serviceRequest(path, { method = 'GET', body, headers = {} } = {}) {
+  const key = serviceRoleKey()
+  const response = await fetch(`${SUPABASE_URL}${path}`, {
+    method,
+    headers: { apikey:key, Authorization:`Bearer ${key}`, ...headers },
+    ...(body === undefined ? {} : { body }),
+  })
+  const text = await response.text()
+  const payload = text ? (() => { try { return JSON.parse(text) } catch { return text } })() : null
+  if (!response.ok) throw apiError('ASC_LIBRARY_STORAGE_FAILED', payload?.message || payload?.error || 'FloStudio could not save this approved App Store media item.', response.status >= 400 && response.status < 500 ? response.status : 500)
+  return payload
+}
+
+async function listApplePages(path, token) {
+  const results = []
+  let next = path
+  let pages = 0
+  while (next && pages < 20) {
+    const payload = await appleRequest(next, token)
+    results.push(...(payload?.data || []))
+    const nextValue = payload?.links?.next || null
+    next = typeof nextValue === 'string' ? (nextValue.startsWith(APPLE_API) ? nextValue.slice(APPLE_API.length) : nextValue) : null
+    pages += 1
+  }
+  return results
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length)
+  let cursor = 0
+  const workers = Array.from({ length:Math.min(Math.max(1, limit), items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++
+      results[index] = await mapper(items[index], index)
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
+
+async function appStoreProductionAssetCandidates({ connection, token }) {
+  const library = await appleRequest(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/assetLibrary`, token)
+  const libraryId = library?.data?.id
+  if (!libraryId) throw apiError('ASC_ASSET_LIBRARY_UNAVAILABLE', 'Apple did not return an App Asset Library for this selected app.', 409)
+  const imageFields = 'category,createdDate,lastModifiedDate,fileName,fileSize,imageAsset,referenceName,specId,state,stateDetails'
+  const videoFields = 'category,createdDate,lastModifiedDate,fileName,fileSize,previewFrameImage,previewFrameTimeCode,referenceName,specId,state,stateDetails,videoAsset'
+  const [images, videos] = await Promise.all([
+    listApplePages(`/v1/appAssetLibraries/${encodeURIComponent(libraryId)}/images?filter[state]=APPROVED&limit=200&fields[appAssetLibraryImages]=${encodeURIComponent(imageFields)}`, token),
+    listApplePages(`/v1/appAssetLibraries/${encodeURIComponent(libraryId)}/videos?filter[state]=APPROVED&limit=200&fields[appAssetLibraryVideos]=${encodeURIComponent(videoFields)}`, token),
+  ])
+  const candidateAssets = [...images.map(asset => ({ kind:'image', asset })), ...videos.map(asset => ({ kind:'video', asset }))]
+  const placementFields = 'mediaType,placementType,placementGroup,createdDate,lastModifiedDate,state,stateDetails,image,video,appCustomProductPageLocalization,appStoreVersionLocalization,appEventLocalization,appStoreVersionExperimentTreatmentLocalization'
+  const placementsByAssetId = Object.fromEntries(await mapWithConcurrency(candidateAssets, 4, async ({ kind, asset }) => {
+    const resource = kind === 'video' ? 'appAssetLibraryVideos' : 'appAssetLibraryImages'
+    const placements = await listApplePages(`/v1/${resource}/${encodeURIComponent(asset.id)}/placements?filter[state]=PARENT_APPROVED&limit=200&fields[appAssetLibraryPlacements]=${encodeURIComponent(placementFields)}`, token)
+    return [asset.id, placements]
+  }))
+  return buildProductionAssetCandidates({ images, videos, placementsByAssetId })
+}
+
+function safeFileStem(value, fallback = 'app-store-media') {
+  const stem = String(value || fallback).replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9-_]+/g, '-').replace(/^-+|-+$/g, '')
+  return stem.slice(0, 72) || fallback
+}
+
+function extensionForImportedMedia(candidate, contentType = '') {
+  const name = String(candidate?.fileName || '')
+  const existing = name.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase()
+  if (existing) return existing === 'jpeg' ? 'jpg' : existing
+  if (/video\/mp4/i.test(contentType)) return 'mp4'
+  if (/video\/quicktime/i.test(contentType)) return 'mov'
+  if (/image\/webp/i.test(contentType)) return 'webp'
+  if (/image\/png/i.test(contentType)) return 'png'
+  return 'jpg'
+}
+
+function sanitizeContentType(value, kind) {
+  const normalized = String(value || '').split(';')[0].trim().toLowerCase()
+  if (kind === 'image' && ['image/jpeg', 'image/png', 'image/webp'].includes(normalized)) return normalized
+  if (kind === 'video' && ['video/mp4', 'video/quicktime', 'video/x-m4v'].includes(normalized)) return normalized
+  return kind === 'video' ? 'video/mp4' : 'image/jpeg'
+}
+
+async function mediaAlreadyImported({ productId, assetId, placementId }) {
+  const params = new URLSearchParams({ select:'id,asset_url,storage_path', product_id:`eq.${productId}`, asc_asset_id:`eq.${assetId}`, asc_placement_id:`eq.${placementId}`, limit:'1' })
+  const rows = await serviceRequest(`/rest/v1/media_assets?${params}`)
+  return Array.isArray(rows) ? rows[0] || null : null
+}
+
+async function importOneAppleProductionAsset({ candidate, productId, workspaceId, userId }) {
+  const existing = await mediaAlreadyImported({ productId, assetId:candidate.id, placementId:candidate.placement.id })
+  if (existing) return { status:'already_imported', candidate, asset:existing }
+  const remoteUrl = candidate.kind === 'video' ? candidate.videoUrl : candidate.imageUrl
+  if (!remoteUrl) throw apiError('ASC_MEDIA_URL_MISSING', 'Apple did not return an importable media URL for this approved asset.', 409)
+  const initialUrl = new URL(remoteUrl)
+  const isAppleMediaHost = host => /(^|\.)(apple\.com|mzstatic\.com)$/i.test(host)
+  if (!isAppleMediaHost(initialUrl.hostname)) throw apiError('ASC_MEDIA_HOST_INVALID', 'FloStudio accepts approved media only from Apple delivery hosts.', 409)
+  const upstream = await fetch(remoteUrl, { redirect:'follow', headers:{ Accept:candidate.kind === 'video' ? 'video/*' : 'image/*' } })
+  if (!upstream.ok) throw apiError('ASC_MEDIA_DOWNLOAD_FAILED', 'Apple did not provide bytes for this approved media asset. Refresh the Apple asset and retry.', upstream.status)
+  const finalUrl = new URL(upstream.url)
+  if (!isAppleMediaHost(finalUrl.hostname)) throw apiError('ASC_MEDIA_HOST_INVALID', 'FloStudio accepts approved media only from Apple delivery hosts.', 409)
+  const contentLength = Number(upstream.headers.get('content-length') || 0)
+  if (Number.isFinite(contentLength) && contentLength > MAX_APP_STORE_IMPORT_BYTES) throw apiError('ASC_MEDIA_TOO_LARGE', `This approved asset exceeds FloStudio’s ${Math.round(MAX_APP_STORE_IMPORT_BYTES / 1024 / 1024)} MB library limit.`, 413)
+  const bytes = Buffer.from(await upstream.arrayBuffer())
+  if (!bytes.length || bytes.length > MAX_APP_STORE_IMPORT_BYTES) throw apiError('ASC_MEDIA_TOO_LARGE', `This approved asset exceeds FloStudio’s ${Math.round(MAX_APP_STORE_IMPORT_BYTES / 1024 / 1024)} MB library limit.`, 413)
+  const contentType = sanitizeContentType(upstream.headers.get('content-type'), candidate.kind)
+  const extension = extensionForImportedMedia(candidate, contentType)
+  const path = `${userId}/app-store-connect/${productId}/${candidate.kind}-${safeFileStem(candidate.fileName, candidate.id)}-${candidate.id}-${candidate.placement.id}.${extension}`
+  const encodedPath = encodeURIComponent(path).replace(/%2F/g, '/')
+  await serviceRequest(`/storage/v1/object/marketing-assets/${encodedPath}`, { method:'POST', body:bytes, headers:{ 'Content-Type':contentType, 'x-upsert':'false' } })
+  const assetUrl = `${SUPABASE_URL}/storage/v1/object/public/marketing-assets/${encodedPath}`
+  try {
+    const rows = await serviceRequest('/rest/v1/media_assets', {
+      method:'POST',
+      body:JSON.stringify({
+        user_id:userId,
+        workspace_id:workspaceId,
+        product_id:productId,
+        kind:candidate.kind,
+        source:'app_store_connect_import',
+        provider:'app_store_connect',
+        render_status:'ready',
+        asset_url:assetUrl,
+        storage_path:path,
+        thumbnail_url:candidate.kind === 'video' ? candidate.previewUrl || null : null,
+        completed_at:new Date().toISOString(),
+        asc_asset_id:candidate.id,
+        asc_placement_id:candidate.placement.id,
+        metadata:{
+          productAppId:productId,
+          source:'app_store_connect',
+          importedAt:new Date().toISOString(),
+          appleAssetId:candidate.id,
+          applePlacementId:candidate.placement.id,
+          appleAssetState:candidate.state,
+          applePlacementState:candidate.placement.state,
+          placementType:candidate.placement.placementType,
+          placementGroup:candidate.placement.placementGroup,
+          targetSurface:candidate.placement.targetSurface,
+          fileName:candidate.fileName,
+          fileSize:candidate.fileSize,
+          referenceName:candidate.referenceName,
+          specId:candidate.specId,
+          category:candidate.category,
+        },
+      }),
+      headers:{ 'Content-Type':'application/json', Prefer:'return=representation' },
+    })
+    return { status:'imported', candidate, asset:Array.isArray(rows) ? rows[0] : rows }
+  } catch (error) {
+    await serviceRequest('/storage/v1/object/marketing-assets', { method:'DELETE', body:JSON.stringify({ prefixes:[path] }), headers:{ 'Content-Type':'application/json' } }).catch(() => null)
+    throw error
+  }
 }
 
 async function appleBinaryRequest(path, token) {
@@ -894,11 +1056,27 @@ async function connectionFromInput(body, accessToken) {
   return { productId, appStoreAppId, metrics }
 }
 
+async function connectedAppStoreConnection(productId, accessToken) {
+  if (!productId) throw apiError('ASC_APP_ID_REQUIRED', 'Select a portfolio app first.')
+  const rows = await authorizedVaultRpc('get_app_store_connect_connection', { target_product_id:productId }, productId, accessToken)
+  const connection = rows?.[0]
+  if (!connection?.encrypted_private_key) throw apiError('ASC_NOT_CONNECTED', 'Connect this app’s App Store Connect key before importing approved media.', 409)
+  return connection
+}
+
+async function productMediaScope(productId) {
+  const params = new URLSearchParams({ select:'id,workspace_id', id:`eq.${productId}`, limit:'1' })
+  const rows = await serviceRequest(`/rest/v1/products?${params}`)
+  const product = Array.isArray(rows) ? rows[0] : null
+  if (!product?.workspace_id) throw apiError('ASC_APP_NOT_FOUND', 'The selected FloStudio portfolio app is unavailable for this import.', 404)
+  return product
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.setHeader('Allow', ['POST']); return res.status(405).json({ error: `Method ${req.method} Not Allowed` }) }
   try {
     const body = parseBody(req)
-    const { accessToken } = await authenticatedUser(req)
+    const { user, accessToken } = await authenticatedUser(req)
     const action = body.action || 'status'
     if (action === 'status') {
       const productId = String(body.productId || '').trim()
@@ -919,6 +1097,45 @@ export default async function handler(req, res) {
       const metrics = await syncMetrics({ connection, privateKey: decryptPrivateKey(connection.encrypted_private_key) })
       await privilegedRpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: connection.app_store_app_id, target_issuer_id: connection.issuer_id, target_key_id: connection.key_id, target_key_type: connection.key_type, target_vendor_number: connection.vendor_number, target_encrypted_private_key: connection.encrypted_private_key, target_metrics: metrics, target_status: 'connected', target_error: null })
       return res.status(200).json({ success: true, status: 'connected', productId, metrics, syncedAt: new Date().toISOString() })
+    }
+    if (action === 'list_production_assets') {
+      const productId = String(body.productId || '').trim()
+      const connection = await connectedAppStoreConnection(productId, accessToken)
+      const token = createAppleToken({ issuerId:connection.issuer_id, keyId:connection.key_id, privateKey:decryptPrivateKey(connection.encrypted_private_key), keyType:connection.key_type || 'team' })
+      const candidates = await appStoreProductionAssetCandidates({ connection, token })
+      return res.status(200).json({
+        success:true,
+        productId,
+        candidates,
+        importPolicy:'FloStudio shows only Apple APPROVED media placed on a PARENT_APPROVED App Store surface. Selecting an item copies it only into this app’s private Creative Lab library; it never creates a post, draft, review item, schedule, or publication.',
+      })
+    }
+    if (action === 'import_production_assets') {
+      const productId = String(body.productId || '').trim()
+      const selectedKeys = Array.isArray(body.selectedKeys) ? body.selectedKeys.map(value => String(value)).filter(Boolean) : []
+      if (!selectedKeys.length) throw apiError('ASC_MEDIA_SELECTION_REQUIRED', 'Choose at least one approved App Store media item to import.')
+      if (selectedKeys.length > 40) throw apiError('ASC_MEDIA_SELECTION_LIMIT', 'Import up to 40 approved media placements at a time so FloStudio can preserve provenance and import status.', 413)
+      const connection = await connectedAppStoreConnection(productId, accessToken)
+      const token = createAppleToken({ issuerId:connection.issuer_id, keyId:connection.key_id, privateKey:decryptPrivateKey(connection.encrypted_private_key), keyType:connection.key_type || 'team' })
+      const candidates = await appStoreProductionAssetCandidates({ connection, token })
+      const selected = selectedProductionAssets(candidates, selectedKeys).filter(candidate => candidate.importable)
+      if (!selected.length) throw apiError('ASC_MEDIA_SELECTION_STALE', 'The selected Apple media is no longer approved/importable. Refresh the approved-media list and choose again.', 409)
+      const scope = await productMediaScope(productId)
+      const results = await mapWithConcurrency(selected, 2, async candidate => {
+        try {
+          return await importOneAppleProductionAsset({ candidate, productId, workspaceId:scope.workspace_id, userId:user.id })
+        } catch (error) {
+          return { status:'failed', candidate:{ id:candidate.id, placement:candidate.placement, fileName:candidate.fileName, kind:candidate.kind }, error:error.message || 'Import failed.' }
+        }
+      })
+      return res.status(200).json({
+        success:true,
+        productId,
+        imported:results.filter(result => result.status === 'imported').length,
+        alreadyImported:results.filter(result => result.status === 'already_imported').length,
+        failed:results.filter(result => result.status === 'failed').length,
+        results,
+      })
     }
     if (action === 'update_vendor_number') {
       const productId = String(body.productId || '').trim()

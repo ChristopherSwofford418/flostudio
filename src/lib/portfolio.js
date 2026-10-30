@@ -25,7 +25,7 @@ export async function getWorkspaceRole(workspaceId) {
   return data || 'none'
 }
 
-export async function listPortfolioApps(workspaceId) {
+export async function listPortfolioApps(workspaceId, { includeArchived = false } = {}) {
   if (!workspaceId) return []
   const { data, error } = await supabase
     .from('products')
@@ -44,6 +44,7 @@ export async function listPortfolioApps(workspaceId) {
       icon: (product.name || 'A').slice(0, 1).toUpperCase(),
       imageUrl,
       accentColor: facts.accentColor || (imageUrl ? '#ff8769' : '#7b61ff'),
+      archived: Boolean(facts.archived),
       url: product.product_url || '',
       autopilot: facts.autopilot || { enabled:false, cadence:20, platforms:['instagram'], creativeMix:{ image:70, video:30 }, approvalMode:'review' },
       sourceFacts: {
@@ -51,7 +52,7 @@ export async function listPortfolioApps(workspaceId) {
         screenshots: facts.screenshots || facts.screenshotUrls || [],
       },
     }
-  })
+  }).filter(product => includeArchived || !product.archived)
 }
 
 export async function savePortfolioApp({ workspaceId, userId, productId, brandId, name, websiteUrl, description, offerText, audience, category, autopilot, brandDna, sourceFacts }) {
@@ -80,7 +81,21 @@ export async function savePortfolioApp({ workspaceId, userId, productId, brandId
   return data
 }
 
-export async function archivePortfolioApp(productId) {
-  const { error } = await supabase.from('products').update({ source_facts:{ archived:true } }).eq('id', productId)
+export async function setPortfolioArchiveStatus({ productId, sourceFacts = {}, archived, reason = null, releaseStatus = null }) {
+  if (!productId) throw new Error('Select a portfolio app first.')
+  const archiveRecord = archived ? {
+    archived:true,
+    archivedAt:new Date().toISOString(),
+    archiveReason:reason || 'owner_archive',
+    archivedReleaseStatus:releaseStatus || null,
+  } : {
+    archived:false,
+    restoredAt:new Date().toISOString(),
+  }
+  const { error } = await supabase.from('products').update({ source_facts:{ ...sourceFacts, ...archiveRecord } }).eq('id', productId)
   if (error) throw error
+}
+
+export async function archivePortfolioApp(productId, sourceFacts = {}) {
+  return setPortfolioArchiveStatus({ productId, sourceFacts, archived:true })
 }
