@@ -8,7 +8,7 @@ import WorkspaceProviderKey from './WorkspaceProviderKey.jsx'
 
 const navGroups = [
   { label: 'PORTFOLIO', items: [['portfolio', 'My Portfolio', '00']] },
-  { label: 'CREATE', items: [['agent', 'Campaign Engine', '01'], ['images', 'Creative Lab', '02'], ['ai-calendar', 'Campaign Map', '03']] },
+  { label: 'CREATE', items: [['agent', 'Campaign Engine', '01'], ['images', 'Creative Lab', '02'], ['ai-calendar', 'Campaign Map', '03'], ['facebook-kits', 'Facebook Page Kits', 'FB']] },
   { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['experiments', 'Experiments', '05'], ['easy-growth', 'Easy Growth', '06'], ['dashboard', 'Performance', '07'], ['accounts', 'Channels', '08'], ['insights', 'App Insights', '09'], ['seo', 'SEO & ASO', '10']] },
 ]
 
@@ -17,6 +17,7 @@ const pageMeta = {
   '/agent': ['Campaign Engine', 'Turn one product into a connected creative campaign, then render, review, and schedule it.'],
   '/images': ['Creative Lab', 'Generate ad creative built to perform across every placement.'],
   '/ai-calendar': ['Campaign Map', 'Turn content strategy into a complete publishing cadence.'],
+  '/facebook-kits': ['Facebook Page Kits', 'Review-ready, app-specific Facebook page one-pagers and local graphics.'],
   '/pipeline': ['Review Queue', 'Decide, refine, and ship your highest-potential ideas.'],
   '/experiments': ['Experiments', 'Turn creative, listing, and content hypotheses into verified portfolio learning.'],
   '/dashboard': ['Performance', 'Your campaign command center.'],
