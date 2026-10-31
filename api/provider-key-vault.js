@@ -84,6 +84,13 @@ export async function authorizationRpc(name, args, accessToken) {
   return rpcWithKey(name, args, anonymousKey(), `Bearer ${accessToken}`)
 }
 
+// The database functions below independently re-check workspace-admin access from
+// the signed-in JWT. Their only credential output is AES-GCM ciphertext, which this
+// server decrypts with a deployment-only vault key and never returns to the browser.
+export async function workspaceAdminVaultRpc(name, args, accessToken) {
+  return authorizationRpc(name, args, accessToken)
+}
+
 // Credential material is read or changed only through the server's service role after an
 // authorizationRpc check has verified the caller's workspace-admin membership.
 export async function privilegedProviderRpc(name, args) {
@@ -152,7 +159,7 @@ export async function assertOwnedMediaAsset({ workspaceId, productId, mediaAsset
 export async function resolveWorkspaceOpenAIKey({ workspaceId, accessToken }) {
   if (!workspaceId || !accessToken) return null
   await assertWorkspaceAdmin({ workspaceId, accessToken })
-  const rows = await privilegedProviderRpc('get_workspace_openai_provider_credential', { target_workspace_id:workspaceId })
+  const rows = await workspaceAdminVaultRpc('get_workspace_openai_provider_credential', { target_workspace_id:workspaceId }, accessToken)
   const envelope = Array.isArray(rows) ? rows[0]?.encrypted_api_key : null
   return envelope ? decryptProviderKey(envelope) : null
 }
