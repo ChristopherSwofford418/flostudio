@@ -4,6 +4,7 @@ import Layout from '../components/Layout'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { buildFacebookPageGraphicSvg, buildFacebookPageKit, buildFacebookPageOnePagerText } from '../lib/facebookPageKits'
 import { trackFloEvent } from '../lib/observability'
+import FacebookGroupDiscovery from '../components/FacebookGroupDiscovery'
 
 const safeImageUrl = value => {
   const raw = String(value || '').trim()
@@ -153,6 +154,8 @@ export default function FacebookPageKits() {
             <article className="studio-panel" style={{ padding:18 }}><div className="studio-kicker">FACTS + READINESS</div><div style={{ display:'grid', gap:14, marginTop:13 }}><SummaryValue label="Product destination">{kit.destinationUrl ? <a href={kit.destinationUrl} target="_blank" rel="noreferrer" style={{ color:'#5148df', textDecoration:'underline' }}>{kit.destinationUrl}</a> : <span style={{ color:'#a0610c' }}>Add an approved destination in Portfolio.</span>}</SummaryValue><SummaryValue label="Facebook Page reference">{kit.pageUrl ? <a href={kit.pageUrl} target="_blank" rel="noreferrer" style={{ color:'#5148df', textDecoration:'underline' }}>Open existing Page ↗</a> : <span style={{ color:'#7b829b' }}>No Page URL saved. This kit does not create one.</span>}</SummaryValue><SummaryValue label="Approved context">{kit.proofPoints}</SummaryValue><SummaryValue label="Claims to avoid">{kit.restrictedClaims}</SummaryValue><SummaryValue label="Source basis">{kit.sourceNote}</SummaryValue></div></article>
           </aside>
         </section>}
+
+        {selectedApp && <FacebookGroupDiscovery app={selectedApp} workspaceId={selectedApp.workspace_id} />}
 
         <section className="studio-panel" style={{ padding:18 }}><div style={{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'end', flexWrap:'wrap' }}><div><div className="studio-kicker">ALL APP KITS</div><h2 style={{ color:'#20233f', fontSize:20, marginTop:4 }}>A first kit already exists for every production app.</h2></div><p style={{ color:'#737b95', fontSize:11, maxWidth:370 }}>Choose an app to open its own copy and graphic. These are manual, review-first exports only.</p></div><div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:11, marginTop:15 }}>{appKits.map(item => <article key={item.productId} style={{ border:'1px solid #e1e3f1', background:'#fff', borderRadius:12, padding:13, display:'grid', gap:11 }}><div style={{ display:'flex', alignItems:'center', gap:9, minWidth:0 }}><AppArtwork kit={item} size={38} /><div style={{ minWidth:0 }}><b style={{ display:'block', color:'#242643', fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.appName}</b><span style={{ color:'#7b829d', fontSize:10 }}>{item.category}</span></div></div><div style={{ display:'flex', justifyContent:'space-between', gap:7, alignItems:'center' }}><Availability tone={item.graphicAvailable ? 'ready' : 'review'}>{item.graphicAvailable ? 'Graphic ready' : 'Copy ready'}</Availability><button className="studio-button studio-button--soft" onClick={() => chooseApp(apps.find(app => app.id === item.productId))} style={{ padding:'7px 9px', fontSize:9.5 }}>Open kit</button></div></article>)}</div></section>
       </>}

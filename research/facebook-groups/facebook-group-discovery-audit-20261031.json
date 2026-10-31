@@ -1,0 +1,190 @@
+{
+  "collected_at": "2026-10-31",
+  "source": "Public web and direct Facebook Group-page identity review; no login, membership, messages, posts, or publishing.",
+  "total_apps": 25,
+  "total_source_linked_groups": 475,
+  "coverage": [
+    {
+      "app_name": "Auto Wizard",
+      "product_id": "365b3002-e0bc-450d-acd2-44d68976afd9",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "None; 20 unique direct Facebook Group URLs with publicly visible group identity were verified. Groups centered on mechanical diagnosis or safety-critical repair discussions were not included solely on that basis."
+    },
+    {
+      "app_name": "Bible Anew: Verse & Prayer",
+      "product_id": "b664765b-e772-4dfd-b5ae-9c09afbc2a7c",
+      "sourced_groups": 19,
+      "coverage_status": "partial",
+      "partial_reason": "Returned 19 rather than padding to 20. A directly inspected Bible-devotional discussion group labeled Private was excluded, as were candidates whose visible purpose was materially outside Bible reading, Scripture reflection, devotional habits, or Christian prayer. No membership, activity, permission, or quality conclusions are implied."
+    },
+    {
+      "app_name": "Block Your Phone to Study",
+      "product_id": "0cd95c48-dde5-497c-bb65-bc52f5d52200",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": null
+    },
+    {
+      "app_name": "Citation Shield",
+      "product_id": "cf3646a4-3a88-4bd4-9082-f5fa60484b7a",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Groups without a unique direct Facebook Group URL, non-group Facebook links, and groups whose publicly visible identity was not sufficiently related to legal research, legal-document work, legal writing, legal informatics, or legal-support workflows were excluded."
+    },
+    {
+      "app_name": "CivicGlow: Local Good News",
+      "product_id": "e8e2a2ac-ef01-4399-9358-884ad4a19419",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Excluded duplicate links, Facebook posts/pages/search results rather than direct group URLs, and candidates whose visible identity was primarily emergency-, crime-alert-, religious-, or professional-advice-oriented rather than within the stated scope."
+    },
+    {
+      "app_name": "Credential Kit: License Wallet",
+      "product_id": "83556aae-413c-4ba0-a243-a2852b9e0ca9",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "None; 20 unique direct Facebook Group URLs with publicly visible, scope-relevant identities were verified. Groups with only weak or inaccessible identity evidence were not included."
+    },
+    {
+      "app_name": "CreditPath Daily Credit",
+      "product_id": "7cbbf507-c654-4750-8600-8196aba73a7b",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Excluded direct-group candidates when their visible identity was primarily credit repair, debt elimination or negotiation, lending or financing, score monitoring, tax matters, investing-only discussion, commercial processing, unrelated topics, or too vague to support a topical connection. No membership, engagement, activity, posting permission, administrator permission, or joinability assessment was made."
+    },
+    {
+      "app_name": "EquipmentFit: Workout Planner",
+      "product_id": "9ad85752-3b89-44e1-bdf9-0b8ad2fae584",
+      "sourced_groups": 18,
+      "coverage_status": "partial",
+      "partial_reason": "Partial result: 18 direct group pages had sufficiently visible, verifiable group identities. Other search candidates were not included when the accessible direct page did not expose enough identity information to support a credible entry; no entries were added merely to reach 20."
+    },
+    {
+      "app_name": "FlickerTales: Story Quest",
+      "product_id": "e486d68d-7627-4e27-8c5d-660879463195",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "No additional candidates were needed after validating 20 unique direct Facebook Group URLs with visible topical identity evidence."
+    },
+    {
+      "app_name": "GutCheck AI: Know Your Gut",
+      "product_id": "fa2f09f0-f551-40fc-a1f4-2f46db853684",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Excluded unrelated local/community groups and direct group pages whose public identity could not be verified. No login, joining, messaging, posting, invitation, membership questioning, or access-control bypass was performed."
+    },
+    {
+      "app_name": "GymGuard: Equipment Checks",
+      "product_id": "2da0d95f-bd4a-4021-b232-0a6b3b19bfa8",
+      "sourced_groups": 19,
+      "coverage_status": "partial",
+      "partial_reason": "Returned 19 rather than padding to 20: additional direct Facebook candidates inspected were chiefly consumer equipment communities, equipment sales/trade communities, generic coaching groups, or pages whose visible identity did not credibly align with independent gym or fitness-facility equipment-check record keeping. No certification, regulatory-compliance, or repair-management groups were included."
+    },
+    {
+      "app_name": "Jamee: Home Health Organizer",
+      "product_id": "ed9bab3e-897b-47b2-a7ed-ea84b5dad2fe",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Reached the requested cap of 20 unique direct candidates; other results were duplicates, posts, Pages, or lacked enough visible group identity to include."
+    },
+    {
+      "app_name": "LawnSignal",
+      "product_id": "4079d117-d1f9-46bc-b17f-2d801bf8e578",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "None; 20 unique, direct Facebook Group URLs with publicly visible lawn-care identities were identified. Candidates lacking a direct /groups/ URL or a sufficiently visible lawn-care identity were not included."
+    },
+    {
+      "app_name": "MadMan Growth",
+      "product_id": "6d19f219-abd1-4418-8da0-6732f7e304c9",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "None; 20 unique, direct Facebook Group URLs with publicly visible group identities were verified and ranked."
+    },
+    {
+      "app_name": "MatterPrep: Legal AI Help",
+      "product_id": "80160c9e-d8f0-4d40-945d-4f05e05354c7",
+      "sourced_groups": 18,
+      "coverage_status": "partial",
+      "partial_reason": "Fewer than 20 candidates met the direct-URL and credible visible-identity threshold after excluding pages oriented primarily to legal professionals, law-firm-led groups, and results that were posts rather than group pages."
+    },
+    {
+      "app_name": "Nimvella: Password Manager",
+      "product_id": "4e4c5f2b-9299-44a1-b3fe-bf5baef497b3",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "None; 20 unique direct Facebook Group candidates were returned. Groups with mismatched identities surfaced through post-level keyword matches were excluded."
+    },
+    {
+      "app_name": "PratoFit AI: Emagrecer",
+      "product_id": "8ed5e17c-0550-4887-84d8-72d7de685672",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Nenhum; foram retornados 20 candidatos únicos, o limite solicitado, com URLs diretas de grupos e identidade temática publicamente visível."
+    },
+    {
+      "app_name": "Prayframe: Prayer Timer",
+      "product_id": "dec8d6d2-4921-43ae-a983-ce7300a24574",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "None; 20 unique direct Facebook Group URLs with credible, publicly visible topical identity were verified. No results were padded with pages, posts, profiles, search links, or invented URLs."
+    },
+    {
+      "app_name": "ResumeFix: AI Resume Builder",
+      "product_id": "5f8ffa78-3f46-46ec-a582-8d0bfa2f667e",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Excluded candidates that resolved to unrelated group identities, were unavailable, or did not show a sufficiently relevant career, résumé, or job-search identity on a public source."
+    },
+    {
+      "app_name": "ScamZero: Scam Detector",
+      "product_id": "b66b86ed-5048-4faa-9bb8-7e2b9b97a430",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Excluded direct URLs that resolved to unrelated local, marketplace, crime, grief, or general-interest groups; excluded private groups from the returned set; and excluded pages whose visible identity did not credibly establish consumer scam-awareness relevance."
+    },
+    {
+      "app_name": "Spotted Safety",
+      "product_id": "6d19bc9b-b62c-4f18-84e3-989bcf14dcee",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Excluded duplicate URLs, posts, Pages, search results, non-group destinations, candidates focused on surveillance or law enforcement, and direct-group candidates with insufficient visible identity evidence or weaker topical fit."
+    },
+    {
+      "app_name": "Syllabus Agent: AI Study Tool",
+      "product_id": "84a35ece-ca39-4eef-9c74-32e4c2f90030",
+      "sourced_groups": 17,
+      "coverage_status": "partial",
+      "partial_reason": "Fewer than 20 were returned because additional search results either resolved to unrelated groups, were school-affiliated, focused on admissions or test preparation, appeared tutoring-oriented, did not expose a credible direct group identity, or were too weakly related to the stated app scope."
+    },
+    {
+      "app_name": "TagSnap: Registration Alert",
+      "product_id": "c4f25006-a9e4-42f6-9160-0bf9f961b2a5",
+      "sourced_groups": 10,
+      "coverage_status": "partial",
+      "partial_reason": "Fewer than 20 candidates met the direct-URL and public-identity requirements. Many indexed results were individual registration posts inside generic local, marketplace, rider, or event groups rather than groups whose visible identity was about vehicle documents, registration, records, or date tracking; those were not used to pad the list."
+    },
+    {
+      "app_name": "Tanakh Anew: Jewish Bible",
+      "product_id": "b6222284-85f4-438f-94f7-aecfe0fb96ca",
+      "sourced_groups": 20,
+      "coverage_status": "complete",
+      "partial_reason": "Excluded non-group URLs, Facebook Pages, posts without a separately credible group identity, duplicate group URLs, and candidates whose visible identity was not sufficiently related to Tanakh/Jewish Bible study, Torah/parsha reflection, or Hebrew/Jewish learning."
+    },
+    {
+      "app_name": "סדר משותף",
+      "product_id": "1ef7f266-feb3-4132-8a61-51e0215bfea4",
+      "sourced_groups": 14,
+      "coverage_status": "partial",
+      "partial_reason": "Fewer than 20 candidates were returned to avoid padding: many search hits were posts in unrelated local, work, finance, real-estate, or technical groups, or had no credible visible group identity connected to Hebrew household organization, chores, routines, or family coordination."
+    }
+  ],
+  "access_labels": {
+    "login may be required": 142,
+    "publicly visible": 325,
+    "privacy not verified": 8
+  },
+  "import_contract": "Direct facebook.com/groups URLs only; rank 1–20 unique per app; app, workspace, and owner IDs fixed to the matched active production app; source links preserved; uncertain privacy remains labeled.",
+  "non_actions": "No group join, admin contact, membership check, message, post, invite, scraping at view time, social-account connection, or publishing action was performed or created."
+}
