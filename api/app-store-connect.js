@@ -439,10 +439,11 @@ function reportCoverageEntry({ report, result, message = null }) {
   return { status:'available', reportName:report.attributes?.name || null, category:report.attributes?.category || null, processingDate:value.processingDate || null, rowCount:value.rows.length, segmentCount:value.segmentCount, message:value.rows.length ? 'Apple returned rows for the most recent daily instance.' : 'Apple returned a completed daily instance with no rows.' }
 }
 
-async function analyticsReportsForApp({ appId, token }) {
+async function analyticsReportsForApp({ appId, token, createIfMissing = true }) {
   const requestResponse = await appleRequest(`/v1/apps/${encodeURIComponent(appId)}/analyticsReportRequests?filter[accessType]=ONGOING&fields[analyticsReportRequests]=accessType,stoppedDueToInactivity`, token)
   const requests = (requestResponse.data || []).filter(item => !item.attributes?.stoppedDueToInactivity)
   if (!requests.length) {
+    if (!createIfMissing) return { status:'requires_existing_analytics_request', message:'Apple has not provided an ongoing Analytics Reports request for this app. FloStudio will not create one automatically.' }
     try {
       const created = await appleRequest('/v1/analyticsReportRequests', token, { method:'POST', body:{ data:{ type:'analyticsReportRequests', attributes:{ accessType:'ONGOING' }, relationships:{ app:{ data:{ type:'apps', id:String(appId) } } } } } })
       return { status:'requested', requestId:created.data?.id || null, requestIds:created.data?.id ? [created.data.id] : [], message:'FloStudio requested ongoing Apple App Analytics reports for this app. Apple says the first report typically arrives in 24–48 hours.' }
@@ -489,9 +490,9 @@ async function newestRowsForReports(reports, token) {
   return { report:chosen.value.report, result:{ status:'fulfilled', value:chosen.value.result } }
 }
 
-async function analyticsMetrics({ connection, token }) {
+async function analyticsMetrics({ connection, token, createReports = true }) {
   try {
-    const reportState = await analyticsReportsForApp({ appId:connection.app_store_app_id, token })
+    const reportState = await analyticsReportsForApp({ appId:connection.app_store_app_id, token, createIfMissing:createReports })
     if (reportState.status !== 'ready') return reportState
     const grouped = {
       downloads:reportState.reports.filter(report => reportMatches(report, name => /download/.test(name))),
@@ -1089,6 +1090,147 @@ async function assertAppStoreReadyForMedia({ connection, token }) {
   return versions
 }
 
+async function assertWorkspaceAppleReportingAdmin(workspaceId, accessToken) {
+  if (!workspaceId) throw apiError('ASC_WORKSPACE_REQUIRED', 'Open a FloStudio workspace before managing Apple reporting.')
+  await rpc('assert_workspace_app_store_reporting_admin', { target_workspace_id:workspaceId }, accessToken)
+}
+
+async function workspaceReportingConnection(workspaceId, accessToken) {
+  await assertWorkspaceAppleReportingAdmin(workspaceId, accessToken)
+  const rows = await rpc('get_workspace_app_store_reporting_connection', { target_workspace_id:workspaceId }, accessToken)
+  const connection = rows?.[0]
+  if (!connection?.encrypted_private_key) throw apiError('ASC_REPORTING_NOT_CONNECTED', 'Connect the workspace Apple Sales and Reports key before pulling portfolio reports.', 409)
+  return connection
+}
+
+async function workspaceReportingStatus(workspaceId, accessToken) {
+  await assertWorkspaceAppleReportingAdmin(workspaceId, accessToken)
+  const rows = await rpc('get_workspace_app_store_reporting_status', { target_workspace_id:workspaceId }, accessToken)
+  return rows?.[0] || null
+}
+
+function validateReportingCredentials({ issuerId, keyId, vendorNumber, privateKey }) {
+  validateCredentials({ issuerId, keyId, privateKey, keyType:'team' })
+  if (!vendorNumber) throw apiError('ASC_VENDOR_NUMBER_REQUIRED', 'Enter the Vendor Number shown in App Store Connect → Reports. Apple requires it for Sales and Trends downloads.')
+  if (!/^[0-9A-Za-z-]{4,64}$/.test(vendorNumber)) throw apiError('ASC_VENDOR_NUMBER_INVALID', 'Enter the Apple Vendor Number exactly as shown in App Store Connect → Reports.')
+}
+
+function appStoreIdentityForProduct(product) {
+  const facts = product?.source_facts || {}
+  const metadata = facts.storeMetadata || {}
+  const appStoreAppId = String(facts.currentProductionAppStoreId || metadata.appStoreId || facts.appId || '').trim()
+  const sku = String(facts.currentProductionSku || metadata.sku || metadata.bundleId || facts.currentProductionBundleId || '').trim()
+  return { appStoreAppId, sku }
+}
+
+async function activeWorkspaceProducts(workspaceId, accessToken) {
+  const params = new URLSearchParams({ select:'id,workspace_id,user_id,name,source_facts', workspace_id:`eq.${workspaceId}`, order:'name.asc', limit:'100' })
+  const products = await authenticatedDataRequest(`/rest/v1/products?${params}`, accessToken)
+  return (Array.isArray(products) ? products : []).filter(product => !Boolean(product?.source_facts?.archived))
+}
+
+async function reportingMetricsForProduct(product, token, datasets) {
+  const { appStoreAppId, sku } = appStoreIdentityForProduct(product)
+  const base = {
+    catalog:{ appStoreAppId:appStoreAppId || null, name:product.name || null, bundleId:sku || null },
+    source:'Apple Sales and Trends Reports API',
+    generatedAt:new Date().toISOString(),
+  }
+  if (!appStoreAppId) {
+    return {
+      status:'pending',
+      metrics:{ ...base, sales:{ status:'missing_app_store_id', message:'This FloStudio app does not have a verified Apple App Store ID, so no Apple sales row can be matched.' }, analytics:{ status:'pending', message:'A verified Apple App Store ID is required before FloStudio can check for already-generated Analytics Reports.' }, availability:{ sales:{ status:'missing_app_store_id', message:'No verified Apple App Store ID is stored.' }, users:{ status:'pending', message:'Apple user metrics require an eligible Analytics Report.' } } },
+    }
+  }
+
+  let sales = null
+  let zeroValueSales = null
+  for (const dataset of datasets) {
+    const summarized = summarizeSalesReport(dataset.rows, { appStoreAppId, sku })
+    if (salesHasValue(summarized)) {
+      sales = { ...summarized, frequency:'MONTHLY', reportDate:dataset.reportDate, checkedPeriods:datasets.map(item => item.reportDate) }
+      break
+    }
+    if (summarized.matchedRows > 0 && !zeroValueSales) zeroValueSales = { ...summarized, frequency:'MONTHLY', reportDate:dataset.reportDate, checkedPeriods:datasets.map(item => item.reportDate), message:'Apple returned a zero-value sales row for this app in the completed report period.' }
+  }
+  sales ||= zeroValueSales || { status:'no_sales_in_recent_periods', message:'Apple returned no matching Sales and Trends rows for this app across the completed monthly report periods.', checkedPeriods:datasets.map(item => item.reportDate) }
+
+  const analytics = await analyticsMetrics({ connection:{ app_store_app_id:appStoreAppId }, token, createReports:false })
+  const subscriptions = analytics?.subscriptions || { status:analytics?.status === 'requires_existing_analytics_request' ? 'pending' : analytics?.status || 'pending', message:analytics?.message || 'Apple has not returned a subscription analytics report for this app.' }
+  const availability = {
+    sales:{ status:sales.status, message:sales.message || (sales.status === 'available' ? `Apple Sales and Trends rows from ${sales.reportDate}.` : 'Apple has not supplied a matching sales row.') },
+    users:{ status:analytics?.status || 'pending', message:analytics?.message || 'Apple user metrics require an eligible Analytics Report.' },
+    downloads:{ status:analytics?.metricAvailability?.downloads || analytics?.status || 'pending', message:analytics?.reportCoverage?.downloads?.message || analytics?.message || 'Apple Downloads report is not available.' },
+    subscriptions:{ status:subscriptions.status || 'pending', message:subscriptions.message || 'Apple subscription report is not available.' },
+    proceeds:{ status:sales.status, message:sales.message || 'Apple Sales and Trends report is not available.' },
+  }
+  return { status:sales.status === 'available' ? 'available' : sales.status === 'unavailable' ? 'unavailable' : 'pending', metrics:{ ...base, sales, analytics, subscriptions, availability } }
+}
+
+async function completedMonthlySalesDatasets({ connection, token }) {
+  const datasets = []
+  let lastNoSalesMessage = ''
+  for (const reportDate of recentSalesReportPeriods()) {
+    const params = new URLSearchParams({
+      'filter[frequency]':'MONTHLY',
+      'filter[reportDate]':reportDate,
+      'filter[reportSubType]':'SUMMARY',
+      'filter[reportType]':'SALES',
+      'filter[vendorNumber]':connection.vendor_number,
+      'filter[version]':'1_0',
+    })
+    try {
+      const rows = parseTabDelimitedReport(await appleBinaryRequest(`/v1/salesReports?${params}`, token))
+      datasets.push({ reportDate, rows })
+    } catch (error) {
+      if (/no sales for the date specified/i.test(error.message || '')) { lastNoSalesMessage = error.message; continue }
+      throw error
+    }
+  }
+  if (!datasets.length && lastNoSalesMessage) {
+    return { datasets:[], message:'Apple has not published a downloadable completed Sales and Trends report in the six most recent report periods.' }
+  }
+  return { datasets, message:null }
+}
+
+async function saveReportingSnapshot({ product, status, metrics, accessToken }) {
+  const body = {
+    product_id:product.id,
+    workspace_id:product.workspace_id,
+    user_id:product.user_id,
+    metrics,
+    status,
+    last_error:null,
+    last_synced_at:new Date().toISOString(),
+    updated_at:new Date().toISOString(),
+  }
+  await authenticatedDataRequest('/rest/v1/app_store_reporting_metrics?on_conflict=product_id', accessToken, {
+    method:'POST',
+    body:JSON.stringify(body),
+    headers:{ 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' },
+  })
+}
+
+async function reportingSnapshotForProduct(productId, accessToken) {
+  const params = new URLSearchParams({ select:'metrics,status,last_error,last_synced_at,updated_at', product_id:`eq.${productId}`, limit:'1' })
+  const rows = await authenticatedDataRequest(`/rest/v1/app_store_reporting_metrics?${params}`, accessToken)
+  return Array.isArray(rows) ? rows[0] || null : null
+}
+
+function mergeReportingMetrics(connection, snapshot, productId) {
+  if (!snapshot?.metrics) return connection
+  const reportingMetrics = snapshot.metrics
+  const baseMetrics = connection?.metrics || {}
+  return {
+    ...(connection || { product_id:productId, status:'connected', reporting_only:true }),
+    status:connection?.status || 'connected',
+    metrics:{ ...baseMetrics, ...reportingMetrics, availability:{ ...(baseMetrics.availability || {}), ...(reportingMetrics.availability || {}) } },
+    reporting_only:!connection,
+    reporting_status:snapshot.status,
+    reporting_last_synced_at:snapshot.last_synced_at,
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.setHeader('Allow', ['POST']); return res.status(405).json({ error: `Method ${req.method} Not Allowed` }) }
   try {
@@ -1099,7 +1241,48 @@ export default async function handler(req, res) {
       const productId = String(body.productId || '').trim()
       if (!productId) throw apiError('ASC_APP_ID_REQUIRED', 'Select a portfolio app first.')
       const status = await authorizedVaultRpc('get_app_store_connect_status', { target_product_id: productId }, productId, accessToken)
-      return res.status(200).json({ success: true, connection: status?.[0] || null })
+      const reportingSnapshot = await reportingSnapshotForProduct(productId, accessToken)
+      return res.status(200).json({ success: true, connection: mergeReportingMetrics(status?.[0] || null, reportingSnapshot, productId) })
+    }
+    if (action === 'reporting_status') {
+      const workspaceId = String(body.workspaceId || '').trim()
+      const [connection, vendorHintRows] = await Promise.all([
+        workspaceReportingStatus(workspaceId, accessToken),
+        rpc('get_workspace_app_store_reporting_vendor_hint', { target_workspace_id:workspaceId }, accessToken),
+      ])
+      return res.status(200).json({ success:true, connection, vendorNumberHint:typeof vendorHintRows === 'string' ? vendorHintRows : null })
+    }
+    if (action === 'reporting_connect') {
+      const workspaceId = String(body.workspaceId || '').trim()
+      const issuerId = String(body.issuerId || '').trim()
+      const keyId = String(body.keyId || '').trim()
+      const vendorNumber = String(body.vendorNumber || '').trim()
+      const privateKey = normalizePrivateKey(body.privateKey)
+      await assertWorkspaceAppleReportingAdmin(workspaceId, accessToken)
+      validateReportingCredentials({ issuerId, keyId, vendorNumber, privateKey })
+      // This validates the supplied Team credential without creating or changing an Apple resource.
+      const validationToken = createAppleToken({ issuerId, keyId, privateKey, keyType:'team' })
+      await appleRequest('/v1/apps?limit=1&fields[apps]=name', validationToken)
+      await rpc('save_workspace_app_store_reporting_connection', { target_workspace_id:workspaceId, target_user_id:user.id, target_issuer_id:issuerId, target_key_id:keyId, target_vendor_number:vendorNumber, target_encrypted_private_key:encryptPrivateKey(privateKey), target_status:'connected', target_error:null }, accessToken)
+      return res.status(200).json({ success:true, status:'connected', keyIdEnding:keyId.slice(-4), message:'Workspace Apple reporting key connected and encrypted server-side. FloStudio did not create an Apple report request.' })
+    }
+    if (action === 'reporting_sync_all') {
+      const workspaceId = String(body.workspaceId || '').trim()
+      const connection = await workspaceReportingConnection(workspaceId, accessToken)
+      const token = createAppleToken({ issuerId:connection.issuer_id, keyId:connection.key_id, privateKey:decryptPrivateKey(connection.encrypted_private_key), keyType:'team' })
+      const products = await activeWorkspaceProducts(workspaceId, accessToken)
+      const reportResponse = await completedMonthlySalesDatasets({ connection, token })
+      const results = await mapWithConcurrency(products, 3, async product => {
+        const result = await reportingMetricsForProduct(product, token, reportResponse.datasets)
+        if (!reportResponse.datasets.length && result.metrics.sales?.status === 'no_sales_in_recent_periods') {
+          result.metrics.sales.message = reportResponse.message || result.metrics.sales.message
+          result.metrics.availability.sales.message = result.metrics.sales.message
+        }
+        await saveReportingSnapshot({ product, ...result, accessToken })
+        return { productId:product.id, status:result.status, salesStatus:result.metrics.sales?.status, analyticsStatus:result.metrics.analytics?.status }
+      })
+      await rpc('save_workspace_app_store_reporting_connection', { target_workspace_id:workspaceId, target_user_id:connection.user_id, target_issuer_id:connection.issuer_id, target_key_id:connection.key_id, target_vendor_number:connection.vendor_number, target_encrypted_private_key:connection.encrypted_private_key, target_status:'connected', target_error:null }, accessToken)
+      return res.status(200).json({ success:true, total:results.length, available:results.filter(item => item.salesStatus === 'available').length, noSales:results.filter(item => item.salesStatus === 'no_sales_in_recent_periods').length, skipped:results.filter(item => item.salesStatus === 'missing_app_store_id').length, results })
     }
     if (action === 'test') {
       const result = await connectionFromInput(body, accessToken)
