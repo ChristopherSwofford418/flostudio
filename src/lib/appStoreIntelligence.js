@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { buildAppStoreListingSync } from './appStoreListing'
 
 async function appStoreConnectRequest(payload) {
   const { data: sessionData } = await supabase.auth.getSession()
@@ -31,33 +32,21 @@ export async function refreshPublicAppStoreProfile(app) {
   const details = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(details.error || 'FloStudio could not refresh the public listing.')
 
-  const facts = existingFacts(app)
-  const incomingFacts = details.sourceFacts || {}
-  const sourceFacts = {
-    ...facts,
-    ...incomingFacts,
-    sourceType:details.sourceType || facts.sourceType || '',
-    source:details.source || facts.source || '',
-    image:details.image || facts.image || facts.artworkUrl || '',
-    screenshots:incomingFacts.screenshots?.length ? incomingFacts.screenshots : (facts.screenshots || facts.screenshotUrls || []),
-    storeMetadata:{ ...(facts.storeMetadata || {}), ...(incomingFacts.storeMetadata || {}) },
-    learnedAt:new Date().toISOString(),
-  }
+  const sync = buildAppStoreListingSync({ app, details })
 
-  const { error } = await supabase.from('products').update({
-    name:details.name || details.title || app.name,
-    product_url:details.url || url,
-    description:details.description || app.description || '',
-    offer_text:details.offerText || app.offer_text || '',
-    audience:details.audience || app.audience || '',
-    source_facts:sourceFacts,
-  }).eq('id', app.id)
+  const { error } = await supabase.from('products').update(sync.productUpdate).eq('id', app.id)
   if (error) throw error
+  const brandId = app.brand_id || app.brandId
+  if (brandId && sync.displayName) {
+    const { error:brandError } = await supabase.from('brands').update({ name:sync.displayName }).eq('id', brandId)
+    if (brandError) throw brandError
+  }
   return {
     status:'refreshed',
     source:details.source || 'Public listing',
-    hasArtwork:Boolean(sourceFacts.image),
-    screenshotCount:sourceFacts.screenshots.length,
+    displayName:sync.displayName,
+    hasArtwork:sync.hasArtwork,
+    screenshotCount:sync.screenshotCount,
   }
 }
 

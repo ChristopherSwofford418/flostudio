@@ -6,6 +6,7 @@ import { belongsToProduct, createMediaAsset, getCurrentMediaUser, listMediaAsset
 import { createCreativeExperimentMatrix, estimateMatrixCells, listCreativeExperimentMatrices, matrixReadiness } from '../lib/creativeExperimentMatrix'
 import { listShortformResearchExamples } from '../lib/shortformResearch'
 import { buildVideoSourceOptions, resolvedVideoReference } from '../lib/videoReferences'
+import { appStoreAssetsFromFacts } from '../lib/appStoreListing'
 import UGCCastingPanel from '../components/UGCCastingPanel.jsx'
 import { castingProfile, voiceProfile } from '../lib/ugcCasting'
 import JevFormatShortlist from '../components/JevFormatShortlist.jsx'
@@ -230,7 +231,7 @@ export default function ImageBank() {
   const appStoreScreenshots = useMemo(() => {
     if (!activeApp) return []
     const facts = activeApp.source_facts || activeApp.sourceFacts || {}
-    const rawScreens = facts.screenshots || facts.screenshotUrls || activeApp.screenshots || []
+    const rawScreens = appStoreAssetsFromFacts({ ...facts, screenshots:facts.screenshots || activeApp.screenshots || [] })
     const icon = facts.image || facts.artworkUrl || activeApp.image_url || null
     const list = [...rawScreens]
     if (icon && !list.includes(icon)) list.unshift(icon)

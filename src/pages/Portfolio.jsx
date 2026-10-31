@@ -148,19 +148,20 @@ export default function Portfolio() {
 
   const refreshAllStoreIntelligence = async () => {
     if (!apps.length) { setNotice('Add at least one app before refreshing store intelligence.'); return }
-    setIntelligenceRefresh({ running:true, progress:'Preparing App Store refresh…', report:null })
+    setIntelligenceRefresh({ running:true, progress:'Preparing App Store Connect title and listing refresh…', report:null })
     setNotice('')
     try {
       const report = await refreshPortfolioAppIntelligence({
         apps,
-        onProgress:({ phase, app, completed, total }) => setIntelligenceRefresh(current => ({ ...current, progress:`${phase === 'public' ? 'Reading public listing' : 'Syncing App Store Connect'} for ${app.name} (${completed + 1}/${total})…` })),
+        onProgress:({ phase, app, completed, total }) => setIntelligenceRefresh(current => ({ ...current, progress:`${phase === 'public' ? 'Pulling current App Store title, words, and visuals' : 'Syncing secured App Store Connect data'} for ${app.name} (${completed + 1}/${total})…` })),
       })
       await refreshApps()
       const publicRefreshes = report.filter(item => item.publicListing?.status === 'refreshed').length
       const privateRefreshes = report.filter(item => item.appStoreConnect?.status === 'refreshed').length
       const privateGaps = report.filter(item => item.appStoreConnect?.status === 'not_connected').length
       setIntelligenceRefresh({ running:false, progress:'', report })
-      setNotice(`Store intelligence refreshed for ${publicRefreshes}/${report.length} public listings. ${privateRefreshes} App Store Connect feeds synced${privateGaps ? `; ${privateGaps} still need a secure connection` : ''}.`)
+      const renamed = report.filter(item => item.publicListing?.displayName && item.publicListing.displayName !== item.name).length
+      setNotice(`App Store listing context refreshed for ${publicRefreshes}/${report.length} apps. ${renamed} Flo Studio name${renamed === 1 ? '' : 's'} aligned to the current App Store Connect production title. ${privateRefreshes} secured App Store Connect feeds synced${privateGaps ? `; ${privateGaps} still need a secure connection` : ''}.`)
     } catch (error) {
       setIntelligenceRefresh(current => ({ ...current, running:false, progress:'', report:current.report }))
       setNotice(error.message || 'Store intelligence refresh could not complete.')

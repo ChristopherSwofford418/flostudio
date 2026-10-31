@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { appStoreAssetsFromFacts } from './appStoreListing'
 
 export async function claimWorkspaceInvitation() {
   const { data, error } = await supabase.rpc('claim_workspace_invitation')
@@ -49,7 +50,7 @@ export async function listPortfolioApps(workspaceId, { includeArchived = false }
       autopilot: facts.autopilot || { enabled:false, cadence:20, platforms:['instagram'], creativeMix:{ image:70, video:30 }, approvalMode:'review' },
       sourceFacts: {
         ...facts,
-        screenshots: facts.screenshots || facts.screenshotUrls || [],
+        screenshots: appStoreAssetsFromFacts(facts),
       },
     }
   }).filter(product => includeArchived || !product.archived)
