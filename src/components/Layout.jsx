@@ -212,14 +212,33 @@ function AgentDrawer({ onClose, activeApp, apps }) {
 export default function Layout({ children, title }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { tokens, tier, unlimited, activeApp, apps, setActiveApp, workspaceLoading } = useWorkspace()
+  const { tokens, tier, unlimited, activeApp, apps, setActiveApp, workspaceId, workspaceLoading } = useWorkspace()
   const [user, setUser] = useState(null)
   const [copilotOpen, setCopilotOpen] = useState(false)
   const [providerKeyOpen, setProviderKeyOpen] = useState(false)
+  const [openAiConnected, setOpenAiConnected] = useState(null)
   const [navCollapsed, setNavCollapsed] = useState(false)
   const [appSwitcherOpen, setAppSwitcherOpen] = useState(false)
   const appSwitcherRef = useRef(null)
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data?.user || null)) }, [])
+  useEffect(() => {
+    let active = true
+    if (location.pathname !== '/images' || !workspaceId) { setOpenAiConnected(null); return () => { active = false } }
+    const loadProviderStatus = async () => {
+      try {
+        const { data:{ session } } = await supabase.auth.getSession()
+        if (!session?.access_token) throw new Error('No active session')
+        const response = await fetch(`/api/provider-key?workspaceId=${encodeURIComponent(workspaceId)}`, { headers:{ Authorization:`Bearer ${session.access_token}` } })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data.error || 'Provider status unavailable')
+        if (active) setOpenAiConnected(Boolean(data.configured))
+      } catch {
+        if (active) setOpenAiConnected(false)
+      }
+    }
+    loadProviderStatus()
+    return () => { active = false }
+  }, [location.pathname, workspaceId])
   useEffect(() => {
     const closeOnOutsideClick = event => { if (!appSwitcherRef.current?.contains(event.target)) setAppSwitcherOpen(false) }
     const closeOnEscape = event => { if (event.key === 'Escape') setAppSwitcherOpen(false) }
@@ -249,7 +268,7 @@ export default function Layout({ children, title }) {
       <div className="flo-sidebar-footer">{!navCollapsed && <div className="flo-fuel"><div className="flo-fuel-label">SIGNAL FUEL</div><div className="flo-fuel-amount"><b>{workspaceLoading ? '…' : unlimited ? '∞' : tokens}</b><span>{workspaceLoading ? 'restoring' : unlimited ? 'unlimited' : 'tokens'}</span></div></div>}<div className="flo-profile" style={{ justifyContent:navCollapsed ? 'center':'flex-start' }}><div className="flo-avatar">{initial}</div>{!navCollapsed && <div className="flo-profile-copy" style={{ minWidth:0, flex:1 }}><div className="flo-profile-email">{user?.email || 'FloStudio user'}</div><div className="flo-profile-tier">{workspaceLoading ? 'restoring workspace' : `${tier} workspace`}</div></div>}{!navCollapsed && <button onClick={logout} className="flo-signout" title="Sign out">→</button>}</div></div>
     </aside>
     <main className={`flo-main ${navCollapsed ? 'is-collapsed' : ''}`}>
-      <header className="flo-topbar"><div className="flo-topbar-main"><span className="flo-topbar-orb" aria-hidden="true"/><div><div className="flo-topbar-crumb">FLOSTUDIO / {meta[0]} <span className="flo-topbar-crumb__app">/ {activeAppName}</span></div><div className="flo-topbar-meta">{meta[1]}</div></div></div><div className="flo-topbar-actions"><button type="button" onClick={openGlobalAppSwitcher} disabled={workspaceLoading} className="flo-global-app-context" title="Switch active product"><span className="flo-global-app-context__dot" style={{ background:activeApp?.accentColor || '#8d85ff' }}/><span className="flo-global-app-context__copy"><small>ACTIVE APP</small><b>{activeAppName}</b><em>{activeAppCategory}</em></span><span className="flo-global-app-context__switch">SWITCH⌄</span></button><span className="signal-stamp"><i/>LIVE SYSTEM</span>{location.pathname === '/images' && <button onClick={() => setProviderKeyOpen(true)} className="flo-topbar-copilot">Connect OpenAI</button>}<button onClick={() => setCopilotOpen(true)} className="flo-topbar-copilot">Flo Operator</button><button onClick={() => navigate('/pricing')} className="flo-topbar-tokens">{workspaceLoading ? 'Restoring…' : unlimited ? 'Unlimited' : `${tokens} tokens`}</button></div></header>
+      <header className="flo-topbar"><div className="flo-topbar-main"><span className="flo-topbar-orb" aria-hidden="true"/><div><div className="flo-topbar-crumb">FLOSTUDIO / {meta[0]} <span className="flo-topbar-crumb__app">/ {activeAppName}</span></div><div className="flo-topbar-meta">{meta[1]}</div></div></div><div className="flo-topbar-actions"><button type="button" onClick={openGlobalAppSwitcher} disabled={workspaceLoading} className="flo-global-app-context" title="Switch active product"><span className="flo-global-app-context__dot" style={{ background:activeApp?.accentColor || '#8d85ff' }}/><span className="flo-global-app-context__copy"><small>ACTIVE APP</small><b>{activeAppName}</b><em>{activeAppCategory}</em></span><span className="flo-global-app-context__switch">SWITCH⌄</span></button><span className="signal-stamp"><i/>LIVE SYSTEM</span>{location.pathname === '/images' && <button onClick={() => setProviderKeyOpen(true)} className="flo-topbar-copilot" title={openAiConnected ? 'Workspace OpenAI key is connected for every selected-app render' : 'Open the workspace OpenAI provider connection'}>{openAiConnected ? 'OpenAI connected' : 'Connect OpenAI'}</button>}<button onClick={() => setCopilotOpen(true)} className="flo-topbar-copilot">Flo Operator</button><button onClick={() => navigate('/pricing')} className="flo-topbar-tokens">{workspaceLoading ? 'Restoring…' : unlimited ? 'Unlimited' : `${tokens} tokens`}</button></div></header>
       <div className="flo-workspace"><div className="flo-workspace-halo" aria-hidden="true"/><div className="flo-workspace-content">{workspaceLoading ? <section className="flo-workspace-loading" role="status" aria-live="polite"><div className="flo-workspace-loading__mark">F</div><div><span>FLOSTUDIO / WORKSPACE</span><b>Restoring your portfolio workspace.</b><p>Your apps, active product, and account access are loading securely.</p></div></section> : children}</div></div>
     </main>
     {copilotOpen && <AgentDrawer onClose={() => setCopilotOpen(false)} activeApp={activeApp} apps={apps} />}
