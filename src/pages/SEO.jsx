@@ -215,9 +215,9 @@ export default function SEO() {
     setArticleLoading(true)
     setArticleError('')
     try {
-      const updated = await updateSeoArticleStatus(article.id, 'queued')
+      const updated = await updateSeoArticleStatus(article.id, 'approved')
       setSeoArticles(current => current.map(item => item.id === updated.id ? updated : item))
-      setArticleNotice('Article moved to Push SEO review. No external site was changed.')
+      setArticleNotice('Article is marked ready for manual handoff. No external site was changed.')
     } catch (error) { setArticleError(error?.message || 'Could not queue this SEO article.') }
     finally { setArticleLoading(false) }
   }

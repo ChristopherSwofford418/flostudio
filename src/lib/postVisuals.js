@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { createMediaAsset } from './mediaAssets'
+import { authenticatedJsonHeaders } from './authenticatedApi'
 
 function extensionFor(mime = '') {
   if (mime.includes('webp')) return 'webp'
@@ -15,10 +16,12 @@ function promptForPost(post) {
 
 export async function generateVisualForPost(post) {
   const prompt = promptForPost(post)
+  const productId = post.campaign?.product_id || post.product_id || null
+  if (!post.workspace_id || !productId) throw new Error('Open this post from its app-scoped Review Queue before generating a visual.')
   const response = await fetch('/api/generate-image', {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify({ prompt, aspectRatio:'4:5', variations:1, stylePreset:'Commercial', textOverlay:'' }),
+    headers:await authenticatedJsonHeaders(),
+    body:JSON.stringify({ prompt, aspectRatio:'4:5', variations:1, stylePreset:'Commercial', textOverlay:'', workspaceId:post.workspace_id, productId }),
   })
   const payload = await response.json()
   if (!response.ok || payload.error) throw new Error(payload.error || 'Visual creative could not be generated.')
@@ -34,7 +37,7 @@ export async function generateVisualForPost(post) {
   const { data: publicData } = supabase.storage.from('marketing-assets').getPublicUrl(storagePath)
   return createMediaAsset({
     workspace_id:post.workspace_id || null,
-    product_id:post.campaign?.product_id || null,
+    product_id:productId,
     kind:'image',
     source:'ai_image',
     provider:'openai_gpt_image',

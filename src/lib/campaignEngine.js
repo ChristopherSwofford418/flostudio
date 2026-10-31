@@ -3,6 +3,7 @@ import { createMediaAsset } from './mediaAssets'
 import { recordMemoryEvent } from './creativeMemory'
 import { ensurePersonalWorkspace } from './portfolio'
 import { ensureCampaignRunbook } from './campaignRunbook'
+import { authenticatedJsonHeaders } from './authenticatedApi'
 
 const platformTimes = { instagram:'09:00', linkedin:'08:00', facebook:'13:00', tiktok:'19:00', twitter:'12:00' }
 
@@ -150,7 +151,7 @@ export async function generateCampaignVariant({ userId, campaign, concept, post,
   const job = jobResult.data
   try {
     await supabase.from('render_jobs').update({ status:'in_progress', started_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', job.id)
-    const response = await fetch('/api/generate-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ prompt, aspectRatio:'4:5', variations:1, stylePreset:'Commercial', textOverlay:'' }) })
+    const response = await fetch('/api/generate-image', { method:'POST', headers:await authenticatedJsonHeaders(), body:JSON.stringify({ prompt, aspectRatio:'4:5', variations:1, stylePreset:'Commercial', textOverlay:'', workspaceId, productId:campaign.product_id }) })
     const payload = await response.json()
     if (!response.ok || payload.error || !payload.images?.[0]?.url) throw new Error(payload.error || 'The image provider returned no creative output.')
     const generatedUrl = payload.images[0].url

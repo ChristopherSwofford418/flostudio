@@ -25,9 +25,11 @@ export async function listMediaAssets(productId) {
 
 export async function createMediaAsset(values) {
   const user = await getCurrentMediaUser()
+  const { user_id: ignoredUserId, ...safeValues } = values || {}
+  if (!safeValues.product_id) throw new Error('Select a portfolio app before saving media.')
   const { data, error } = await supabase
     .from('media_assets')
-    .insert([{ user_id: user.id, ...values }])
+    .insert([{ ...safeValues, user_id: user.id }])
     .select()
     .single()
   if (error) throw error
@@ -35,10 +37,13 @@ export async function createMediaAsset(values) {
 }
 
 export async function updateMediaAsset(id, values) {
+  const user = await getCurrentMediaUser()
+  const { user_id: ignoredUserId, ...safeValues } = values || {}
   const { data, error } = await supabase
     .from('media_assets')
-    .update({ ...values, updated_at: new Date().toISOString() })
+    .update({ ...safeValues, updated_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('user_id', user.id)
     .select()
     .single()
   if (error) throw error
@@ -46,12 +51,14 @@ export async function updateMediaAsset(id, values) {
 }
 
 export async function removeMediaAsset(asset) {
+  const user = await getCurrentMediaUser()
+  if (!asset?.id || asset.user_id && asset.user_id !== user.id) throw new Error('This media asset is not available to your account.')
   if (asset.storage_path) {
     const { error: storageError } = await supabase.storage.from('marketing-assets').remove([asset.storage_path])
     if (storageError) throw storageError
   }
   const paths = [asset.thumbnail_path].filter(Boolean)
   if (paths.length) await supabase.storage.from('marketing-assets').remove(paths)
-  const { error } = await supabase.from('media_assets').delete().eq('id', asset.id)
+  const { error } = await supabase.from('media_assets').delete().eq('id', asset.id).eq('user_id', user.id)
   if (error) throw error
 }

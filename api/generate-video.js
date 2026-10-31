@@ -1,6 +1,6 @@
 import { resolveVideoProvider } from './media-provider.js'
 import sharp from 'sharp'
-import { authenticatedProviderUser, resolveWorkspaceOpenAIKey } from './provider-key-vault.js'
+import { authenticatedProviderUser, assertOwnedMediaAsset, assertWorkspaceProduct, resolveWorkspaceOpenAIKey } from './provider-key-vault.js'
 import { castingDirection } from './ugc-casting.js'
 export const maxDuration = 60
 
@@ -59,7 +59,12 @@ export async function prepareVideoReference(value, size) {
     const contentType = /data:([^;]+)/.exec(meta)?.[1] || 'image/png'
     source = new Blob([Buffer.from(encoded, 'base64')], { type:contentType })
   } else {
-    const response = await fetch(value)
+    const url = new URL(value)
+    const host = url.hostname.toLowerCase()
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') || /^(127\.|0\.|10\.|192\.168\.|169\.254\.)/.test(host)) {
+      throw new Error('The selected video source image must be a public image URL.')
+    }
+    const response = await fetch(url, { redirect:'error' })
     if (!response.ok) throw new Error('The selected video source image could not be retrieved.')
     source = new Blob([await response.arrayBuffer()], { type:response.headers.get('content-type') || 'image/png' })
   }
@@ -84,19 +89,22 @@ export default async function handler(req, res) {
     const action = req.method === 'GET' ? req.query?.action : body.action
     const id = req.method === 'GET' ? req.query?.id : null
     const workspaceId = String((req.method === 'GET' ? req.query?.workspaceId : body.workspaceId) || '').trim()
-    let providerApiKey = null
-    if (workspaceId) {
-      const { accessToken } = await authenticatedProviderUser(req)
-      providerApiKey = await resolveWorkspaceOpenAIKey({ workspaceId, accessToken })
-    }
-    const provider = resolveVideoProvider({ apiKey:providerApiKey || undefined })
+    const productId = String((req.method === 'GET' ? req.query?.productId : body.productId) || '').trim()
+    const mediaAssetId = String((req.method === 'GET' ? req.query?.mediaAssetId : body.mediaAssetId) || '').trim()
+    const { user, accessToken } = await authenticatedProviderUser(req)
+    await assertWorkspaceProduct({ workspaceId, productId, accessToken })
+    const providerApiKey = await resolveWorkspaceOpenAIKey({ workspaceId, accessToken })
+    if (!providerApiKey) return res.status(409).json({ error:'Connect an OpenAI provider key for this workspace before rendering.', code:'WORKSPACE_PROVIDER_NOT_CONNECTED' })
+    const provider = resolveVideoProvider({ apiKey:providerApiKey })
 
     if (req.method === 'GET' && action === 'status') {
       if (!id) return res.status(400).json({ error:'A video render ID is required to check status.' })
+      await assertOwnedMediaAsset({ workspaceId, productId, mediaAssetId, userId:user.id, accessToken, providerJobId:id })
       return res.status(200).json(await provider.retrieve(id))
     }
     if (req.method === 'GET' && action === 'content') {
       if (!id) return res.status(400).json({ error:'A video render ID is required to download content.' })
+      await assertOwnedMediaAsset({ workspaceId, productId, mediaAssetId, userId:user.id, accessToken, providerJobId:id })
       const variant = ['video', 'thumbnail', 'spritesheet'].includes(req.query?.variant) ? req.query.variant : 'video'
       const content = await provider.download(id, variant)
       res.setHeader('Content-Type', content.headers.get('content-type') || (variant === 'video' ? 'video/mp4' : 'image/webp'))
@@ -107,6 +115,7 @@ export default async function handler(req, res) {
 
     const prompt = String(body.prompt || '').trim()
     if (!prompt) return res.status(400).json({ error:'Describe the video ad before starting a render.' })
+    await assertOwnedMediaAsset({ workspaceId, productId, mediaAssetId, userId:user.id, accessToken })
     const size = ALLOWED_SIZES.has(body.size) ? body.size : '720x1280'
     const seconds = ALLOWED_SECONDS.has(String(body.seconds)) ? String(body.seconds) : '8'
     const model = body.quality === 'production' ? 'sora-2-pro' : 'sora-2'

@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { authenticatedProviderUser, assertWorkspaceMember, assertWorkspaceProduct, resolveWorkspaceOpenAIKey } from './provider-key-vault.js'
 
 const blockedHostname = hostname => {
   const h = hostname.toLowerCase()
@@ -48,12 +49,17 @@ const jsonLd = html => {
 }
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 9000) => {
+  const candidate = new URL(url)
+  if (!['http:', 'https:'].includes(candidate.protocol) || candidate.port || candidate.username || candidate.password || blockedHostname(candidate.hostname)) {
+    throw new Error('Only public http or https product pages can be read.')
+  }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetch(url, {
       ...options,
       signal: controller.signal,
+      redirect: 'error',
       headers: {
         'User-Agent': 'Mozilla/5.0 FloStudio Product Intelligence/2.0',
         Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
@@ -190,8 +196,14 @@ export default async function handler(req, res) {
     const targetUrl = String(body.url || '').trim()
     if (!targetUrl) return res.status(400).json({ error: 'Paste a public product or app store URL first.' })
 
+    const workspaceId = String(body.workspaceId || '').trim()
+    const productId = String(body.productId || '').trim()
+    const { accessToken } = await authenticatedProviderUser(req)
+    if (productId) await assertWorkspaceProduct({ workspaceId, productId, accessToken })
+    else await assertWorkspaceMember({ workspaceId, accessToken })
+
     const candidate = new URL(targetUrl)
-    if (!['https:', 'http:'].includes(candidate.protocol) || candidate.port || blockedHostname(candidate.hostname)) {
+    if (!['https:', 'http:'].includes(candidate.protocol) || candidate.port || candidate.username || candidate.password || blockedHostname(candidate.hostname)) {
       return res.status(400).json({ error: 'Enter a public http or https product URL.' })
     }
 
@@ -229,7 +241,8 @@ export default async function handler(req, res) {
       restrictedClaims: 'Avoid unsupported guarantees, fabricated testimonials, and claims not present in the listing.'
     }
 
-    const apiKey = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY
+    let apiKey = null
+    try { apiKey = await resolveWorkspaceOpenAIKey({ workspaceId, accessToken }) } catch {}
     if (apiKey && !body.enrichOnly) {
       try {
         const openai = new OpenAI({ apiKey })

@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { runFloAgent } from '../lib/floAgent'
 import { executeFloCopilotCommand } from '../lib/floCopilotEngine'
+import { createCampaign } from '../lib/campaignEngine'
 import WorkspaceProviderKey from './WorkspaceProviderKey.jsx'
 
 const navGroups = [
@@ -34,6 +35,24 @@ function AgentDrawer({ onClose, activeApp, apps }) {
   const [steps, setSteps] = useState([])
   const historyRef = useRef([])
   const endRef = useRef()
+  const reviewCampaign = async user => {
+    if (!activeApp?.id || !activeApp?.workspace_id || !activeApp?.brand_id) throw new Error('Select a saved portfolio app before sending Copilot drafts to review.')
+    const queueName = 'Flo Copilot · Review queue'
+    const existing = await supabase.from('campaigns').select('id,workspace_id,product_id').eq('user_id', user.id).eq('workspace_id', activeApp.workspace_id).eq('product_id', activeApp.id).eq('name', queueName).maybeSingle()
+    if (existing.error) throw existing.error
+    if (existing.data?.id) return existing.data
+    return createCampaign({
+      userId:user.id,
+      brand:{ id:activeApp.brand_id, workspace_id:activeApp.workspace_id, name:activeApp.brandName || activeApp.name },
+      product:{ id:activeApp.id, workspace_id:activeApp.workspace_id, name:activeApp.name },
+      name:queueName,
+      objective:'Review app-scoped Copilot drafts',
+      audience:activeApp.audience || 'Review before use',
+      offerText:activeApp.offer_text || 'Review product details',
+      platforms:['instagram','facebook','linkedin','tiktok'],
+      brief:{ source:'flo_copilot', reviewOnly:true },
+    })
+  }
   useEffect(() => { try { endRef.current?.scrollIntoView({ behavior: 'smooth' }) } catch {} }, [messages, loading, steps])
 
   const send = async (override) => {
@@ -58,8 +77,11 @@ function AgentDrawer({ onClose, activeApp, apps }) {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Sign in to approve posts.')
+      const campaign = await reviewCampaign(user)
       const { error } = await supabase.from('campaign_posts').insert([{
         user_id: user.id,
+        workspace_id:campaign.workspace_id,
+        campaign_id:campaign.id,
         platform: draft.platform,
         content: draft.content,
         scheduled_at: draft.scheduledAt,
@@ -74,7 +96,7 @@ function AgentDrawer({ onClose, activeApp, apps }) {
           ...msg,
           result: {
             ...msg.result,
-            drafts: msg.result.drafts.map(d => d.id === draft.id ? { ...d, status: 'approved' } : d)
+            drafts: msg.result.drafts.map(d => d.id === draft.id ? { ...d, status: 'saved_to_review' } : d)
           }
         }
       }))
@@ -102,9 +124,12 @@ function AgentDrawer({ onClose, activeApp, apps }) {
       if (!user) throw new Error('Sign in to approve posts.')
       const pendingDrafts = drafts.filter(d => d.status === 'draft')
       if (!pendingDrafts.length) return
+      const campaign = await reviewCampaign(user)
 
       const records = pendingDrafts.map(d => ({
         user_id: user.id,
+        workspace_id:campaign.workspace_id,
+        campaign_id:campaign.id,
         platform: d.platform,
         content: d.content,
         scheduled_at: d.scheduledAt,
@@ -121,7 +146,7 @@ function AgentDrawer({ onClose, activeApp, apps }) {
           ...msg,
           result: {
             ...msg.result,
-            drafts: msg.result.drafts.map(d => ({ ...d, status: 'approved' }))
+            drafts: msg.result.drafts.map(d => ({ ...d, status: d.status === 'draft' ? 'saved_to_review' : d.status }))
           }
         }
       }))
@@ -139,23 +164,23 @@ function AgentDrawer({ onClose, activeApp, apps }) {
           <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:10 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span style={{ fontSize:10, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--signal)', fontWeight:700 }}>Generated Drafts ({m.result.drafts.length})</span>
-              <button onClick={() => approveAllDrafts(index, m.result.drafts)} className="studio-chip" style={{ fontSize:10, padding:'3px 8px', background:'var(--signal)', color:'var(--ink-deep)', border:0, fontWeight:700, cursor:'pointer' }}>Approve All</button>
+              <button onClick={() => approveAllDrafts(index, m.result.drafts)} className="studio-chip" style={{ fontSize:10, padding:'3px 8px', background:'var(--signal)', color:'var(--ink-deep)', border:0, fontWeight:700, cursor:'pointer' }}>Save all to review</button>
             </div>
             {m.result.drafts.map((draft) => (
               <div key={draft.id} style={{ background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:6 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <span style={{ fontSize:9, textTransform:'uppercase', letterSpacing:'.08em', color:'rgba(240,240,240,.65)' }}>{draft.platform} · {new Date(draft.scheduledAt).toLocaleDateString()}</span>
-                  <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, background: draft.status === 'approved' ? 'rgba(155,155,155,.2)' : draft.status === 'rejected' ? 'rgba(104,104,104,.2)' : 'rgba(178,178,178,.2)', color: draft.status === 'approved' ? '#b8b8b8' : draft.status === 'rejected' ? '#8e8e8e' : '#c1c1c1' }}>{draft.status.toUpperCase()}</span>
+                  <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, background: draft.status === 'saved_to_review' ? 'rgba(155,155,155,.2)' : draft.status === 'rejected' ? 'rgba(104,104,104,.2)' : 'rgba(178,178,178,.2)', color: draft.status === 'saved_to_review' ? '#b8b8b8' : draft.status === 'rejected' ? '#8e8e8e' : '#c1c1c1' }}>{draft.status === 'saved_to_review' ? 'PENDING REVIEW' : draft.status.toUpperCase()}</span>
                 </div>
                 {draft.mediaUrl && <img src={draft.mediaUrl} alt="Draft visual" style={{ width:'100%', height:90, objectFit:'cover', borderRadius:4 }} />}
                 <p style={{ fontSize:11.5, color:'#ffffff', margin:0, lineHeight:1.4 }}>{draft.content}</p>
                 {draft.status === 'draft' ? (
                   <div style={{ display:'flex', gap:6, marginTop:4 }}>
-                    <button onClick={() => approveDraft(draft, index)} style={{ flex:1, padding:'5px', background:'var(--signal)', color:'var(--ink-deep)', border:0, borderRadius:4, fontSize:10.5, fontWeight:800, cursor:'pointer' }}>Approve & Ship</button>
+                    <button onClick={() => approveDraft(draft, index)} style={{ flex:1, padding:'5px', background:'var(--signal)', color:'var(--ink-deep)', border:0, borderRadius:4, fontSize:10.5, fontWeight:800, cursor:'pointer' }}>Save to Review Queue</button>
                     <button onClick={() => rejectDraft(draft.id, index)} style={{ padding:'5px 10px', background:'rgba(255,255,255,.08)', color:'#ffffff', border:'1px solid rgba(255,255,255,.15)', borderRadius:4, fontSize:10.5, fontWeight:600, cursor:'pointer' }}>Discard</button>
                   </div>
                 ) : (
-                  <div style={{ fontSize:10, color:'rgba(240,240,240,.6)', fontStyle:'italic' }}>{draft.status === 'approved' ? '✓ Saved to Review Queue and Calendar pipeline' : '✕ Discarded'}</div>
+                  <div style={{ fontSize:10, color:'rgba(240,240,240,.6)', fontStyle:'italic' }}>{draft.status === 'saved_to_review' ? '✓ Saved as pending in this app’s Review Queue' : '✕ Discarded'}</div>
                 )}
               </div>
             ))}

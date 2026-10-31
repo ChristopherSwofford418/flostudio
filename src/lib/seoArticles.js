@@ -66,8 +66,9 @@ export async function createSeoArticle({ workspaceId, productId, destinationId, 
 
 export async function updateSeoArticleStatus(id, status) {
   if (!id) return null
-  const update = { status, updated_at:new Date().toISOString() }
-  if (status === 'queued') update.push_mode = 'approved_push'
+  const allowed = new Set(['draft', 'ready_for_review', 'approved'])
+  if (!allowed.has(status)) throw new Error('SEO articles remain internal until a separately authorized publishing integration is added.')
+  const update = { status, push_mode:'review_only', updated_at:new Date().toISOString() }
   const { data, error } = await supabase.from('seo_articles').update(update).eq('id', id).select().single()
   if (error) throw error
   return data

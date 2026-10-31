@@ -98,6 +98,57 @@ export async function assertWorkspaceAdmin({ workspaceId, accessToken }) {
   return true
 }
 
+export async function assertWorkspaceMember({ workspaceId, accessToken }) {
+  if (!workspaceId) throw providerKeyError('WORKSPACE_REQUIRED', 'Select a workspace before continuing.', 400)
+  const role = await authorizationRpc('get_workspace_role', { target_workspace_id:workspaceId }, accessToken)
+  if (!['owner', 'admin', 'member'].includes(String(role || '').toLowerCase())) {
+    throw providerKeyError('WORKSPACE_ACCESS_REQUIRED', 'This workspace is not available to your FloStudio account.', 403)
+  }
+  return role
+}
+
+export async function assertWorkspaceProduct({ workspaceId, productId, accessToken }) {
+  if (!productId) throw providerKeyError('PRODUCT_REQUIRED', 'Select a portfolio app before continuing.', 400)
+  await assertWorkspaceMember({ workspaceId, accessToken })
+  const params = new URLSearchParams({
+    select:'id,workspace_id,user_id',
+    id:`eq.${productId}`,
+    workspace_id:`eq.${workspaceId}`,
+    limit:'1',
+  })
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/products?${params}`, {
+    headers:{ apikey:anonymousKey(), Authorization:`Bearer ${accessToken}` },
+  })
+  const rows = await response.json().catch(() => [])
+  const product = Array.isArray(rows) ? rows[0] : null
+  if (!response.ok || !product?.id) {
+    throw providerKeyError('PRODUCT_ACCESS_REQUIRED', 'This portfolio app is not available in the selected workspace.', 403)
+  }
+  return product
+}
+
+export async function assertOwnedMediaAsset({ workspaceId, productId, mediaAssetId, userId, accessToken, providerJobId = null }) {
+  if (!mediaAssetId) throw providerKeyError('MEDIA_ASSET_REQUIRED', 'This video render is missing its FloStudio media record.', 400)
+  const params = new URLSearchParams({
+    select:'id,provider_job_id',
+    id:`eq.${mediaAssetId}`,
+    user_id:`eq.${userId}`,
+    workspace_id:`eq.${workspaceId}`,
+    product_id:`eq.${productId}`,
+    limit:'1',
+  })
+  if (providerJobId) params.set('provider_job_id', `eq.${providerJobId}`)
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/media_assets?${params}`, {
+    headers:{ apikey:anonymousKey(), Authorization:`Bearer ${accessToken}` },
+  })
+  const rows = await response.json().catch(() => [])
+  const asset = Array.isArray(rows) ? rows[0] : null
+  if (!response.ok || !asset?.id) {
+    throw providerKeyError('MEDIA_ASSET_ACCESS_REQUIRED', 'This video render is not available in the selected app.', 403)
+  }
+  return asset
+}
+
 export async function resolveWorkspaceOpenAIKey({ workspaceId, accessToken }) {
   if (!workspaceId || !accessToken) return null
   await assertWorkspaceAdmin({ workspaceId, accessToken })

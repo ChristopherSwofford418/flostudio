@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { generateAppSeoBlueprint } from './portfolioSeo'
+import { authenticatedJsonHeaders } from './authenticatedApi'
 
 export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
   const query = (prompt || '').toLowerCase().trim()
@@ -30,19 +31,22 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
     try {
       const response = await fetch('/api/generate-image', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authenticatedJsonHeaders(),
         body: JSON.stringify({
           prompt: `High-converting ad creative for ${appName}. ${query}. Cinematic product hero lighting, editorial typography, professional mockup presentation.`,
           size: '1024x1024',
           quality: 'standard',
           referenceImage: refImage,
-          productName: appName
+          productName: appName,
+          workspaceId:activeApp.workspace_id || activeApp.workspaceId,
+          productId:activeApp.id,
         })
       })
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || 'Ad image generation failed.')
 
-      const generatedImageUrl = data.url || data.imageUrl || refImage
+      const generatedImageUrl = data.images?.[0]?.url
+      if (!generatedImageUrl) throw new Error('The image provider returned no creative output.')
 
       return {
         message: `I generated a store-grounded ad creative for **${appName}** using your App Store reference screenshot! Review the preview below and click **Save to Library** to store it in your Creative Lab.`,
@@ -80,7 +84,6 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
     const storeTitle = facts.title || facts.name || activeApp.name || 'App'
     const storeSubtitle = facts.subtitle || facts.description?.slice(0, 120) || activeApp.description || 'Professional workflow utility.'
     const category = activeApp.category || facts.category || 'Productivity'
-    const rating = facts.rating || '4.9/5'
     const screenshots = facts.screenshots || facts.screenshotUrls || activeApp.screenshots || []
     const previewImage = screenshots[0] || activeApp.imageUrl || facts.image || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60'
 
@@ -88,12 +91,12 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
       {
         platform: 'instagram',
         hook: `Redefine how you approach ${category.toLowerCase()} with ${storeTitle}.`,
-        body: `Rated ${rating} by professionals who demand precision. "${storeSubtitle}" Ready to elevate your workflow? Swipe through to see the difference.\n\n#${appName.replace(/\s+/g, '')} #${category.replace(/\s+/g, '')} #Productivity`
+        body: `${storeSubtitle} Explore the app’s saved product context and decide whether it fits your workflow.\n\n#${appName.replace(/\s+/g, '')} #${category.replace(/\s+/g, '')} #Productivity`
       },
       {
         platform: 'linkedin',
         hook: `The smartest way to streamline ${category.toLowerCase()} in 2026.`,
-        body: `Most teams waste hours on repetitive tasks. ${storeTitle} changes that with intelligent automation and clean design. Built for leaders who value speed and accuracy.\n\nDiscover why top professionals are switching: [Link in bio]\n\n#CareerGrowth #${category} #Leadership`
+        body: `${storeTitle} is built around a clearer approach to ${category.toLowerCase()}. Review the product details and see whether its workflow fits your team.\n\n#CareerGrowth #${category} #Leadership`
       },
       {
         platform: 'instagram',
@@ -103,7 +106,7 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
       {
         platform: 'linkedin',
         hook: `Why ${storeTitle} is becoming the go-to tool for ${category.toLowerCase()}.`,
-        body: `When we built ${storeTitle}, our goal was simple: remove friction and deliver instant results. With verified ${rating} satisfaction, your daily execution just got an upgrade.\n\n#Innovation #${category} #ProfessionalDevelopment`
+        body: `Start with the product’s stated purpose, then evaluate the specific workflow in your own context.\n\n#Innovation #${category} #ProfessionalDevelopment`
       },
       {
         platform: 'instagram',
@@ -126,12 +129,12 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
     })
 
     return {
-      message: `I read the App Store listing for **${appName}** (*${category}* · *${rating}* rating). I have crafted **${drafts.length} store-grounded posts** using its actual features and screenshots. Review them below and click **Approve & Ship** to send them to your pipeline!`,
+      message: `I read the saved product context for **${appName}** (*${category}*). I created **${drafts.length} editable review drafts** grounded in that context and its available screenshots. Review each claim, then save it to the app’s Review Queue.`,
       actionType: 'post_drafts',
       result: {
         appName,
         storeCategory: category,
-        storeRating: rating,
+        storeRating: facts.rating || null,
         drafts
       }
     }
@@ -164,16 +167,9 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
   // Intent: Analytics / Stats / Performance
   if (query.includes('analytic') || query.includes('stat') || query.includes('performance') || query.includes('metric') || query.includes('traffic')) {
     return {
-      message: `Here is the current operational performance summary for **${appName}**:`,
+      message: `Open **Performance** or **App Insights** for **${appName}** to review stored campaign records and verified App Store Connect data. Flo Copilot does not invent reach, conversion, ratings, or performance results.`,
       actionType: 'analytics',
-      result: {
-        appName,
-        activeCampaigns: 4,
-        totalPipelinePosts: 24,
-        storeRating: activeApp.source_facts?.rating || '4.8/5',
-        estimatedReach: '42.5k impressions this month',
-        conversionRate: '3.4% click-to-install'
-      }
+      result: { appName }
     }
   }
 

@@ -5,11 +5,8 @@ import { WorkspaceProvider } from './context/WorkspaceContext.jsx'
 import { identifyFloUser, initializeObservability, resetFloIdentity, trackFloEvent } from './lib/observability'
 import Auth from './pages/Auth.jsx'
 import Dashboard from './pages/Dashboard.jsx'
-import Compose from './pages/Compose.jsx'
-import Calendar from './pages/Calendar.jsx'
 import ImageBank from './pages/ImageBank.jsx'
 import Accounts from './pages/Accounts.jsx'
-import Approve from './pages/Approve.jsx'
 import AgentHQ from './pages/AgentHQ.jsx'
 import AICalendar from './pages/AICalendar.jsx'
 import Pipeline from './pages/Pipeline.jsx'
@@ -90,12 +87,12 @@ export default function App() {
         <Route path="/portfolio" element={session ? <Portfolio /> : <Navigate to="/auth" />} />
         <Route path="/experiments" element={session ? <Experiments /> : <Navigate to="/auth" />} />
         <Route path="/ai-calendar" element={session ? <AICalendar /> : <Navigate to="/auth" />} />
-        {/* Legacy pages */}
-        <Route path="/compose" element={session ? <Compose /> : <Navigate to="/auth" />} />
-        <Route path="/calendar" element={session ? <Calendar /> : <Navigate to="/auth" />} />
+        {/* Legacy URLs remain available but now use the current app-scoped workflows. */}
+        <Route path="/compose" element={session ? <Navigate to="/agent" replace /> : <Navigate to="/auth" />} />
+        <Route path="/calendar" element={session ? <Navigate to="/ai-calendar" replace /> : <Navigate to="/auth" />} />
         <Route path="/images" element={session ? <ImageBank /> : <Navigate to="/auth" />} />
         <Route path="/accounts" element={session ? <Accounts /> : <Navigate to="/auth" />} />
-        <Route path="/approve" element={session ? <Approve /> : <Navigate to="/auth" />} />
+        <Route path="/approve" element={session ? <Navigate to="/pipeline" replace /> : <Navigate to="/auth" />} />
         <Route path="/facebook-kits" element={session ? <FacebookPageKits /> : <Navigate to="/auth" />} />
         <Route path="/dashboard" element={session ? <Dashboard /> : <Navigate to="/auth" />} />
         <Route path="/insights" element={session ? <AppInsights /> : <Navigate to="/auth" />} />

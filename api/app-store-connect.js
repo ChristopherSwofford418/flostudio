@@ -1,6 +1,6 @@
 import crypto, { sign } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
-import { MAX_APP_STORE_IMPORT_BYTES, buildProductionAssetCandidates, selectedProductionAssets } from './app-store-connect-assets.js'
+import { MAX_APP_STORE_IMPORT_BYTES, appIsReadyForDistribution, buildProductionAssetCandidates, selectedProductionAssets } from './app-store-connect-assets.js'
 
 export const config = { maxDuration: 60 }
 
@@ -1056,6 +1056,39 @@ async function productMediaScope(productId, accessToken) {
   return product
 }
 
+async function saveProductionCatalogFacts({ productId, metrics, accessToken }) {
+  const params = new URLSearchParams({ select:'id,source_facts', id:`eq.${productId}`, limit:'1' })
+  const rows = await authenticatedDataRequest(`/rest/v1/products?${params}`, accessToken)
+  const product = Array.isArray(rows) ? rows[0] : null
+  if (!product?.id) throw apiError('ASC_APP_NOT_FOUND', 'The selected FloStudio portfolio app is unavailable for this sync.', 404)
+  const catalog = metrics?.catalog || {}
+  const name = String(catalog.name || '').trim()
+  if (!name) return null
+  const sourceFacts = {
+    ...(product.source_facts || {}),
+    currentProductionTitle:name,
+    currentProductionAppStoreId:catalog.appStoreAppId || null,
+    currentProductionBundleId:catalog.bundleId || null,
+    currentProductionVersion:catalog.latestVersion || null,
+    currentProductionReleaseState:catalog.latestVersionState || null,
+    currentProductionVerifiedAt:new Date().toISOString(),
+  }
+  const updated = await authenticatedDataRequest(`/rest/v1/products?id=eq.${encodeURIComponent(productId)}`, accessToken, {
+    method:'PATCH',
+    body:JSON.stringify({ name, source_facts:sourceFacts, updated_at:new Date().toISOString() }),
+    headers:{ 'Content-Type':'application/json', Prefer:'return=representation' },
+  })
+  return Array.isArray(updated) ? updated[0] || null : updated
+}
+
+async function assertAppStoreReadyForMedia({ connection, token }) {
+  const versions = await listApplePages(`/v1/apps/${encodeURIComponent(connection.app_store_app_id)}/appStoreVersions?limit=200&fields[appStoreVersions]=appStoreState,appVersionState,versionString,releaseDate`, token)
+  if (!appIsReadyForDistribution(versions)) {
+    throw apiError('ASC_APP_NOT_IN_PRODUCTION', 'This app does not currently have an Apple version marked Ready for Sale or Ready for Distribution, so FloStudio will not import its media into the production library.', 409)
+  }
+  return versions
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.setHeader('Allow', ['POST']); return res.status(405).json({ error: `Method ${req.method} Not Allowed` }) }
   try {
@@ -1080,12 +1113,14 @@ export default async function handler(req, res) {
       if (!connection?.encrypted_private_key) throw apiError('ASC_NOT_CONNECTED', 'Connect this app’s App Store Connect key before syncing.', 409)
       const metrics = await syncMetrics({ connection, privateKey: decryptPrivateKey(connection.encrypted_private_key) })
       await rpc('save_app_store_connect_connection', { target_product_id: productId, target_app_store_app_id: connection.app_store_app_id, target_issuer_id: connection.issuer_id, target_key_id: connection.key_id, target_key_type: connection.key_type, target_vendor_number: connection.vendor_number, target_encrypted_private_key: connection.encrypted_private_key, target_metrics: metrics, target_status: 'connected', target_error: null }, accessToken)
-      return res.status(200).json({ success: true, status: 'connected', productId, metrics, syncedAt: new Date().toISOString() })
+      const product = await saveProductionCatalogFacts({ productId, metrics, accessToken })
+      return res.status(200).json({ success: true, status: 'connected', productId, metrics, product, syncedAt: new Date().toISOString() })
     }
     if (action === 'list_production_assets') {
       const productId = String(body.productId || '').trim()
       const connection = await connectedAppStoreConnection(productId, accessToken)
       const token = createAppleToken({ issuerId:connection.issuer_id, keyId:connection.key_id, privateKey:decryptPrivateKey(connection.encrypted_private_key), keyType:connection.key_type || 'team' })
+      await assertAppStoreReadyForMedia({ connection, token })
       const candidates = await appStoreProductionAssetCandidates({ connection, token })
       return res.status(200).json({
         success:true,
@@ -1101,6 +1136,7 @@ export default async function handler(req, res) {
       if (selectedKeys.length > 40) throw apiError('ASC_MEDIA_SELECTION_LIMIT', 'Import up to 40 approved media placements at a time so FloStudio can preserve provenance and import status.', 413)
       const connection = await connectedAppStoreConnection(productId, accessToken)
       const token = createAppleToken({ issuerId:connection.issuer_id, keyId:connection.key_id, privateKey:decryptPrivateKey(connection.encrypted_private_key), keyType:connection.key_type || 'team' })
+      await assertAppStoreReadyForMedia({ connection, token })
       const candidates = await appStoreProductionAssetCandidates({ connection, token })
       const selected = selectedProductionAssets(candidates, selectedKeys).filter(candidate => candidate.importable)
       if (!selected.length) throw apiError('ASC_MEDIA_SELECTION_STALE', 'The selected Apple media is no longer approved/importable. Refresh the approved-media list and choose again.', 409)

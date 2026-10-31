@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:node": "node --test tests/*.mjs",
+    "test:all": "pnpm test && pnpm run test:node"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
@@ -19,6 +22,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.2.11"
+    "vite": "^5.2.11",
+    "vitest": "2.1.9"
   }
 }

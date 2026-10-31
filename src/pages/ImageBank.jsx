@@ -681,6 +681,8 @@ export default function ImageBank() {
 
   const generateImages = async () => {
     if (!prompt.trim() && !referenceImage) { setError('Describe the creative or upload a product image first.'); return }
+    if (!activeApp?.id || !workspaceId) { setError('Select a portfolio app before rendering a creative.'); return }
+    if (!providerConnection.configured) { setError('Connect the workspace image provider before rendering a creative.'); return }
     setGenerating(true); setError(''); setGeneratedResults([]); setHandoffState({ status:'idle', message:'' })
     let chargedTokens = 0
     try {
@@ -695,7 +697,7 @@ export default function ImageBank() {
       const controller = new AbortController()
       const timeout = window.setTimeout(() => controller.abort(), 70000)
       const authHeaders = await providerHeaders()
-      const response = await fetch('/api/generate-image', { method:'POST', signal:controller.signal, headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations:1, referenceImage, creativeRound:nextRound, workspaceId }) }).finally(() => window.clearTimeout(timeout))
+      const response = await fetch('/api/generate-image', { method:'POST', signal:controller.signal, headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations:1, referenceImage, creativeRound:nextRound, workspaceId, productId:activeApp.id }) }).finally(() => window.clearTimeout(timeout))
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
       const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${nextRound}-${index + 1}`, 'image', { source:'ai_image', provider:'openai', prompt:brief, metadata:{ aspectRatio, stylePreset, imageAngle, textOverlay, variation:index + 1, creativeRound:nextRound, concept:image.concept || null, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp?.id || null, hook, proof } })))
@@ -765,7 +767,7 @@ export default function ImageBank() {
             method:'POST',
             signal:controller.signal,
             headers:{ ...authHeaders, 'Content-Type':'application/json' },
-            body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio:recipe.aspectRatio, variations:1, referenceImage, creativeRound:nextRound, workspaceId }),
+            body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio:recipe.aspectRatio, variations:1, referenceImage, creativeRound:nextRound, workspaceId, productId:activeApp.id }),
           }).finally(() => window.clearTimeout(timeout))
           const data = await response.json()
           if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
@@ -887,7 +889,7 @@ export default function ImageBank() {
         metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, actorId, actorName:selectedActor.name, voiceId, voiceStyle:selectedVoice.name, referenceIncluded:Boolean(sourceReference), referenceSource:videoSource?.source || (sourceReference ? 'pinned_reference' : null), referenceName:videoSource?.name || null, storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
       })
       const authHeaders = await providerHeaders()
-      const response = await fetch('/api/generate-video', { method:'POST', headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ ...request, workspaceId }) })
+      const response = await fetch('/api/generate-video', { method:'POST', headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ ...request, workspaceId, productId:activeApp.id, mediaAssetId:renderAsset.id }) })
       const job = await response.json()
       if (!response.ok || job.error) throw new Error(job.error || 'Video render could not be started.')
       const persisted = await updateMediaAsset(renderAsset.id, { provider_job_id:job.id, render_status:job.status || 'queued', metadata:{ ...renderAsset.metadata, providerModel:job.model || null, size:videoFormat, seconds:videoSeconds, quality:videoQuality } })
@@ -908,7 +910,7 @@ export default function ImageBank() {
 
   const completeVideo = async job => {
     const authHeaders = await providerHeaders()
-    const workspaceQuery = `&workspaceId=${encodeURIComponent(workspaceId || '')}`
+    const workspaceQuery = `&workspaceId=${encodeURIComponent(workspaceId || '')}&productId=${encodeURIComponent(job.productAppId || activeApp?.id || '')}&mediaAssetId=${encodeURIComponent(job.mediaAssetId || '')}`
     const [video, thumbnail] = await Promise.all([
       persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=video${workspaceQuery}`, 'ai-video', 'video', { persistRecord:false, requestHeaders:authHeaders, source:'ai_video', provider:'openai', prompt:job.prompt, metadata:{ providerJobId:job.id, role:'completed-video' } }),
       persistRemoteOutput(`/api/generate-video?action=content&id=${encodeURIComponent(job.id)}&variant=thumbnail${workspaceQuery}`, 'ai-video-thumbnail', 'image', { persistRecord:false, requestHeaders:authHeaders, source:'ai_video', provider:'openai', prompt:job.prompt, metadata:{ providerJobId:job.id, role:'video-thumbnail' } }),
@@ -925,7 +927,7 @@ export default function ImageBank() {
     const timer = setTimeout(async () => {
       try {
         const authHeaders = await providerHeaders()
-        const response = await fetch(`/api/generate-video?action=status&id=${encodeURIComponent(videoJob.id)}&workspaceId=${encodeURIComponent(workspaceId || '')}`, { headers:authHeaders })
+        const response = await fetch(`/api/generate-video?action=status&id=${encodeURIComponent(videoJob.id)}&workspaceId=${encodeURIComponent(workspaceId || '')}&productId=${encodeURIComponent(videoJob.productAppId || activeApp?.id || '')}&mediaAssetId=${encodeURIComponent(videoJob.mediaAssetId || '')}`, { headers:authHeaders })
         const status = await response.json()
         if (!response.ok || status.error) throw new Error(status.error || 'Video render status could not be retrieved.')
         const next = { ...videoJob, ...status }

@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import { buildAppStoreListingSync } from './appStoreListing'
+import { authenticatedJsonHeaders } from './authenticatedApi'
 
 async function appStoreConnectRequest(payload) {
   const { data: sessionData } = await supabase.auth.getSession()
@@ -26,8 +27,8 @@ export async function refreshPublicAppStoreProfile(app) {
 
   const response = await fetch('/api/ingest-product', {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body:JSON.stringify({ url, enrichOnly:true }),
+    headers:await authenticatedJsonHeaders(),
+    body:JSON.stringify({ url, enrichOnly:true, workspaceId:app.workspace_id || app.workspaceId, productId:app.id }),
   })
   const details = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(details.error || 'FloStudio could not refresh the public listing.')

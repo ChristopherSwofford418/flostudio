@@ -6,6 +6,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { createCampaign, createCampaignPosts, generateCampaignVariant, listCampaignMedia, loadCampaignWorkspace, saveBrandAndProduct, saveCampaignConcepts, selectCampaignConcept, updateCampaignConcept } from '../lib/campaignEngine'
 import { buildNextBestCreative, recordMemoryEvent } from '../lib/creativeMemory'
 import { ensureCampaignRunbook, loadCampaignRunbookContext, recreateCampaignRunbook } from '../lib/campaignRunbook'
+import { authenticatedJsonHeaders } from '../lib/authenticatedApi'
 import CampaignMomentumMap from '../components/CampaignMomentumMap'
 import CreativeFamilyPanel from '../components/CreativeFamilyPanel'
 import JevThesisReview from '../components/JevThesisReview'
@@ -244,7 +245,7 @@ export default function AgentHQ() {
     if (!websiteUrl.trim()) { setStage('dna'); return }
     setBusy('analyze-url'); setError(''); setUrlState('Reading your public product page…')
     try {
-      const response = await fetch('/api/ingest-product', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ url:websiteUrl.trim() }) })
+      const response = await fetch('/api/ingest-product', { method:'POST', headers:await authenticatedJsonHeaders(), body:JSON.stringify({ url:websiteUrl.trim(), workspaceId, productId:activeApp?.id || undefined }) })
       const details = await response.json()
       if (!response.ok) throw new Error(details.error)
       setSourceFacts(details)

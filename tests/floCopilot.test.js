@@ -15,9 +15,10 @@ describe('Flo Copilot Action Engine', () => {
     expect(res.result.targetKeywords).toBeDefined()
   })
 
-  it('returns analytics summary on request', async () => {
+  it('routes analytics requests to verified data workspaces without inventing results', async () => {
     const res = await executeFloCopilotCommand({ prompt: 'Show analytics stats', activeApp: { name: 'ResumeFix AI' } })
     expect(res.actionType).toBe('analytics')
-    expect(res.result.activeCampaigns).toBeDefined()
+    expect(res.result).toEqual({ appName:'ResumeFix AI' })
+    expect(res.message).toContain('does not invent')
   })
 })
