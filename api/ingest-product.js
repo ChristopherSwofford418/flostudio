@@ -296,6 +296,8 @@ export default async function handler(req, res) {
       }
     })
   } catch (error) {
+    const status = error?.status || (error?.code === 'AUTH_REQUIRED' ? 401 : null)
+    if (status) return res.status(status).json({ error:error?.message || 'Sign in to FloStudio before reading a product listing.', code:error?.code || 'PRODUCT_INTAKE_ACCESS_ERROR' })
     return res.status(422).json({ error: error?.name === 'AbortError' ? 'That page took too long to respond. Try again or fill the fields manually.' : 'FloStudio could not analyze that URL. Check the link and try again.' })
   }
 }
