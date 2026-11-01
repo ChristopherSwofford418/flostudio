@@ -1,6 +1,7 @@
 import { supabase } from '../supabase'
 import { generateAppSeoBlueprint } from './portfolioSeo'
 import { authenticatedJsonHeaders } from './authenticatedApi'
+import { appStoreListingVisualOptions, referencePayload } from './appVisualReferences'
 
 export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
   const query = (prompt || '').toLowerCase().trim()
@@ -24,9 +25,15 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
       }
     }
 
-    const facts = activeApp.source_facts || activeApp.sourceFacts || {}
-    const screenshots = facts.screenshots || facts.screenshotUrls || activeApp.screenshots || []
-    const refImage = screenshots[0] || activeApp.imageUrl || facts.image || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60'
+    const reference = appStoreListingVisualOptions(activeApp)[0]
+    const referenceRequest = referencePayload(reference)
+    if (!referenceRequest) {
+      return {
+        message:`I need a verified App Store visual for **${appName}** before making an ad. Refresh its App Store listing or import approved App Store Connect media in Portfolio, then try again.`,
+        actionType:'error',
+        result:null,
+      }
+    }
 
     try {
       const response = await fetch('/api/generate-image', {
@@ -36,7 +43,7 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
           prompt: `High-converting ad creative for ${appName}. ${query}. Cinematic product hero lighting, editorial typography, professional mockup presentation.`,
           size: '1024x1024',
           quality: 'standard',
-          referenceImage: refImage,
+          reference: referenceRequest,
           productName: appName,
           workspaceId:activeApp.workspace_id || activeApp.workspaceId,
           productId:activeApp.id,
@@ -55,7 +62,7 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
           appName,
           imageUrl: generatedImageUrl,
           promptUsed: query,
-          referenceImage: refImage
+          referenceImage: reference.url
         }
       }
     } catch (err) {
@@ -84,8 +91,9 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
     const storeTitle = facts.title || facts.name || activeApp.name || 'App'
     const storeSubtitle = facts.subtitle || facts.description?.slice(0, 120) || activeApp.description || 'Professional workflow utility.'
     const category = activeApp.category || facts.category || 'Productivity'
-    const screenshots = facts.screenshots || facts.screenshotUrls || activeApp.screenshots || []
-    const previewImage = screenshots[0] || activeApp.imageUrl || facts.image || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60'
+    const appStoreVisuals = appStoreListingVisualOptions(activeApp)
+    const screenshots = appStoreVisuals.map(item => item.url)
+    const previewImage = screenshots[0] || null
 
     const postAngles = [
       {
@@ -117,7 +125,7 @@ export async function executeFloCopilotCommand({ prompt, activeApp, userId }) {
 
     const drafts = Array.from({ length: Math.min(postCount, 10) }, (_, i) => {
       const angle = postAngles[i % postAngles.length]
-      const currentScreenshot = screenshots[i % screenshots.length] || previewImage
+      const currentScreenshot = screenshots.length ? screenshots[i % screenshots.length] : null
       return {
         id: `draft-${Date.now()}-${i}`,
         platform: angle.platform,

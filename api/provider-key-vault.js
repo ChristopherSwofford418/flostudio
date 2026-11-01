@@ -118,7 +118,7 @@ export async function assertWorkspaceProduct({ workspaceId, productId, accessTok
   if (!productId) throw providerKeyError('PRODUCT_REQUIRED', 'Select a portfolio app before continuing.', 400)
   await assertWorkspaceMember({ workspaceId, accessToken })
   const params = new URLSearchParams({
-    select:'id,workspace_id,user_id',
+    select:'id,workspace_id,user_id,source_facts',
     id:`eq.${productId}`,
     workspace_id:`eq.${workspaceId}`,
     limit:'1',
@@ -132,6 +132,78 @@ export async function assertWorkspaceProduct({ workspaceId, productId, accessTok
     throw providerKeyError('PRODUCT_ACCESS_REQUIRED', 'This portfolio app is not available in the selected workspace.', 403)
   }
   return product
+}
+
+function safePublicImageUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim())
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return ''
+    const host = url.hostname.toLowerCase()
+    if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') || /^(127\.|0\.|10\.|192\.168\.|169\.254\.)/.test(host)) return ''
+    return url.href
+  } catch {
+    return ''
+  }
+}
+
+function registeredAppStoreImageUrls(sourceFacts = {}) {
+  const facts = sourceFacts && typeof sourceFacts === 'object' ? sourceFacts : {}
+  const metadata = facts.storeMetadata || facts.store_metadata || {}
+  const candidates = [
+    facts.image,
+    facts.artworkUrl,
+    ...(Array.isArray(facts.screenshots) ? facts.screenshots : []),
+    ...(Array.isArray(facts.screenshotUrls) ? facts.screenshotUrls : []),
+    ...(Array.isArray(metadata.screenshots) ? metadata.screenshots : []),
+    ...(Array.isArray(metadata.ipadScreenshots) ? metadata.ipadScreenshots : []),
+    ...(Array.isArray(metadata.appletvScreenshots) ? metadata.appletvScreenshots : []),
+  ]
+  return [...new Set(candidates.map(safePublicImageUrl).filter(Boolean))]
+}
+
+// Render endpoints accept a reference descriptor rather than trusting an arbitrary browser URL.
+// A reference can resolve only to the selected product's registered App Store listing media or
+// a product-scoped, approved App Store Connect import with exact Apple provenance.
+export async function resolveVerifiedProductVisualReference({ workspaceId, productId, userId, accessToken, reference }) {
+  const product = await assertWorkspaceProduct({ workspaceId, productId, accessToken })
+  const descriptor = reference && typeof reference === 'object' ? reference : {}
+  const source = String(descriptor.source || '').trim()
+
+  if (source === 'app_store_listing') {
+    const url = safePublicImageUrl(descriptor.url)
+    const registered = registeredAppStoreImageUrls(product.source_facts)
+    if (!url || !registered.includes(url)) {
+      throw providerKeyError('UNVERIFIED_APP_REFERENCE', 'Choose a current App Store screenshot or artwork for this selected app before rendering.', 400)
+    }
+    return { source:'app_store_listing', url, label:'App Store listing visual' }
+  }
+
+  if (source === 'app_store_connect_import') {
+    const mediaAssetId = String(descriptor.mediaAssetId || '').trim()
+    if (!mediaAssetId) throw providerKeyError('UNVERIFIED_APP_REFERENCE', 'Choose approved App Store Connect media for this selected app before rendering.', 400)
+    const params = new URLSearchParams({
+      select:'id,asset_url,kind,source,asc_asset_id,asc_placement_id',
+      id:`eq.${mediaAssetId}`,
+      user_id:`eq.${userId}`,
+      workspace_id:`eq.${workspaceId}`,
+      product_id:`eq.${productId}`,
+      kind:'eq.image',
+      source:'eq.app_store_connect_import',
+      limit:'1',
+    })
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/media_assets?${params}`, {
+      headers:{ apikey:anonymousKey(), Authorization:`Bearer ${accessToken}` },
+    })
+    const rows = await response.json().catch(() => [])
+    const asset = Array.isArray(rows) ? rows[0] : null
+    const url = safePublicImageUrl(asset?.asset_url)
+    if (!response.ok || !asset?.id || !asset.asc_asset_id || !asset.asc_placement_id || !url) {
+      throw providerKeyError('UNVERIFIED_APP_REFERENCE', 'That media item is not approved App Store Connect artwork for the selected app.', 403)
+    }
+    return { source:'app_store_connect_import', url, mediaAssetId:asset.id, label:'Approved App Store Connect media' }
+  }
+
+  throw providerKeyError('APP_REFERENCE_REQUIRED', 'Select a verified App Store screenshot, artwork, or approved App Store Connect image for this app before rendering.', 400)
 }
 
 export async function assertOwnedMediaAsset({ workspaceId, productId, mediaAssetId, userId, accessToken, providerJobId = null }) {

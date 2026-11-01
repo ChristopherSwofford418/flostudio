@@ -5,8 +5,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { belongsToProduct, createMediaAsset, getCurrentMediaUser, listMediaAssets, removeMediaAsset, updateMediaAsset } from '../lib/mediaAssets'
 import { createCreativeExperimentMatrix, estimateMatrixCells, listCreativeExperimentMatrices, matrixReadiness } from '../lib/creativeExperimentMatrix'
 import { listShortformResearchExamples } from '../lib/shortformResearch'
-import { buildVideoSourceOptions, resolvedVideoReference } from '../lib/videoReferences'
-import { appStoreAssetsFromFacts } from '../lib/appStoreListing'
+import { verifiedProductVisualOptions, referencePayload } from '../lib/appVisualReferences'
 import UGCCastingPanel from '../components/UGCCastingPanel.jsx'
 import { castingProfile, voiceProfile } from '../lib/ugcCasting'
 import JevFormatShortlist from '../components/JevFormatShortlist.jsx'
@@ -174,6 +173,7 @@ export default function ImageBank() {
   const [loadingAssets, setLoadingAssets] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [referenceImage, setReferenceImage] = useState(null)
+  const [referenceSource, setReferenceSource] = useState(null)
   const [videoSource, setVideoSource] = useState(null)
   const [prompt, setPrompt] = useState('')
   const [textOverlay, setTextOverlay] = useState('')
@@ -228,16 +228,8 @@ export default function ImageBank() {
   const imageAssets = useMemo(() => assets.filter(asset => asset.kind === 'image'), [assets])
   const videoAssets = useMemo(() => assets.filter(asset => asset.kind === 'video'), [assets])
 
-  const appStoreScreenshots = useMemo(() => {
-    if (!activeApp) return []
-    const facts = activeApp.source_facts || activeApp.sourceFacts || {}
-    const rawScreens = appStoreAssetsFromFacts({ ...facts, screenshots:facts.screenshots || activeApp.screenshots || [] })
-    const icon = facts.image || facts.artworkUrl || activeApp.image_url || null
-    const list = [...rawScreens]
-    if (icon && !list.includes(icon)) list.unshift(icon)
-    return list
-  }, [activeApp])
-  const videoSourceOptions = useMemo(() => buildVideoSourceOptions({ appStoreScreenshots, imageAssets }), [appStoreScreenshots, imageAssets])
+  const verifiedVisualOptions = useMemo(() => verifiedProductVisualOptions({ app:activeApp || {}, imageAssets }), [activeApp, imageAssets])
+  const videoSourceOptions = verifiedVisualOptions
   const selectedStyle = STYLE_PRESETS.find(style => style.id === stylePreset)
   const selectedRunbook = AD_RUNBOOKS.find(runbook => runbook.id === runbookId) || AD_RUNBOOKS[0]
   const selectedObjective = CAMPAIGN_OBJECTIVES.find(objective => objective.id === objectiveId) || CAMPAIGN_OBJECTIVES[0]
@@ -250,22 +242,22 @@ export default function ImageBank() {
   const selectedVoice = voiceProfile(voiceId)
   const postAssistantImage = useMemo(() => generatedResults[0]?.url || referenceImage || null, [generatedResults, referenceImage])
   const hasWorkspace = Boolean(workspaceId)
-  const hasReferenceImage = Boolean(String(referenceImage || '').trim())
-  const hasCreativeDirection = Boolean(prompt.trim() || hasReferenceImage)
+  const hasVerifiedSelectedAppReference = Boolean(referencePayload(referenceSource))
+  const hasCreativeDirection = Boolean(prompt.trim() || hasVerifiedSelectedAppReference)
   const hasPostAssistantImage = Boolean(String(postAssistantImage || '').trim())
   const hasVideoDirection = Boolean(videoPrompt.trim())
   const providerReady = !providerConnection.loading && providerConnection.configured
-  const imageRenderReady = Boolean(activeApp?.id && hasWorkspace && hasCreativeDirection && providerReady)
+  const imageRenderReady = Boolean(activeApp?.id && hasWorkspace && hasCreativeDirection && hasVerifiedSelectedAppReference && providerReady)
   const postOptionsReady = Boolean(activeApp?.id && hasWorkspace && hasPostAssistantImage && providerReady)
   const videoRenderReady = Boolean(activeApp?.id && hasWorkspace && hasVideoDirection && providerReady)
   const creativeReadiness = useMemo(() => [
-    { label:'Product truth', ready:Boolean(activeApp || referenceImage), next:'Select an app or pin a real product image.' },
+    { label:'Verified app visual', ready:hasVerifiedSelectedAppReference, next:'Pin this app’s App Store artwork, screenshot, or approved App Store Connect media.' },
     { label:'Scroll-stopping hook', ready:Boolean(hook.trim()), next:'Name the opening promise or friction point.' },
     { label:'Credible proof', ready:Boolean(proof.trim()), next:'Add one supportable proof point.' },
     { label:'Clear end frame', ready:Boolean(storyboard[3]?.caption?.trim()), next:'Define the final action or payoff.' },
-  ], [activeApp, referenceImage, hook, proof, storyboard])
+  ], [hasVerifiedSelectedAppReference, hook, proof, storyboard])
   const readinessScore = creativeReadiness.filter(item => item.ready).length
-  const batchHasProductTruth = Boolean(activeApp && (String(activeApp.description || '').trim() || referenceImage))
+  const batchHasProductTruth = Boolean(activeApp && hasVerifiedSelectedAppReference)
   const matrixCellCount = useMemo(() => estimateMatrixCells({ hooks:selectedExperimentHooks, actorIds:[actorId], voiceIds:[voiceId] }), [selectedExperimentHooks, actorId, voiceId])
   const rankedShortformResearch = useMemo(() => {
     const orderedPlatforms = ['TikTok', 'Instagram Reels', 'YouTube Shorts']
@@ -344,12 +336,16 @@ export default function ImageBank() {
     }
   }
 
-  const chooseVideoSource = source => {
-    if (!source?.url) return
-    setVideoSource(source)
+  const chooseVerifiedReference = source => {
+    if (!source?.url || !referencePayload(source)) return
     setReferenceImage(source.url)
+    setReferenceSource(source)
+    setVideoSource(source)
+    setError('')
     setVideoError('')
   }
+
+  const chooseVideoSource = source => chooseVerifiedReference(source)
 
   const clearVideoSource = () => {
     setVideoSource(null)
@@ -527,6 +523,7 @@ export default function ImageBank() {
   }, [activeApp?.id, actorId, voiceId])
   useEffect(() => {
     setReferenceImage(null)
+    setReferenceSource(null)
     setVideoSource(null)
     setGeneratedResults([])
     setSelectedPlaybookLaneId(null)
@@ -595,12 +592,9 @@ export default function ImageBank() {
     setUploading(true); setError('')
     try {
       const [first] = input
-      if (first.size > 10 * 1024 * 1024) throw new Error('Please choose a reference image smaller than 10MB.')
-      const reader = new FileReader()
-      const reference = await new Promise((resolve, reject) => { reader.onload = event => resolve(event.target.result); reader.onerror = reject; reader.readAsDataURL(first) })
-      const savedAssets = []
-      for (const file of input) savedAssets.push(await uploadAsset(file, 'brand-source', { source:'upload', kind:'image' }))
-      setReferenceImage(savedAssets[0]?.url || reference)
+      if (first.size > 10 * 1024 * 1024) throw new Error('Please choose an image smaller than 10MB.')
+      for (const file of input) await uploadAsset(file, 'brand-source', { source:'upload', kind:'image', metadata:{ verification:'unverified_custom_upload' } })
+      setError('Custom artwork was saved to this app’s library, but it cannot replace the verified App Store product reference used for new renders.')
       await loadAssets()
     } catch (uploadError) { setError(uploadError.message || 'The image could not be uploaded.') }
     setUploading(false)
@@ -697,7 +691,8 @@ export default function ImageBank() {
   const generateImages = async () => {
     if (!activeApp?.id) { setError('Select a portfolio app before rendering a creative.'); return }
     if (!workspaceId) { setError('Select a signed-in workspace before rendering a creative.'); return }
-    if (!hasCreativeDirection) { setError('Describe the creative or upload a product image first.'); return }
+    if (!hasVerifiedSelectedAppReference) { setError('Pin a verified App Store screenshot, artwork, or approved App Store Connect image from this selected app before rendering.'); return }
+    if (!hasCreativeDirection) { setError('Describe the creative or select this app’s verified product visual first.'); return }
     if (providerConnection.loading) { setError('The workspace image provider is still being checked. Wait for the connection check to finish.'); return }
     if (!providerConnection.configured) { setError('Connect the workspace image provider before rendering a creative.'); return }
     setGenerating(true); setError(''); setGeneratedResults([]); setHandoffState({ status:'idle', message:'' })
@@ -714,10 +709,10 @@ export default function ImageBank() {
       const controller = new AbortController()
       const timeout = window.setTimeout(() => controller.abort(), 70000)
       const authHeaders = await providerHeaders()
-      const response = await fetch('/api/generate-image', { method:'POST', signal:controller.signal, headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations:1, referenceImage, creativeRound:nextRound, workspaceId, productId:activeApp.id }) }).finally(() => window.clearTimeout(timeout))
+      const response = await fetch('/api/generate-image', { method:'POST', signal:controller.signal, headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio, variations:1, reference:referencePayload(referenceSource), creativeRound:nextRound, workspaceId, productId:activeApp.id }) }).finally(() => window.clearTimeout(timeout))
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
-      const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${nextRound}-${index + 1}`, 'image', { source:'ai_image', provider:'openai', prompt:brief, metadata:{ aspectRatio, stylePreset, imageAngle, textOverlay, variation:index + 1, creativeRound:nextRound, concept:image.concept || null, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp?.id || null, hook, proof } })))
+      const saved = await Promise.all((data.images || []).map((image, index) => persistRemoteOutput(image.url, `ai-image-${nextRound}-${index + 1}`, 'image', { source:'ai_image', provider:'openai', prompt:brief, metadata:{ aspectRatio, stylePreset, imageAngle, textOverlay, variation:index + 1, creativeRound:nextRound, concept:image.concept || null, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp?.id || null, verifiedReference:referencePayload(referenceSource), hook, proof } })))
       setGeneratedResults(saved)
       setCreativeRound(nextRound)
       await loadAssets()
@@ -732,7 +727,7 @@ export default function ImageBank() {
     if (generating || batchState.status === 'working') return
     if (!activeApp?.id) { setError('Select a portfolio app before creating a creative batch.'); return }
     if (!workspaceId) { setError('Select a signed-in workspace before creating a creative batch.'); return }
-    if (!batchHasProductTruth) { setError('Add a factual product description or pin a real product image before creating this app’s batch. FloStudio will not invent product context.'); return }
+    if (!batchHasProductTruth) { setError('Pin a verified App Store screenshot, artwork, or approved App Store Connect image from this app before creating a batch.'); return }
     if (providerConnection.loading) { setError('The workspace image provider is still being checked. Wait for the connection check to finish.'); return }
     if (!providerConnection.configured) { setError('Connect the workspace image provider before creating a ten-creative batch.'); return }
 
@@ -786,7 +781,7 @@ export default function ImageBank() {
             method:'POST',
             signal:controller.signal,
             headers:{ ...authHeaders, 'Content-Type':'application/json' },
-            body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio:recipe.aspectRatio, variations:1, referenceImage, creativeRound:nextRound, workspaceId, productId:activeApp.id }),
+            body:JSON.stringify({ prompt:brief, textOverlay, aspectRatio:recipe.aspectRatio, variations:1, reference:referencePayload(referenceSource), creativeRound:nextRound, workspaceId, productId:activeApp.id }),
           }).finally(() => window.clearTimeout(timeout))
           const data = await response.json()
           if (!response.ok || data.error) throw new Error(data.error || 'Image generation failed.')
@@ -816,6 +811,7 @@ export default function ImageBank() {
               batchTotal:TEN_CREATIVE_BATCH_RECIPES.length,
               batchRecipe:recipe.id,
               batchLabel:recipe.label,
+              verifiedReference:referencePayload(referenceSource),
             },
           })
           results.push(saved)
@@ -886,6 +882,7 @@ export default function ImageBank() {
   const startVideo = async () => {
     if (!activeApp?.id) { setVideoError('Select a portfolio app before rendering a video.'); return }
     if (!workspaceId) { setVideoError('Select a signed-in workspace before rendering a video.'); return }
+    if (!hasVerifiedSelectedAppReference) { setVideoError('Select a verified App Store screenshot, artwork, or approved App Store Connect image for this app before rendering video.'); return }
     if (!hasVideoDirection) { setVideoError('Describe the motion, product, setting, and camera direction first.'); return }
     if (providerConnection.loading) { setVideoError('The workspace video provider is still being checked. Wait for the connection check to finish.'); return }
     if (!providerConnection.configured) { setVideoError('Connect the workspace video provider before rendering a video.'); return }
@@ -895,8 +892,7 @@ export default function ImageBank() {
     const directorPrompt = `Creator delivery: ${selectedCreatorDelivery.label}. ${selectedCreatorDelivery.prompt} Edit pace: ${selectedEditPace.label}. ${selectedEditPace.prompt} Caption treatment: ${selectedCaptionTreatment.label}. ${selectedCaptionTreatment.prompt}`
     const castingPrompt = creatorMode === 'product_only' ? 'No on-camera talent or dialogue. Keep the app and product motion central.' : `Selected synthetic actor: ${selectedActor.name}, ${selectedActor.role}. Selected voice style: ${selectedVoice.name}. Use only this fictional, synthetic adult casting direction; never imitate a real person or named voice.`
     const runbookPrompt = `${selectedRunbook.label} format. ${videoPrompt || selectedRunbook.video} Hook: ${hook || 'derive a clear, credible hook.'} Proof: ${proof || 'show only supportable product truth.'}${productContext} ${directorPrompt} ${castingPrompt} Structured storyboard: ${storyboardPrompt}`
-    const sourceReference = resolvedVideoReference(videoSource, referenceImage)
-    const request = { prompt:runbookPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', referenceImage:sourceReference, creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, actorId, voiceId, storyboard }
+    const request = { prompt:runbookPrompt, size:videoFormat, seconds:videoSeconds, quality:videoQuality === 'production' ? 'production' : 'draft', reference:referencePayload(referenceSource), creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, actorId, voiceId, storyboard }
     let renderAsset = null
     let chargedTokens = 0
     try {
@@ -908,7 +904,7 @@ export default function ImageBank() {
         kind:'video', source:'ai_video', provider:'openai', render_status:'queued', prompt:runbookPrompt,
         product_id:activeApp.id, workspace_id:workspaceId || null,
         reference_asset_id:videoSource?.id || null,
-        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, actorId, actorName:selectedActor.name, voiceId, voiceStyle:selectedVoice.name, referenceIncluded:Boolean(sourceReference), referenceSource:videoSource?.source || (sourceReference ? 'pinned_reference' : null), referenceName:videoSource?.name || null, storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
+        metadata:{ size:videoFormat, seconds:videoSeconds, quality:videoQuality, creatorMode, ugcStoryShape, creatorDelivery, editPace, captionTreatment, actorId, actorName:selectedActor.name, voiceId, voiceStyle:selectedVoice.name, referenceIncluded:hasVerifiedSelectedAppReference, referenceSource:referenceSource?.source || null, referenceName:referenceSource?.name || null, verifiedReference:referencePayload(referenceSource), storyboard, runbook:runbookId, objective:objectiveId, visualLens:lensId, productAppId:activeApp.id },
       })
       const authHeaders = await providerHeaders()
       const response = await fetch('/api/generate-video', { method:'POST', headers:{ ...authHeaders, 'Content-Type':'application/json' }, body:JSON.stringify({ ...request, workspaceId, productId:activeApp.id, mediaAssetId:renderAsset.id }) })
@@ -993,13 +989,12 @@ export default function ImageBank() {
         <div className="ad-room-hero__top"><div><div className="abundance-eyebrow">Portfolio Ad Room / Production desk</div><h1 className="ad-room-hero__title" style={{ marginTop:10 }}>Build the ad. <em>Not the prompt.</em></h1><p className="abundance-copy" style={{ marginTop:13, maxWidth:640 }}>Choose the proven format, ground it in your actual product, direct the hook and proof, then render an ad set you can review and scale.</p></div><div className="abundance-glass" style={{ padding:15, borderRadius:3 }}><div className="abundance-mini-label">PRODUCTION LIBRARY</div><div style={{ display:'flex', alignItems:'baseline', gap:7, marginTop:5 }}><b style={{ fontSize:31, letterSpacing:'-.06em' }}>{assets.length}</b><span style={{ color:'rgba(240,240,240,.65)', fontSize:12 }}>real outputs</span></div><div style={{ display:'flex', gap:7, marginTop:10 }}><span className="abundance-pill"><i/>{imageAssets.length} images</span><span className="abundance-pill">{videoAssets.length} video</span></div></div></div>
         <div className="product-truth"><span className="product-truth__label">Product Truth</span>{apps.length ? <select value={activeApp?.id || ''} onChange={event => setActiveApp(apps.find(app => app.id === event.target.value) || null)}>{apps.map(app => <option value={app.id} key={app.id}>{app.name}{app.category ? ` / ${app.category}` : ''}</option>)}</select> : <span style={{ color:'rgba(240,240,240,.66)', fontSize:12 }}>Add a portfolio app to pin real product context into every render.</span>}<span className="product-truth__status">{activeApp ? `${activeApp.name} / ACTIVE` : 'NO PRODUCT SELECTED'}</span></div>
         <div className="media-rail">
-          {appStoreScreenshots.map((url, idx) => (
-            <div key={idx} onClick={() => setReferenceImage(url)} className="media-rail-item" style={{ cursor:'pointer', border: referenceImage === url ? '2px solid var(--signal)' : '1px solid rgba(240,240,240,.18)' }}>
-              <img src={url} alt="App Store screenshot" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+          {verifiedVisualOptions.map(reference => (
+            <div key={`${reference.source}-${reference.id}`} onClick={() => chooseVerifiedReference(reference)} className="media-rail-item" style={{ cursor:'pointer', border: referenceImage === reference.url ? '2px solid var(--signal)' : '1px solid rgba(240,240,240,.18)' }}>
+              <img src={reference.url} alt={reference.name} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
             </div>
           ))}
-          {assets.slice(0,8).map(asset => <div key={asset.name} className={`media-rail-item ${asset.kind}`}><AssetVisual asset={asset} compact /></div>)}
-          {!appStoreScreenshots.length && !assets.length && <div className="abundance-glass" style={{ gridColumn:'1 / -1', padding:16, borderRadius:3, color:'rgba(240,240,240,.68)', fontSize:12 }}>Select your app above to instantly load Apple App Store screenshots and product artwork into the production media rail.</div>}
+          {!verifiedVisualOptions.length && <div className="abundance-glass" style={{ gridColumn:'1 / -1', padding:16, borderRadius:3, color:'rgba(240,240,240,.68)', fontSize:12 }}>Refresh this app’s App Store listing or import approved App Store Connect media to load its verified product visuals.</div>}
         </div>
       </section>
 
@@ -1015,21 +1010,21 @@ export default function ImageBank() {
           <div>
             <div className="abundance-mini-label">SOURCE IMAGE / FIRST FRAME</div>
             <h2 style={{ fontSize:18, letterSpacing:'-.05em', marginTop:4 }}>Choose the image that should become this video ad.</h2>
-            <p style={{ color:'rgba(240,240,240,.62)', fontSize:11.5, lineHeight:1.5, marginTop:5, maxWidth:650 }}>Choose any saved image for {activeApp?.name || 'the active app'} or its imported App Store artwork. FloStudio sends it as the video’s first-frame reference and records the relationship on the finished video.</p>
+            <p style={{ color:'rgba(240,240,240,.62)', fontSize:11.5, lineHeight:1.5, marginTop:5, maxWidth:650 }}>Choose this app’s current App Store artwork, listing screenshot, or approved App Store Connect media. FloStudio locks it as the verified first-frame reference and records the relationship on the finished video.</p>
           </div>
-          {videoSource && <button onClick={clearVideoSource} className="studio-chip">Use text only</button>}
+          {referenceSource && <button onClick={() => { setReferenceImage(null); setReferenceSource(null); clearVideoSource() }} className="studio-chip">Clear source</button>}
         </div>
-        {videoSource ? <div style={{ marginTop:12, display:'flex', gap:10, alignItems:'center', padding:9, border:'1px solid rgba(197,197,197,.32)', background:'rgba(197,197,197,.08)' }}>
-          <img src={videoSource.url} alt="Selected video source" style={{ width:56, height:56, objectFit:'cover' }} />
-          <div><b style={{ color:'#ffffff', fontSize:12 }}>Selected: {videoSource.name}</b><div style={{ color:'rgba(240,240,240,.6)', fontSize:10.5, marginTop:4 }}>This image is locked as the video’s starting frame.</div></div>
-        </div> : <div style={{ marginTop:12, color:'rgba(240,240,240,.58)', fontSize:11.5 }}>No source image selected. The video will be generated from the written direction only.</div>}
+        {referenceSource ? <div style={{ marginTop:12, display:'flex', gap:10, alignItems:'center', padding:9, border:'1px solid rgba(197,197,197,.32)', background:'rgba(197,197,197,.08)' }}>
+          <img src={referenceSource.url} alt="Selected video source" style={{ width:56, height:56, objectFit:'cover' }} />
+          <div><b style={{ color:'#ffffff', fontSize:12 }}>Selected: {referenceSource.name}</b><div style={{ color:'rgba(240,240,240,.6)', fontSize:10.5, marginTop:4 }}>This verified selected-app visual is locked as the video’s starting frame.</div></div>
+        </div> : <div style={{ marginTop:12, color:'rgba(240,240,240,.58)', fontSize:11.5 }}>No verified app visual selected. Select this app’s App Store artwork, listing screenshot, or approved App Store Connect media before rendering.</div>}
         <div style={{ display:'flex', gap:8, overflowX:'auto', paddingTop:13, paddingBottom:2 }}>
-          {videoSourceOptions.map(source => <button key={`${source.source}-${source.id || source.url}`} onClick={() => chooseVideoSource(source)} aria-pressed={videoSource?.url === source.url} title={`Use ${source.name} as the source image`} style={{ width:82, minWidth:82, height:104, padding:0, overflow:'hidden', position:'relative', border:videoSource?.url === source.url ? '2px solid var(--signal)' : '1px solid rgba(240,240,240,.24)', background:'rgba(16,16,16,.54)', cursor:'pointer' }}>
+          {videoSourceOptions.map(source => <button key={`${source.source}-${source.id || source.url}`} onClick={() => chooseVideoSource(source)} aria-pressed={referenceSource?.url === source.url} title={`Use ${source.name} as the source image`} style={{ width:82, minWidth:82, height:104, padding:0, overflow:'hidden', position:'relative', border:referenceSource?.url === source.url ? '2px solid var(--signal)' : '1px solid rgba(240,240,240,.24)', background:'rgba(16,16,16,.54)', cursor:'pointer' }}>
             <img src={source.url} alt={source.name} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
-            <span style={{ position:'absolute', inset:'auto 0 0', padding:'6px 5px', background:'rgba(14,14,14,.88)', color:'#ffffff', fontSize:8, lineHeight:1.2, textAlign:'left' }}>{source.source === 'saved_image' ? 'SAVED AD' : 'STORE IMAGE'}</span>
+            <span style={{ position:'absolute', inset:'auto 0 0', padding:'6px 5px', background:'rgba(14,14,14,.88)', color:'#ffffff', fontSize:8, lineHeight:1.2, textAlign:'left' }}>{source.source === 'app_store_connect_import' ? 'APPLE APPROVED' : 'STORE IMAGE'}</span>
           </button>)}
         </div>
-        {!videoSourceOptions.length && <div style={{ marginTop:12, padding:11, border:'1px dashed rgba(240,240,240,.22)', color:'rgba(240,240,240,.62)', fontSize:11.5 }}>Create an image ad or add an App Store link in Portfolio to choose a real source frame here.</div>}
+        {!videoSourceOptions.length && <div style={{ marginTop:12, padding:11, border:'1px dashed rgba(240,240,240,.22)', color:'rgba(240,240,240,.62)', fontSize:11.5 }}>Refresh the App Store listing or import approved App Store Connect media to choose a verified source frame here.</div>}
         <UGCCastingPanel appName={activeApp?.name} actorId={actorId} voiceId={voiceId} onActorChange={setActorId} onVoiceChange={setVoiceId} /><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', marginTop:14, padding:'12px', border:'1px solid rgba(49,130,246,.24)', background:'rgba(49,130,246,.06)' }}><div><div className="abundance-mini-label">CASTING SELECTED</div><div style={{ color:'#1c2530', fontSize:12, fontWeight:800, marginTop:3 }}>{selectedActor.name} · {selectedVoice.name}</div></div><button type="button" onClick={() => videoBuilderRef.current?.scrollIntoView({ behavior:'smooth', block:'start' })} className="studio-button" style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>Continue to video builder ↓</button></div><div style={{ marginTop:14, paddingTop:13, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">ON-CAMERA DIRECTION / ORIGINAL ADULT TALENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_MODES.map(mode => <button key={mode.id} onClick={() => setCreatorMode(mode.id)} className={`format-card ${creatorMode === mode.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{mode.label}</b><small>{mode.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'160px minmax(0,1fr)', gap:10, alignItems:'center', marginTop:11 }}><div className="abundance-mini-label">UGC STORY SHAPE</div><select className="studio-input" value={ugcStoryShape} onChange={event => setUgcStoryShape(event.target.value)}>{UGC_STORY_SHAPES.map(shape => <option value={shape.id} key={shape.id}>{shape.label} — {shape.detail}</option>)}</select></div><p style={{ color:'rgba(240,240,240,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>Creator modes use original, non-identifiable adult talent. FloStudio never asks the model to imitate a real person. The selected app screen remains the canonical product reference.</p></div>
       </section>}
       {activeTab !== 'library' && <section className="abundance-card flo-dark-surface creative-dark-console" style={{ marginTop:18, padding:'14px 16px', borderColor:'rgba(49,130,246,.32)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="abundance-mini-label">CREATIVE DIRECTOR CHECK</div><h2 style={{ fontSize:17, letterSpacing:'-.045em', marginTop:4 }}>Production readiness: {readinessScore} / {creativeReadiness.length}</h2><p style={{ color:'rgba(240,240,240,.6)', fontSize:11, lineHeight:1.5, marginTop:5 }}>FloStudio never blocks an early concept, but complete briefs produce stronger image and UGC-video direction.</p></div><span className="abundance-pill">{readinessScore === creativeReadiness.length ? 'ready to render' : 'brief in progress'}</span></div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:8, marginTop:12 }}>{creativeReadiness.map(item => <div key={item.label} style={{ border:'1px solid rgba(240,240,240,.14)', background:item.ready ? 'rgba(49,130,246,.08)' : 'rgba(240,240,240,.025)', padding:9, borderRadius:3 }}><b style={{ display:'block', fontSize:10.5, color:item.ready ? 'var(--signal)' : '#ffffff' }}>{item.ready ? '✓ ' : '○ '}{item.label}</b><span style={{ display:'block', marginTop:4, color:'rgba(240,240,240,.55)', fontSize:9.5, lineHeight:1.35 }}>{item.ready ? 'Locked into the production brief.' : item.next}</span></div>)}</div></section>}
@@ -1081,27 +1076,28 @@ export default function ImageBank() {
             <div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>PRODUCT REFERENCE</div>
             {referenceImage ? (
               <div className="abundance-glass" style={{ padding:10, borderRadius:13, display:'flex', alignItems:'center', gap:10 }}>
-                <img src={referenceImage} alt="Product reference" style={{ width:50, height:50, objectFit:'cover', borderRadius:9 }} />
-                <div style={{ flex:1, color:'rgba(255,255,255,.78)', fontSize:12 }}>Your selected screenshot is pinned as product reference truth.</div>
-                <button onClick={() => setReferenceImage(null)} className="studio-chip">Clear</button>
+                <img src={referenceImage} alt="Verified selected-app reference" style={{ width:50, height:50, objectFit:'cover', borderRadius:9 }} />
+                <div style={{ flex:1, color:'rgba(255,255,255,.78)', fontSize:12 }}>{referenceSource?.source === 'app_store_connect_import' ? 'Approved App Store Connect media is pinned for this app.' : 'This app’s current App Store visual is pinned as the product reference.'}</div>
+                <button onClick={() => { setReferenceImage(null); setReferenceSource(null); setVideoSource(null) }} className="studio-chip">Clear</button>
               </div>
             ) : (
               <div>
-                {appStoreScreenshots.length > 0 && (
+                {verifiedVisualOptions.length > 0 && (
                   <div style={{ marginBottom:10 }}>
-                    <div style={{ color:'rgba(240,240,240,.62)', fontSize:11, marginBottom:6 }}>Click an app store screenshot to pin it:</div>
+                    <div style={{ color:'rgba(240,240,240,.62)', fontSize:11, marginBottom:6 }}>Pin verified App Store artwork, a listing screenshot, or approved App Store Connect media:</div>
                     <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:4 }}>
-                      {appStoreScreenshots.map((url, i) => (
-                        <div key={i} onClick={() => setReferenceImage(url)} style={{ width:52, height:64, borderRadius:6, overflow:'hidden', cursor:'pointer', border:'1px solid rgba(240,240,240,.25)', flexShrink:0, background:'#111111' }}>
-                          <img src={url} alt="Store screenshot" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                        </div>
+                      {verifiedVisualOptions.map(reference => (
+                        <button type="button" key={`${reference.source}-${reference.id}`} onClick={() => chooseVerifiedReference(reference)} title={reference.name} style={{ width:52, height:64, padding:0, borderRadius:6, overflow:'hidden', cursor:'pointer', border:'1px solid rgba(240,240,240,.25)', flexShrink:0, background:'#111111' }}>
+                          <img src={reference.url} alt={reference.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                        </button>
                       ))}
                     </div>
                   </div>
                 )}
-                <label style={{ position:'relative', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', minHeight:54, border:'1px dashed rgba(255,255,255,.32)', borderRadius:13, color:'rgba(241,241,241,.72)', fontSize:12, cursor:'pointer', background:'rgba(255,255,255,.04)' }}>
-                  {uploading ? 'Uploading source...' : 'Or upload custom image / artwork'}
-                  <input aria-label="Upload custom image or artwork" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => handleUpload(event.target.files)} style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.01, cursor:'pointer' }} />
+                {!verifiedVisualOptions.length && <div style={{ padding:'10px 11px', border:'1px dashed rgba(240,240,240,.25)', borderRadius:10, color:'rgba(240,240,240,.72)', fontSize:11, lineHeight:1.45 }}>No verified app visual is available yet. Refresh this app’s App Store listing or import approved App Store Connect media before rendering.</div>}
+                <label style={{ position:'relative', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', minHeight:44, marginTop:10, border:'1px dashed rgba(255,255,255,.24)', borderRadius:13, color:'rgba(241,241,241,.68)', fontSize:11, cursor:'pointer', background:'rgba(255,255,255,.03)' }}>
+                  {uploading ? 'Saving to this app’s library...' : 'Save custom artwork to library (not a render reference)'}
+                  <input aria-label="Save custom image or artwork to this app’s library" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => handleUpload(event.target.files)} style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0.01, cursor:'pointer' }} />
                 </label>
               </div>
             )}
@@ -1115,7 +1111,7 @@ export default function ImageBank() {
               </div>
               <span className="abundance-pill">100 tokens / 10 renders</span>
             </div>
-            {!batchHasProductTruth && <div style={{ marginTop:10, color:'rgba(240,240,240,.72)', fontSize:10.5, lineHeight:1.45 }}>Needs a factual product description or a pinned real product image. FloStudio will not generate a generic batch from an app name alone.</div>}
+            {!batchHasProductTruth && <div style={{ marginTop:10, color:'rgba(240,240,240,.72)', fontSize:10.5, lineHeight:1.45 }}>Pin a verified App Store or approved App Store Connect visual first. FloStudio will not generate from an app name, prompt, upload, or generic visual alone.</div>}
             {batchState.message && <div style={{ marginTop:10, color:batchState.status === 'complete' ? 'var(--signal)' : batchState.status === 'error' ? '#cccccc' : 'rgba(240,240,240,.78)', fontSize:11, lineHeight:1.45 }}>{batchState.message}{batchState.status !== 'idle' && ` (${batchState.completed}/${TEN_CREATIVE_BATCH_RECIPES.length} saved${batchState.failed ? `, ${batchState.failed} not completed` : ''})`}</div>}
             <button type="button" onClick={runTenCreativeBatch} disabled={generating || batchState.status === 'working' || !activeApp?.id || !hasWorkspace || !batchHasProductTruth || !providerReady} className="studio-button" style={{ width:'100%', marginTop:13, padding:13 }}>{batchState.status === 'working' ? `Rendering batch ${batchState.completed + batchState.failed + 1} of ${TEN_CREATIVE_BATCH_RECIPES.length}…` : 'Create 10 image creatives · review only'}</button>
           </section>
@@ -1128,11 +1124,11 @@ export default function ImageBank() {
       {activeTab === 'generate' && generatedResults.length > 0 && <section className="abundance-card flo-dark-surface creative-dark-console" style={{ marginTop:20, padding:'18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap', borderColor:'rgba(223,223,223,.34)' }}><div><div className="abundance-mini-label">REVIEW HANDOFF / TURN A REAL OUTPUT INTO A DECISION</div><h3 style={{ fontSize:18, letterSpacing:'-.05em', marginTop:5 }}>Send this creative straight to the review queue.</h3><p style={{ color:'rgba(240,240,240,.62)', fontSize:11.5, lineHeight:1.5, marginTop:5, maxWidth:590 }}>FloStudio creates a real pending Instagram draft using your hook and proof, then attaches this saved creative so it is ready for an approval decision.</p>{handoffState.message && <div style={{ marginTop:8, fontSize:11.5, color:handoffState.status === 'done' ? 'var(--signal)' : handoffState.status === 'error' ? '#c3c3c3' : 'rgba(240,240,240,.76)' }}>{handoffState.message}</div>}</div><button onClick={() => sendCreativeToReview(generatedResults[0])} disabled={handoffState.status === 'working' || handoffState.status === 'done'} className="studio-button" style={{ whiteSpace:'nowrap' }}>{handoffState.status === 'working' ? 'Creating review draft…' : handoffState.status === 'done' ? 'Sent to review' : 'Send to review queue →'}</button></section>}
 
       {activeTab === 'video' && <div ref={videoBuilderRef} className="creative-workspace" style={{ display:'grid', gridTemplateColumns:'minmax(0,1.05fr) minmax(360px,.95fr)', gap:20, scrollMarginTop:24 }}>
-        <section className="abundance-card flo-dark-surface creative-dark-console" style={{ padding:25 }}><div className="abundance-mini-label">VIDEO AD / {selectedRunbook.type}</div><h2 style={{ fontSize:27, letterSpacing:'-.06em', marginTop:5 }}>{selectedRunbook.label} in motion.</h2><p style={{ color:'rgba(232,232,232,.64)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:560 }}>A real render job, built from the same format, product truth, hook, and proof as the image ad. Direct camera movement and production pacing; the Ad Room handles the render queue.</p><textarea className="studio-input" value={videoPrompt} onChange={event => setVideoPrompt(event.target.value)} rows={5} placeholder={selectedRunbook.video} style={{ resize:'vertical', lineHeight:1.6, marginTop:18 }} /><div className="ad-blueprint"><div className="ad-blueprint__label">AD BLUEPRINT</div><input value={hook} onChange={event => setHook(event.target.value)} placeholder="Opening hook / what stops the scroll?" /><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Proof / what makes the claim believable?" /></div><div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">UGC DIRECTOR / PERFORMANCE, PACE, AND CAPTION TREATMENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_DELIVERIES.map(delivery => <button key={delivery.id} onClick={() => setCreatorDelivery(delivery.id)} className={`format-card ${creatorDelivery === delivery.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{delivery.label}</b><small>{delivery.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:11 }}><div><div className="abundance-mini-label" style={{ marginBottom:6 }}>EDIT PACE</div><select className="studio-input" value={editPace} onChange={event => setEditPace(event.target.value)}>{EDIT_PACES.map(pace => <option value={pace.id} key={pace.id}>{pace.label} — {pace.detail}</option>)}</select></div><div><div className="abundance-mini-label" style={{ marginBottom:6 }}>CAPTION TREATMENT</div><select className="studio-input" value={captionTreatment} onChange={event => setCaptionTreatment(event.target.value)}>{CAPTION_TREATMENTS.map(treatment => <option value={treatment.id} key={treatment.id}>{treatment.label} — {treatment.detail}</option>)}</select></div></div><p style={{ color:'rgba(240,240,240,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>These controls shape how the original talent performs, how the cut moves, and how much text competes with your product proof.</p></div><div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">STORYBOARD / EDIT THE BEATS BEFORE RENDER</div><p style={{ color:'rgba(232,232,232,.58)', fontSize:11, lineHeight:1.5, margin:'7px 0 11px' }}>FloStudio sends these four editable beats to the real video provider. Keep every shot specific, product-led, and supportable.</p><div style={{ display:'grid', gap:9 }}>{storyboard.map((beat, index) => <div key={beat.id} style={{ padding:11, border:'1px solid rgba(240,240,240,.14)', background:'rgba(240,240,240,.035)', borderRadius:3 }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', marginBottom:8 }}><span style={{ color:'var(--signal)', font:'500 9px DM Mono,monospace', letterSpacing:'.1em' }}>{String(index + 1).padStart(2,'0')} / {beat.label}</span><span style={{ color:'rgba(240,240,240,.45)', fontSize:10 }}>editable beat</span></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}><textarea className="studio-input" value={beat.visual} onChange={event => updateStoryboardBeat(index, 'visual', event.target.value)} rows={2} placeholder="What should the viewer see?" style={{ resize:'vertical', fontSize:11 }} /><textarea className="studio-input" value={beat.voiceover} onChange={event => updateStoryboardBeat(index, 'voiceover', event.target.value)} rows={2} placeholder="What should the voiceover say?" style={{ resize:'vertical', fontSize:11 }} /></div><input className="studio-input" value={beat.caption} onChange={event => updateStoryboardBeat(index, 'caption', event.target.value)} placeholder="On-screen copy / caption" style={{ marginTop:8, fontSize:11 }} /></div>)}</div></div><div style={{ marginTop:18 }}><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:9 }}>VIDEO PLACEMENT</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>{VIDEO_FORMATS.map(format => <button key={format.id} onClick={() => setVideoFormat(format.id)} className={`format-card ${videoFormat === format.id ? 'active':''}`}><b>{format.label}</b><small>{format.detail}</small></button>)}</div></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>DURATION</div><select className="studio-input" value={videoSeconds} onChange={event => setVideoSeconds(event.target.value)}>{['4','8','12'].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></div><div><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>RENDER INTENT</div><select className="studio-input" value={videoQuality} onChange={event => setVideoQuality(event.target.value)}><option value="draft">Fast test / 30 tokens</option><option value="production">Polished launch / 60 tokens</option></select></div></div>{videoError && <div style={{ marginTop:15, padding:'11px 13px', color:'#cccccc', fontSize:12, border:'1px solid rgba(136,136,136,.32)', background:'rgba(136,136,136,.1)', borderRadius:11 }}>{videoError}</div>}<div style={{ color:'rgba(232,232,232,.52)', fontSize:10.5, lineHeight:1.55, marginTop:14 }}>Providers can decline prompts involving real people, copyrighted characters, music, or reference images with human faces. Failed starts return the charged tokens automatically. Finished MP4s are saved to the production library.</div><button onClick={startVideo} disabled={['queued','in_progress'].includes(videoJob?.status) || !videoRenderReady} className="studio-button" style={{ width:'100%', marginTop:18, padding:14 }}>{['queued','in_progress'].includes(videoJob?.status) ? 'Video render in progress...' : `Render ${selectedRunbook.label.toLowerCase()} video`}</button></section>
+        <section className="abundance-card flo-dark-surface creative-dark-console" style={{ padding:25 }}><div className="abundance-mini-label">VIDEO AD / {selectedRunbook.type}</div><h2 style={{ fontSize:27, letterSpacing:'-.06em', marginTop:5 }}>{selectedRunbook.label} in motion.</h2><p style={{ color:'rgba(232,232,232,.64)', fontSize:12, lineHeight:1.6, marginTop:10, maxWidth:560 }}>A real render job, built from the same format, product truth, hook, and proof as the image ad. Direct camera movement and production pacing; the Ad Room handles the render queue.</p><textarea className="studio-input" value={videoPrompt} onChange={event => setVideoPrompt(event.target.value)} rows={5} placeholder={selectedRunbook.video} style={{ resize:'vertical', lineHeight:1.6, marginTop:18 }} /><div className="ad-blueprint"><div className="ad-blueprint__label">AD BLUEPRINT</div><input value={hook} onChange={event => setHook(event.target.value)} placeholder="Opening hook / what stops the scroll?" /><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Proof / what makes the claim believable?" /></div><div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">UGC DIRECTOR / PERFORMANCE, PACE, AND CAPTION TREATMENT</div><div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:7, marginTop:8 }}>{CREATOR_DELIVERIES.map(delivery => <button key={delivery.id} onClick={() => setCreatorDelivery(delivery.id)} className={`format-card ${creatorDelivery === delivery.id ? 'active':''}`} style={{ padding:9 }}><b style={{ display:'block', fontSize:10.5 }}>{delivery.label}</b><small>{delivery.detail}</small></button>)}</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:11 }}><div><div className="abundance-mini-label" style={{ marginBottom:6 }}>EDIT PACE</div><select className="studio-input" value={editPace} onChange={event => setEditPace(event.target.value)}>{EDIT_PACES.map(pace => <option value={pace.id} key={pace.id}>{pace.label} — {pace.detail}</option>)}</select></div><div><div className="abundance-mini-label" style={{ marginBottom:6 }}>CAPTION TREATMENT</div><select className="studio-input" value={captionTreatment} onChange={event => setCaptionTreatment(event.target.value)}>{CAPTION_TREATMENTS.map(treatment => <option value={treatment.id} key={treatment.id}>{treatment.label} — {treatment.detail}</option>)}</select></div></div><p style={{ color:'rgba(240,240,240,.54)', fontSize:10.5, lineHeight:1.45, marginTop:8 }}>These controls shape how the original talent performs, how the cut moves, and how much text competes with your product proof.</p></div><div style={{ marginTop:20, paddingTop:16, borderTop:'1px solid rgba(240,240,240,.14)' }}><div className="abundance-mini-label">STORYBOARD / EDIT THE BEATS BEFORE RENDER</div><p style={{ color:'rgba(232,232,232,.58)', fontSize:11, lineHeight:1.5, margin:'7px 0 11px' }}>FloStudio sends these four editable beats to the real video provider. Keep every shot specific, product-led, and supportable.</p><div style={{ display:'grid', gap:9 }}>{storyboard.map((beat, index) => <div key={beat.id} style={{ padding:11, border:'1px solid rgba(240,240,240,.14)', background:'rgba(240,240,240,.035)', borderRadius:3 }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', marginBottom:8 }}><span style={{ color:'var(--signal)', font:'500 9px DM Mono,monospace', letterSpacing:'.1em' }}>{String(index + 1).padStart(2,'0')} / {beat.label}</span><span style={{ color:'rgba(240,240,240,.45)', fontSize:10 }}>editable beat</span></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}><textarea className="studio-input" value={beat.visual} onChange={event => updateStoryboardBeat(index, 'visual', event.target.value)} rows={2} placeholder="What should the viewer see?" style={{ resize:'vertical', fontSize:11 }} /><textarea className="studio-input" value={beat.voiceover} onChange={event => updateStoryboardBeat(index, 'voiceover', event.target.value)} rows={2} placeholder="What should the voiceover say?" style={{ resize:'vertical', fontSize:11 }} /></div><input className="studio-input" value={beat.caption} onChange={event => updateStoryboardBeat(index, 'caption', event.target.value)} placeholder="On-screen copy / caption" style={{ marginTop:8, fontSize:11 }} /></div>)}</div></div><div style={{ marginTop:18 }}><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:9 }}>VIDEO PLACEMENT</div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>{VIDEO_FORMATS.map(format => <button key={format.id} onClick={() => setVideoFormat(format.id)} className={`format-card ${videoFormat === format.id ? 'active':''}`}><b>{format.label}</b><small>{format.detail}</small></button>)}</div></div><div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:18 }}><div><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>DURATION</div><select className="studio-input" value={videoSeconds} onChange={event => setVideoSeconds(event.target.value)}>{['4','8','12'].map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}</select></div><div><div style={{ color:'#ffffff', fontSize:12, fontWeight:800, marginBottom:8 }}>RENDER INTENT</div><select className="studio-input" value={videoQuality} onChange={event => setVideoQuality(event.target.value)}><option value="draft">Fast test / 30 tokens</option><option value="production">Polished launch / 60 tokens</option></select></div></div>{videoError && <div style={{ marginTop:15, padding:'11px 13px', color:'#cccccc', fontSize:12, border:'1px solid rgba(136,136,136,.32)', background:'rgba(136,136,136,.1)', borderRadius:11 }}>{videoError}</div>}<div style={{ color:'rgba(232,232,232,.52)', fontSize:10.5, lineHeight:1.55, marginTop:14 }}>Providers can decline prompts involving real people, copyrighted characters, music, or App Store visuals with human faces. Failed starts return the charged tokens automatically. Finished MP4s are saved to the production library.</div><button onClick={startVideo} disabled={['queued','in_progress'].includes(videoJob?.status) || !videoRenderReady} className="studio-button" style={{ width:'100%', marginTop:18, padding:14 }}>{['queued','in_progress'].includes(videoJob?.status) ? 'Video render in progress...' : `Render ${selectedRunbook.label.toLowerCase()} video`}</button></section>
         <section className="abundance-card flo-dark-surface creative-dark-console" style={{ padding:22, minHeight:530, display:'flex', flexDirection:'column' }}><div className="abundance-mini-label">RENDER MONITOR</div>{videoJob?.status === 'completed' && videoJob.videoUrl ? <div style={{ marginTop:15 }}><div style={{ borderRadius:15, overflow:'hidden', background:'#080808', aspectRatio:videoJob.size === '720x1280' ? '9 / 16':'16 / 9' }}><video src={videoJob.videoUrl} poster={videoJob.thumbnailUrl} controls playsInline style={{ width:'100%', height:'100%', objectFit:'cover' }} /></div><div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12 }}><div><b style={{ display:'block', fontSize:14 }}>Video render complete</b><span style={{ color:'rgba(232,232,232,.6)', fontSize:11 }}>{videoJob.seconds || videoSeconds}s / saved to Asset Library</span></div><a href={videoJob.videoUrl} target="_blank" rel="noreferrer" className="abundance-pill">Open MP4</a></div></div> : videoJob ? <div style={{ flex:1, display:'grid', placeItems:'center', textAlign:'center' }}><div><div style={{ fontSize:42, fontWeight:800, letterSpacing:'-.08em', color:'#ededed' }}>{Math.max(0, Number(videoJob.progress || 0))}%</div><div style={{ color:'#ffffff', fontWeight:800, marginTop:6 }}>{videoJob.status === 'queued' ? 'Render queued' : 'Rendering your ad'}</div><div style={{ color:'rgba(232,232,232,.62)', fontSize:12, lineHeight:1.6, maxWidth:310, margin:'8px auto 0' }}>FloStudio is checking this real video job every ten seconds. You can leave the page; the job ID is retained locally for monitoring when you return.</div><div style={{ height:7, background:'rgba(255,255,255,.1)', borderRadius:999, overflow:'hidden', marginTop:18 }}><div style={{ height:'100%', width:`${Math.max(4, Number(videoJob.progress || 4))}%`, background:'linear-gradient(90deg,#878787,#727272,#ededed)', borderRadius:999 }} /></div></div></div> : <div className="abundance-glass" style={{ flex:1, marginTop:15, borderRadius:16, padding:20, display:'flex', flexDirection:'column', justifyContent:'flex-end', background:'linear-gradient(160deg,rgba(136,136,136,.13),rgba(114,114,114,.21))' }}><div className="abundance-mini-label">NO FAKE VIDEO PREVIEWS</div><h3 style={{ fontSize:26, letterSpacing:'-.065em', lineHeight:1.05, marginTop:8 }}>Your real campaign film will appear here.</h3><p style={{ color:'rgba(232,232,232,.65)', fontSize:12, lineHeight:1.6, marginTop:10 }}>The preview board stays honest: it only becomes a playable video when a render job actually completes.</p></div>}</section>
       </div>}
 
-      {activeTab === 'library' && <section id="app-asset-library" className="abundance-card flo-dark-surface creative-dark-console" style={{ padding:23 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', gap:16, marginBottom:18 }}><div><div className="abundance-mini-label">ASSET LIBRARY</div><h2 style={{ fontSize:26, letterSpacing:'-.06em', marginTop:5 }}>Every real output, ready for the next campaign.</h2></div><label className="studio-button" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{uploading ? 'Uploading...' : 'Add brand asset'}<input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={event => handleUpload(event.target.files)} style={{ display:'none' }} /></label></div>{handoffState.message && <div style={{ margin:'0 0 14px', color:handoffState.status === 'done' ? 'var(--signal)' : handoffState.status === 'error' ? '#c3c3c3' : 'rgba(240,240,240,.76)', fontSize:12 }}>{handoffState.message}</div>}{loadingAssets ? <div style={{ minHeight:280, display:'grid', placeItems:'center' }}><span className="spinner" /></div> : assets.length ? <div className="asset-grid">{assets.map(asset => <div key={asset.id || asset.name} className="asset-card"><AssetVisual asset={asset} compact /><div className="asset-footer"><div style={{ minWidth:0 }}><div style={{ font:'500 9px DM Mono,monospace', color:asset.source === 'app_store_connect_import' ? 'var(--signal)' : asset.kind === 'video' ? '#ededed':'#c7c7c7', letterSpacing:'.09em' }}>{asset.source === 'app_store_connect_import' ? 'APPLE APPROVED MEDIA' : asset.kind === 'video' ? 'VIDEO RENDER' : 'IMAGE CREATIVE'}</div><div style={{ fontSize:11, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:110, marginTop:3 }}>{asset.name}</div></div><div style={{ display:'flex', gap:5 }}><button onClick={() => sendCreativeToReview(asset)} disabled={Boolean(asset.campaign_post_id) || handoffState.status === 'working'} style={{ border:'1px solid rgba(223,223,223,.55)', background:'rgba(223,223,223,.18)', color:'var(--signal)', borderRadius:8, padding:'6px 8px', fontSize:10, fontWeight:800 }}>{asset.campaign_post_id ? 'In review' : 'Review'}</button><button onClick={() => deleteAsset(asset)} style={{ border:'1px solid rgba(255,255,255,.18)', background:'rgba(8,8,8,.72)', color:'#ffffff', borderRadius:8, padding:'6px 8px', fontSize:10, fontWeight:700 }}>Delete</button></div></div></div>)}</div> : <div className="abundance-glass" style={{ minHeight:260, display:'grid', placeItems:'center', borderRadius:16, color:'rgba(232,232,232,.68)', textAlign:'center', padding:20 }}>Upload your product visual or make the first image ad. FloStudio will keep real assets here for reuse across image and video campaigns.</div>}</section>}
+      {activeTab === 'library' && <section id="app-asset-library" className="abundance-card flo-dark-surface creative-dark-console" style={{ padding:23 }}><div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', gap:16, marginBottom:18 }}><div><div className="abundance-mini-label">ASSET LIBRARY</div><h2 style={{ fontSize:26, letterSpacing:'-.06em', marginTop:5 }}>Every real output, ready for the next campaign.</h2></div><label className="studio-button" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center' }}>{uploading ? 'Uploading...' : 'Add brand asset'}<input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={event => handleUpload(event.target.files)} style={{ display:'none' }} /></label></div>{handoffState.message && <div style={{ margin:'0 0 14px', color:handoffState.status === 'done' ? 'var(--signal)' : handoffState.status === 'error' ? '#c3c3c3' : 'rgba(240,240,240,.76)', fontSize:12 }}>{handoffState.message}</div>}{loadingAssets ? <div style={{ minHeight:280, display:'grid', placeItems:'center' }}><span className="spinner" /></div> : assets.length ? <div className="asset-grid">{assets.map(asset => <div key={asset.id || asset.name} className="asset-card"><AssetVisual asset={asset} compact /><div className="asset-footer"><div style={{ minWidth:0 }}><div style={{ font:'500 9px DM Mono,monospace', color:asset.source === 'app_store_connect_import' ? 'var(--signal)' : asset.kind === 'video' ? '#ededed':'#c7c7c7', letterSpacing:'.09em' }}>{asset.source === 'app_store_connect_import' ? 'APPLE APPROVED MEDIA' : asset.kind === 'video' ? 'VIDEO RENDER' : 'IMAGE CREATIVE'}</div><div style={{ fontSize:11, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:110, marginTop:3 }}>{asset.name}</div></div><div style={{ display:'flex', gap:5 }}><button onClick={() => sendCreativeToReview(asset)} disabled={Boolean(asset.campaign_post_id) || handoffState.status === 'working'} style={{ border:'1px solid rgba(223,223,223,.55)', background:'rgba(223,223,223,.18)', color:'var(--signal)', borderRadius:8, padding:'6px 8px', fontSize:10, fontWeight:800 }}>{asset.campaign_post_id ? 'In review' : 'Review'}</button><button onClick={() => deleteAsset(asset)} style={{ border:'1px solid rgba(255,255,255,.18)', background:'rgba(8,8,8,.72)', color:'#ffffff', borderRadius:8, padding:'6px 8px', fontSize:10, fontWeight:700 }}>Delete</button></div></div></div>)}</div> : <div className="abundance-glass" style={{ minHeight:260, display:'grid', placeItems:'center', borderRadius:16, color:'rgba(232,232,232,.68)', textAlign:'center', padding:20 }}>Import an App Store visual, save custom artwork, or make a verified-reference creative. Only current App Store and approved App Store Connect visuals can anchor new renders.</div>}</section>}
     </div>
   </Layout>
 }

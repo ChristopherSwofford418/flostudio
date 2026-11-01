@@ -1,6 +1,6 @@
 import { resolveVideoProvider } from './media-provider.js'
 import sharp from 'sharp'
-import { authenticatedProviderUser, assertOwnedMediaAsset, assertWorkspaceProduct, resolveWorkspaceOpenAIKey } from './provider-key-vault.js'
+import { authenticatedProviderUser, assertOwnedMediaAsset, assertWorkspaceProduct, resolveVerifiedProductVisualReference, resolveWorkspaceOpenAIKey } from './provider-key-vault.js'
 import { castingDirection } from './ugc-casting.js'
 export const maxDuration = 60
 
@@ -128,10 +128,12 @@ export default async function handler(req, res) {
       voiceover:String(beat?.voiceover || '').slice(0, 240),
     })) : []
     const storyboardPrompt = storyboard.length ? ` Follow this editable storyboard exactly as a visual plan: ${storyboard.map(beat => `Shot ${beat.index} ${beat.label}. Purpose: ${beat.purpose}. Visual: ${beat.visual}. On-screen copy: ${beat.caption}. Voiceover direction: ${beat.voiceover}.`).join(' ')}` : ''
-    const enhancedPrompt = buildEnhancedVideoPrompt({ prompt, storyboardPrompt, creatorMode:body.creatorMode, ugcStoryShape:body.ugcStoryShape, creatorDelivery:body.creatorDelivery, editPace:body.editPace, captionTreatment:body.captionTreatment, actorId:body.actorId, voiceId:body.voiceId, hasReference:Boolean(body.referenceImage) })
-    const reference = await prepareVideoReference(body.referenceImage, size)
+    const verifiedReference = await resolveVerifiedProductVisualReference({ workspaceId, productId, userId:user.id, accessToken, reference:body.reference })
+    const enhancedPrompt = buildEnhancedVideoPrompt({ prompt, storyboardPrompt, creatorMode:body.creatorMode, ugcStoryShape:body.ugcStoryShape, creatorDelivery:body.creatorDelivery, editPace:body.editPace, captionTreatment:body.captionTreatment, actorId:body.actorId, voiceId:body.voiceId, hasReference:true })
+    const reference = await prepareVideoReference(verifiedReference.url, size)
+    if (!reference) return res.status(422).json({ error:'The selected verified app image could not be prepared for video. Choose another App Store or approved App Store Connect visual.', code:'APP_REFERENCE_UNAVAILABLE' })
     const job = await provider.create({ model, prompt:enhancedPrompt, size, seconds, reference })
-    return res.status(200).json({ ...job, provider:provider.id })
+    return res.status(200).json({ ...job, provider:provider.id, reference:{ source:verifiedReference.source, label:verifiedReference.label } })
   } catch (error) {
     console.error('Video generation error:', error)
     return res.status(error.code === 'MEDIA_PROVIDER_CONFIGURATION' ? 503 : 500).json({ error:error?.message || 'Video creation failed. Please try again.' })

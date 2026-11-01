@@ -4,6 +4,7 @@ import { recordMemoryEvent } from './creativeMemory'
 import { ensurePersonalWorkspace } from './portfolio'
 import { ensureCampaignRunbook } from './campaignRunbook'
 import { authenticatedJsonHeaders } from './authenticatedApi'
+import { loadVerifiedProductRenderReference } from './productRenderReference'
 
 const platformTimes = { instagram:'09:00', linkedin:'08:00', facebook:'13:00', tiktok:'19:00', twitter:'12:00' }
 
@@ -144,6 +145,7 @@ export async function createCampaignPosts({ userId, campaignId, concept, platfor
 
 export async function generateCampaignVariant({ userId, campaign, concept, post, variation }) {
   const workspaceId = campaign.workspace_id || await ensurePersonalWorkspace()
+  const verifiedReference = await loadVerifiedProductRenderReference({ workspaceId, productId:campaign.product_id })
   const prompt =
  `Create a premium conversion-focused ${post.platform} campaign creative. Campaign: ${campaign.name}. Concept: ${concept.title}. Angle: ${concept.angle}. Hook: ${concept.hook}. Proof: ${concept.proof}. CTA: ${concept.cta}. Visual direction: ${concept.visual_recipe?.direction || 'editorial commercial product story'}. Edited script direction: ${JSON.stringify(concept.script || {})}. Make the product benefit instantly clear; use sophisticated modern ad art direction, deliberate lighting, and a strong visual hierarchy. Do not use unreadable generated text, public figures, competitor marks, or copyrighted characters.`
   const jobResult = await supabase.from('render_jobs').insert([{ user_id:userId, workspace_id:workspaceId, campaign_id:campaign.id, concept_id:concept.id, provider:'openai_gpt_image', job_kind:'image', status:'queued', request_spec:{ prompt, variation, platform:post.platform, ratio:'4:5' }, quote_tokens:10 }]).select().single()
@@ -151,7 +153,7 @@ export async function generateCampaignVariant({ userId, campaign, concept, post,
   const job = jobResult.data
   try {
     await supabase.from('render_jobs').update({ status:'in_progress', started_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', job.id)
-    const response = await fetch('/api/generate-image', { method:'POST', headers:await authenticatedJsonHeaders(), body:JSON.stringify({ prompt, aspectRatio:'4:5', variations:1, stylePreset:'Commercial', textOverlay:'', workspaceId, productId:campaign.product_id }) })
+    const response = await fetch('/api/generate-image', { method:'POST', headers:await authenticatedJsonHeaders(), body:JSON.stringify({ prompt, aspectRatio:'4:5', variations:1, stylePreset:'Commercial', textOverlay:'', reference:verifiedReference.payload, workspaceId, productId:campaign.product_id }) })
     const payload = await response.json()
     if (!response.ok || payload.error || !payload.images?.[0]?.url) throw new Error(payload.error || 'The image provider returned no creative output.')
     const generatedUrl = payload.images[0].url
@@ -162,7 +164,7 @@ export async function generateCampaignVariant({ userId, campaign, concept, post,
     const { error: uploadError } = await supabase.storage.from('marketing-assets').upload(storagePath, blob, { contentType:blob.type || 'image/png', upsert:true })
     if (uploadError) throw uploadError
     const { data: publicData } = supabase.storage.from('marketing-assets').getPublicUrl(storagePath)
-    const asset = await createMediaAsset({ user_id:userId, workspace_id:workspaceId, product_id:campaign.product_id || null, kind:'image', source:'ai_image', provider:'openai_gpt_image', render_status:'completed', prompt, asset_url:publicData.publicUrl, storage_path:storagePath, campaign_post_id:post.id, campaign_id:campaign.id, concept_id:concept.id, render_job_id:job.id, metadata:{ variation, platform:post.platform, origin:'campaign-engine', ratio:'4:5' }, completed_at:new Date().toISOString() })
+    const asset = await createMediaAsset({ user_id:userId, workspace_id:workspaceId, product_id:campaign.product_id || null, kind:'image', source:'ai_image', provider:'openai_gpt_image', render_status:'completed', prompt, asset_url:publicData.publicUrl, storage_path:storagePath, campaign_post_id:post.id, campaign_id:campaign.id, concept_id:concept.id, render_job_id:job.id, metadata:{ variation, platform:post.platform, origin:'campaign-engine', ratio:'4:5', verifiedReference:verifiedReference.payload }, completed_at:new Date().toISOString() })
     await supabase.from('campaign_media').insert([{ user_id:userId, workspace_id:workspaceId, campaign_id:campaign.id, concept_id:concept.id, media_asset_id:asset.id, role:'variant' }])
     await supabase.from('render_jobs').update({ status:'completed', settled_tokens:10, media_asset_id:asset.id, completed_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', job.id)
     await recordMemoryEvent({ userId, campaignId:campaign.id, conceptId:concept.id, mediaAssetId:asset.id, eventType:'asset_rendered', attributes:{ provider:'openai_gpt_image', platform:post.platform, variation, visualDirection:concept.visual_recipe?.direction || '' } })
