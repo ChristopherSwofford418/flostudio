@@ -164,10 +164,10 @@ function AgentDrawer({ onClose, activeApp, apps }) {
           <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:10 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span style={{ fontSize:10, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--signal)', fontWeight:700 }}>Generated Drafts ({m.result.drafts.length})</span>
-              <button onClick={() => approveAllDrafts(index, m.result.drafts)} className="studio-chip" style={{ fontSize:10, padding:'3px 8px', background:'var(--signal)', color:'var(--ink-deep)', border:0, fontWeight:700, cursor:'pointer' }}>Save all to review</button>
+              <button onClick={() => approveAllDrafts(index, m.result.drafts)} className="studio-chip" style={{ fontSize:10, padding:'3px 8px', background:'var(--signal)', color:'#fff', border:0, fontWeight:700, cursor:'pointer' }}>Save all to review</button>
             </div>
             {m.result.drafts.map((draft) => (
-              <div key={draft.id} style={{ background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:6 }}>
+              <div key={draft.id} className="flo-copilot-result-card" style={{ background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:6 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <span style={{ fontSize:9, textTransform:'uppercase', letterSpacing:'.08em', color:'rgba(240,240,240,.65)' }}>{draft.platform} · {new Date(draft.scheduledAt).toLocaleDateString()}</span>
                   <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, background: draft.status === 'saved_to_review' ? 'rgba(155,155,155,.2)' : draft.status === 'rejected' ? 'rgba(104,104,104,.2)' : 'rgba(178,178,178,.2)', color: draft.status === 'saved_to_review' ? '#b8b8b8' : draft.status === 'rejected' ? '#8e8e8e' : '#c1c1c1' }}>{draft.status === 'saved_to_review' ? 'PENDING REVIEW' : draft.status.toUpperCase()}</span>
@@ -176,7 +176,7 @@ function AgentDrawer({ onClose, activeApp, apps }) {
                 <p style={{ fontSize:11.5, color:'#ffffff', margin:0, lineHeight:1.4 }}>{draft.content}</p>
                 {draft.status === 'draft' ? (
                   <div style={{ display:'flex', gap:6, marginTop:4 }}>
-                    <button onClick={() => approveDraft(draft, index)} style={{ flex:1, padding:'5px', background:'var(--signal)', color:'var(--ink-deep)', border:0, borderRadius:4, fontSize:10.5, fontWeight:800, cursor:'pointer' }}>Save to Review Queue</button>
+                    <button onClick={() => approveDraft(draft, index)} style={{ flex:1, padding:'5px', background:'var(--signal)', color:'#fff', border:0, borderRadius:4, fontSize:10.5, fontWeight:800, cursor:'pointer' }}>Save to Review Queue</button>
                     <button onClick={() => rejectDraft(draft.id, index)} style={{ padding:'5px 10px', background:'rgba(255,255,255,.08)', color:'#ffffff', border:'1px solid rgba(255,255,255,.15)', borderRadius:4, fontSize:10.5, fontWeight:600, cursor:'pointer' }}>Discard</button>
                   </div>
                 ) : (
@@ -187,18 +187,18 @@ function AgentDrawer({ onClose, activeApp, apps }) {
           </div>
         )}
         {m.actionType === 'seo_blueprint' && m.result && (
-          <div style={{ marginTop:10, background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:5 }}>
+          <div className="flo-copilot-result-card" style={{ marginTop:10, background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:5 }}>
             <div style={{ fontSize:10, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--signal)', fontWeight:700 }}>SEO & ASO Blueprint</div>
             <div style={{ fontSize:11, color:'#ffffff' }}><b>Title:</b> {m.result.metaTitle}</div>
             <div style={{ fontSize:11, color:'rgba(240,240,240,.8)' }}><b>Keywords:</b> {m.result.targetKeywords.join(', ')}</div>
           </div>
         )}
         {m.actionType === 'ad_created' && m.result && (
-          <div style={{ marginTop:10, background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:8 }}>
+          <div className="flo-copilot-result-card" style={{ marginTop:10, background:'rgba(16,16,16,.45)', border:'1px solid rgba(240,240,240,.16)', borderRadius:8, padding:10, display:'flex', flexDirection:'column', gap:8 }}>
             <div style={{ fontSize:10, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--signal)', fontWeight:700 }}>Generated Ad Creative</div>
             <img src={m.result.imageUrl} alt="Generated ad" style={{ width:'100%', height:200, objectFit:'cover', borderRadius:6, border:'1px solid rgba(240,240,240,.2)' }} />
             <div style={{ fontSize:11, color:'rgba(240,240,240,.8)' }}><b>Prompt:</b> {m.result.promptUsed}</div>
-            <a href={m.result.imageUrl} target="_blank" rel="noreferrer" style={{ textAlign:'center', padding:'6px', background:'var(--signal)', color:'var(--ink-deep)', borderRadius:4, fontSize:11, fontWeight:800, textDecoration:'none' }}>Open Full Resolution →</a>
+            <a href={m.result.imageUrl} target="_blank" rel="noreferrer" style={{ textAlign:'center', padding:'6px', background:'var(--signal)', color:'#fff', borderRadius:4, fontSize:11, fontWeight:800, textDecoration:'none' }}>Open Full Resolution →</a>
           </div>
         )}
       </div>)}

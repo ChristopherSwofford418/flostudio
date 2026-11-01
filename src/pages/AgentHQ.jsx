@@ -423,7 +423,7 @@ export default function AgentHQ() {
       </section>
 
       <div className="engine-stat-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:18 }}>
-        {[[workspace.brands.length,'Brand profiles','var(--signal)'],[workspace.products.length,'Products','var(--teal)'],[workspace.campaigns.length,'Campaigns','var(--vermilion)'],[workspace.media.length,'Creative assets','var(--yellow)']].map(([value,label,color]) => <div key={label} className="abundance-card" style={{ padding:'16px 18px' }}><div style={{ fontSize:25, fontWeight:850, color:'#ffffff', letterSpacing:'-.07em' }}>{value}</div><div style={{ color, font:'600 9.5px DM Mono,monospace', letterSpacing:'.08em', marginTop:4 }}>{label.toUpperCase()}</div></div>)}
+        {[[workspace.brands.length,'Brand profiles','var(--signal)'],[workspace.products.length,'Products','var(--teal)'],[workspace.campaigns.length,'Campaigns','var(--vermilion)'],[workspace.media.length,'Creative assets','var(--yellow)']].map(([value,label,color]) => <div key={label} className="abundance-card flo-dark-surface engine-stat-card" style={{ padding:'16px 18px' }}><div style={{ fontSize:25, fontWeight:850, color:'#ffffff', letterSpacing:'-.07em' }}>{value}</div><div style={{ color, font:'600 9.5px DM Mono,monospace', letterSpacing:'.08em', marginTop:4 }}>{label.toUpperCase()}</div></div>)}
       </div>
 
       <div className="engine-grid" style={{ display:'grid', gridTemplateColumns:'178px minmax(0,1fr) 290px', gap:18, alignItems:'start' }}>
@@ -433,7 +433,7 @@ export default function AgentHQ() {
           <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid rgba(255,255,255,.1)', color:'rgba(232,232,232,.54)', fontSize:10.5, lineHeight:1.55 }}>Every output is attached to a campaign record, not lost in a prompt history.</div>
         </aside>
 
-        <main className="studio-panel" style={{ overflow:'hidden', background:'linear-gradient(145deg,#2f2f2f,#121212)', borderColor:'rgba(197,197,197,.28)' }}>
+        <main className="studio-panel flo-dark-surface" style={{ overflow:'hidden', background:'linear-gradient(145deg,#2f2f2f,#121212)', borderColor:'rgba(197,197,197,.28)' }}>
           {stage === 'intake' && <section style={{ padding:'26px 28px' }}>
             <div className="studio-kicker" style={{ color:'#c5c5c5' }}>01 / Product intake</div><h2 style={{ color:'#ffffff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>What are we taking to market?</h2><p style={{ color:'rgba(247,247,247,.68)', fontSize:12, lineHeight:1.65, marginTop:8, maxWidth:650 }}>Start with a live product page, app listing, or your own facts. Flo uses only the details you confirm in the next step.</p>
             <div style={{ display:'grid', gap:16, marginTop:23 }}>

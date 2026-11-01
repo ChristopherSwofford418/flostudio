@@ -34,7 +34,7 @@ export default function UGCCastingPanel({ appName, actorId, voiceId, onActorChan
     if (matchingVoice) onVoiceChange(matchingVoice.id)
   }
 
-  return <section style={{ marginTop:16, paddingTop:14, borderTop:'1px solid rgba(240,240,240,.14)' }}>
+  return <section className="flo-dark-surface ugc-casting-panel" style={{ marginTop:16, paddingTop:14, borderTop:'1px solid rgba(240,240,240,.14)' }}>
     <style>{`@keyframes ugcWave{from{transform:scaleY(.45)}to{transform:scaleY(1)}}`}</style>
     <div style={{ display:'flex', justifyContent:'space-between', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}>
       <div>

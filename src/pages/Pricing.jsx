@@ -30,7 +30,7 @@ export default function Pricing() {
         {/* Pricing Cards Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24, marginBottom: 48 }}>
           {PRICING_TIERS.map(tier => (
-            <div key={tier.id} className="abundance-card" style={{ border: tier.popular ? '2px solid #9b9b9b' : '1px solid rgba(255,255,255,.13)', padding: 32, display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: tier.popular ? '0 20px 48px rgba(122,122,122,.2)' : undefined, transition: 'all 0.2s' }}
+            <div key={tier.id} className="abundance-card flo-dark-surface" style={{ border: tier.popular ? '2px solid #9b9b9b' : '1px solid rgba(255,255,255,.13)', padding: 32, display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: tier.popular ? '0 20px 48px rgba(122,122,122,.2)' : undefined, transition: 'all 0.2s' }}
               onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)'}}
               onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)'}}>
               
