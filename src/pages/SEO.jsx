@@ -78,12 +78,17 @@ export default function SEO() {
   const [visibilityForm, setVisibilityForm] = useState({ engine:'chatgpt', promptText:'', resultUrl:'', citedUrls:'', notes:'' })
 
   useEffect(() => {
-    if (!safeApps.length) return
-    const requested = safeApps.find(app => app.id === requestedId)
-    const current = safeApps.find(app => app.id === selectedId)
-    const fallback = requested || current || safeApps.find(app => app.id === activeApp?.id) || safeApps[0]
-    if (fallback?.id && fallback.id !== selectedId) setSelectedId(fallback.id)
-  }, [safeApps, requestedId, selectedId, activeApp?.id])
+    if (!safeApps.length) {
+      if (selectedId) setSelectedId('')
+      return
+    }
+    const requestedApp = safeApps.find(app => app.id === requestedId) || null
+    const workspaceApp = safeApps.find(app => app.id === activeApp?.id) || null
+    const currentApp = safeApps.find(app => app.id === selectedId) || null
+    const nextApp = requestedApp || workspaceApp || currentApp || safeApps[0]
+    if (nextApp.id !== selectedId) setSelectedId(nextApp.id)
+    if (nextApp.id !== activeApp?.id) setActiveApp(nextApp)
+  }, [safeApps, requestedId, selectedId, activeApp?.id, setActiveApp])
 
   const selectApp = id => {
     const next = safeApps.find(app => app.id === id)

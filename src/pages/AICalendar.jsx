@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
-import { listMediaAssets } from '../lib/mediaAssets'
 import { useWorkspace } from '../context/WorkspaceContext'
 
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh4a3B2bm9raHFicGJxZWZlZ3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDI1NDgsImV4cCI6MjA5MTc3ODU0OH0.OVdLzh2Bvuf4l6F6ITSpj4pWqoc3EoTxs6OCvrMf4JU'
@@ -34,6 +33,7 @@ export default function AICalendar() {
   const [scopeMode, setScopeMode] = useState('app')
   const [legacyCount, setLegacyCount] = useState(0)
   const [loadError, setLoadError] = useState('')
+  const [mutatingPostId, setMutatingPostId] = useState(null)
   const activeProductId = activeApp?.id || ''
 
   const year = currentDate.getFullYear()
@@ -41,32 +41,62 @@ export default function AICalendar() {
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
-  useEffect(() => { loadPosts() }, [month, year, activeProductId, scopeMode])
+  useEffect(() => { loadPosts() }, [month, year, activeProductId, scopeMode, workspaceId])
 
   const loadPosts = async () => {
     setLoading(true)
     setLoadError('')
-    const start = new Date(year, month, 1).toISOString()
-    const end = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
     try {
-      const mediaQuery = scopeMode === 'all'
-        ? supabase.from('media_assets').select('*').in('render_status', ['ready','completed']).order('created_at', { ascending:false })
-        : listMediaAssets(activeProductId).catch(() => [])
+      const { data:{ user }, error:authError } = await supabase.auth.getUser()
+      if (authError) throw authError
+      if (!user?.id) throw new Error('Sign in to view this calendar.')
+      if (!workspaceId) throw new Error('Choose a workspace before viewing its calendar.')
+      if (scopeMode === 'app' && !activeProductId) {
+        setPosts([])
+        setMediaAssets([])
+        setLegacyCount(0)
+        setLoadError('Choose a portfolio app to view its calendar.')
+        return
+      }
+
+      const start = new Date(year, month, 1).toISOString()
+      const end = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
+      const postQuery = supabase
+        .from('campaign_posts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('workspace_id', workspaceId)
+        .gte('scheduled_at', start)
+        .lte('scheduled_at', end)
+        .order('scheduled_at')
+      const campaignQuery = supabase
+        .from('campaigns')
+        .select('id,product_id,name')
+        .eq('user_id', user.id)
+        .eq('workspace_id', workspaceId)
+      let mediaQuery = supabase
+        .from('media_assets')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('workspace_id', workspaceId)
+        .in('render_status', ['ready','completed'])
+        .order('created_at', { ascending:false })
+      if (scopeMode === 'app') mediaQuery = mediaQuery.eq('product_id', activeProductId)
       const [postResult, campaignResult, mediaResult] = await Promise.all([
-        supabase.from('campaign_posts').select('*').gte('scheduled_at', start).lte('scheduled_at', end).order('scheduled_at'),
-        supabase.from('campaigns').select('id,product_id,name'),
+        postQuery,
+        campaignQuery,
         mediaQuery,
       ])
       if (postResult.error) throw postResult.error
       if (campaignResult.error) throw campaignResult.error
+      if (mediaResult.error) throw mediaResult.error
       const campaignById = Object.fromEntries((campaignResult.data || []).map(campaign => [campaign.id, campaign]))
       const enriched = (postResult.data || []).map(post => ({ ...post, campaign:campaignById[post.campaign_id] || null }))
       const unassigned = enriched.filter(post => !post.campaign?.product_id).length
-      const scoped = scopeMode === 'app' && activeProductId ? enriched.filter(post => post.campaign?.product_id === activeProductId) : enriched
+      const scoped = scopeMode === 'app' ? enriched.filter(post => post.campaign?.product_id === activeProductId) : enriched
       setPosts(scoped)
       setLegacyCount(unassigned)
-      const mediaRows = Array.isArray(mediaResult) ? mediaResult : (mediaResult?.data || [])
-      setMediaAssets(mediaRows.filter(asset => asset.render_status === 'ready' || asset.render_status === 'completed'))
+      setMediaAssets(mediaResult.data || [])
     } catch (error) {
       setLoadError(error.message || 'FloStudio could not load this calendar.')
       setPosts([])
@@ -93,40 +123,28 @@ export default function AICalendar() {
   }
 
   const fillMonth = async () => {
-    if (!fillPrompt.trim()) return
+    const prompt = fillPrompt.trim()
+    if (!prompt) {
+      alert('Add a campaign prompt before generating an app calendar.')
+      return
+    }
     if (!activeApp || scopeMode !== 'app') {
       alert('Choose a portfolio app before filling its calendar. All Portfolio is review-only.')
+      return
+    }
+    if (!workspaceId || activeApp.workspace_id !== workspaceId) {
+      alert('Choose an app from the active workspace before filling its calendar.')
       return
     }
     setGenerating(true)
     setShowFillModal(false)
     try {
-      const { data:{ user } } = await supabase.auth.getUser()
+      const { data:{ user }, error:authError } = await supabase.auth.getUser()
+      if (authError) throw authError
       if (!user?.id) throw new Error('Sign in again before creating an app calendar.')
-      let campaignResult = await supabase.from('campaigns').select('*').eq('user_id', user.id).eq('product_id', activeApp.id).order('updated_at', { ascending:false }).limit(1).maybeSingle()
-      if (campaignResult.error) throw campaignResult.error
-      let calendarCampaign = campaignResult.data
-      if (!calendarCampaign) {
-        if (!activeApp.brand_id) throw new Error('This app needs a brand record before FloStudio can create an app-scoped calendar. Open Campaign Engine once for this app, then try again.')
-        const created = await supabase.from('campaigns').insert([{
-          user_id:user.id,
-          workspace_id:workspaceId || activeApp.workspace_id || null,
-          brand_id:activeApp.brand_id,
-          product_id:activeApp.id,
-          name:`${activeApp.name} · ${MONTHS[month]} ${year} Content Calendar`,
-          objective:'content cadence',
-          audience:activeApp.audience || null,
-          offer_text:activeApp.offer_text || null,
-          platforms:['instagram','linkedin','facebook','twitter'],
-          brief:fillPrompt.trim(),
-          status:'ready_for_review',
-        }]).select().single()
-        if (created.error) throw created.error
-        calendarCampaign = created.data
-      }
       const text = await callAI([
         { role: 'system', content: 'You are a social media strategist. Generate a month of posts. Return ONLY a valid JSON array: [{"day":1,"platform":"instagram","content":"...","hashtags":"..."}]' },
-        { role: 'user', content: `Brand/context: ${fillPrompt}\nMonth: ${MONTHS[month]} ${year}\nGenerate 12 posts spread across the month. Platforms: instagram, linkedin, twitter, facebook.` }
+        { role: 'user', content: `Brand/context: ${prompt}\nMonth: ${MONTHS[month]} ${year}\nGenerate 12 posts spread across the month. Platforms: instagram, linkedin, twitter, facebook.` }
       ], 2000)
       let generated = []
       try {
@@ -143,14 +161,52 @@ export default function AICalendar() {
           { day: 18, platform: 'linkedin', content: `Three ways to automate your social presence with AI.`, hashtags: '#Automation' },
         ]
       }
-      
-      for (const post of generated) {
+
+      if (!Array.isArray(generated) || !generated.length) throw new Error('The calendar generator returned no usable posts. No posts were created.')
+      const validPosts = generated.filter(post => post && typeof post === 'object')
+      if (!validPosts.length) throw new Error('The calendar generator returned no usable posts. No posts were created.')
+
+      const campaignResult = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('workspace_id', workspaceId)
+        .eq('product_id', activeApp.id)
+        .order('updated_at', { ascending:false })
+        .limit(1)
+        .maybeSingle()
+      if (campaignResult.error) throw campaignResult.error
+      let calendarCampaign = campaignResult.data
+      if (!calendarCampaign) {
+        if (!activeApp.brand_id) throw new Error('This app needs a brand record before FloStudio can create an app-scoped calendar. Open Campaign Engine once for this app, then try again.')
+        const created = await supabase.from('campaigns').insert([{
+          user_id:user.id,
+          workspace_id:workspaceId,
+          brand_id:activeApp.brand_id,
+          product_id:activeApp.id,
+          name:`${activeApp.name} · ${MONTHS[month]} ${year} Content Calendar`,
+          objective:'content cadence',
+          audience:activeApp.audience || null,
+          offer_text:activeApp.offer_text || null,
+          platforms:['instagram','linkedin','facebook','twitter'],
+          brief:prompt,
+          status:'ready_for_review',
+        }]).select().single()
+        if (created.error) throw created.error
+        calendarCampaign = created.data
+      }
+
+      const failures = generated.length - validPosts.length
+        ? [`${generated.length - validPosts.length} generated item${generated.length - validPosts.length === 1 ? '' : 's'} could not be saved because it was invalid.`]
+        : []
+      let createdCount = 0
+      for (const [index, post] of validPosts.entries()) {
         const dayNum = Math.min(Math.max(1, post.day || 1), daysInMonth)
         const d = new Date(year, month, dayNum)
         d.setHours(9, 0, 0, 0)
-        await supabase.from('campaign_posts').insert([{
+        const { error:insertError } = await supabase.from('campaign_posts').insert([{
           user_id:user.id,
-          workspace_id:workspaceId || activeApp.workspace_id || null,
+          workspace_id:workspaceId,
           campaign_id:calendarCampaign.id,
           platform: post.platform || 'instagram',
           content: `${post.content || ''}${post.hashtags ? '\n\n' + post.hashtags : ''}`,
@@ -158,24 +214,85 @@ export default function AICalendar() {
           scheduled_at: d.toISOString(),
           created_at: new Date().toISOString()
         }])
+        if (insertError) failures.push(`Post ${index + 1}: ${insertError.message || 'could not be saved.'}`)
+        else createdCount += 1
       }
       await loadPosts()
+      if (failures.length) {
+        const outcome = createdCount
+          ? `Calendar generation partially completed: created ${createdCount} of ${validPosts.length} valid posts.`
+          : 'Calendar generation failed: no posts were created.'
+        alert(`${outcome} ${failures.length} item${failures.length === 1 ? '' : 's'} failed. ${failures.slice(0, 3).join(' ')}`)
+      } else {
+        alert(`Calendar generation completed: created ${createdCount} posts. Nothing was published automatically.`)
+      }
     } catch (e) {
       alert(`Error filling calendar: ${e.message}`)
+    } finally {
+      setGenerating(false)
     }
-    setGenerating(false)
   }
 
-  const deletePost = async (id) => {
-    await supabase.from('campaign_posts').delete().eq('id', id)
-    setSelectedPost(null)
-    await loadPosts()
+  const deletePost = async (post) => {
+    if (!post?.id) return
+    setMutatingPostId(post.id)
+    try {
+      const { data:{ user }, error:authError } = await supabase.auth.getUser()
+      if (authError) throw authError
+      if (!user?.id) throw new Error('Sign in again before deleting a post.')
+      if (!workspaceId) throw new Error('Choose a workspace before deleting a post.')
+      const { data, error } = await supabase
+        .from('campaign_posts')
+        .delete()
+        .eq('id', post.id)
+        .eq('user_id', user.id)
+        .eq('workspace_id', workspaceId)
+        .select('id')
+      if (error) throw error
+      if (!data?.length) throw new Error('This post is no longer available in the active workspace.')
+      setSelectedPost(null)
+      await loadPosts()
+    } catch (error) {
+      alert(`Could not delete post: ${error.message || 'Please try again.'}`)
+    } finally {
+      setMutatingPostId(null)
+    }
   }
 
-  const approvePost = async (id) => {
-    await supabase.from('campaign_posts').update({ status: 'approved' }).eq('id', id)
-    setSelectedPost(null)
-    await loadPosts()
+  const approvePost = async (post) => {
+    if (!post?.id) return
+    if (post.status === 'published') {
+      alert('Published posts cannot be moved back to approved.')
+      return
+    }
+    if (post.status !== 'pending') {
+      alert('Only posts awaiting review can be approved.')
+      return
+    }
+    setMutatingPostId(post.id)
+    try {
+      const { data:{ user }, error:authError } = await supabase.auth.getUser()
+      if (authError) throw authError
+      if (!user?.id) throw new Error('Sign in again before approving a post.')
+      if (!workspaceId) throw new Error('Choose a workspace before approving a post.')
+      const { data, error } = await supabase
+        .from('campaign_posts')
+        .update({ status: 'approved' })
+        .eq('id', post.id)
+        .eq('user_id', user.id)
+        .eq('workspace_id', workspaceId)
+        .eq('status', 'pending')
+        .select('id, status')
+        .maybeSingle()
+      if (error) throw error
+      if (!data) throw new Error('This post was already reviewed or is no longer available in the active workspace.')
+      setSelectedPost(null)
+      await loadPosts()
+    } catch (error) {
+      alert(`Could not approve post: ${error.message || 'Please try again.'}`)
+    } finally {
+      setMutatingPostId(null)
+    }
   }
 
   return (
@@ -197,7 +314,7 @@ export default function AICalendar() {
         {legacyCount > 0 && scopeMode === 'app' && <div style={{ marginTop:14, padding:'10px 13px', borderRadius:12, border:'1px solid #e7defd', background:'#faf8ff', color:'#625c7d', fontSize:11, lineHeight:1.55 }}><b style={{ color:'#4e47b8' }}>{legacyCount} legacy calendar record{legacyCount === 1 ? '' : 's'}</b> cannot yet be matched to a portfolio app and remain preserved in <b>All Portfolio</b>. No records have been removed or changed.</div>}
         {loadError && <div style={{ marginTop:14, padding:'10px 13px', borderRadius:12, border:'1px solid #f0c6cd', background:'#fff7f7', color:'#9b3545', fontSize:11.5 }}>{loadError}</div>}
         <section style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:12, margin:'18px 0 14px' }}>{[['pending','Needs review','#6f63d8'],['approved','Approved','#16836b'],['published','Published','#2673c9']].map(([status,label,accent]) => <div key={status} className="calendar-stat"><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center' }}><span style={{ color:'#68738a', fontSize:9, letterSpacing:'.1em', fontWeight:850, textTransform:'uppercase' }}>{label}</span><span style={{ width:8, height:8, borderRadius:'50%', background:accent }}/></div><b style={{ display:'block', color:'#20273d', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>{counts[status]}</b><span style={{ color:'#7a8498', fontSize:10.5 }}>in {scopeMode === 'all' ? 'all portfolio' : (activeApp?.name || 'selected app')}</span></div>)}</section>
-        <section style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', margin:'0 0 12px' }}><div><div className="calendar-kicker" style={{ color:'#5f59e8' }}>MONTHLY PUBLISHING RHYTHM</div><p style={{ color:'#69748b', fontSize:10.5, marginTop:4 }}>{scopeMode === 'all' ? 'Review all preserved calendar activity.' : `Build ${activeApp?.name || 'this app'}’s cadence using its saved product truth and creative library.`}</p></div><button type="button" onClick={() => setShowFillModal(true)} disabled={generating || scopeMode === 'all'} style={{ border:'1px solid #5f59e8', background:'#5f59e8', color:'#fff', borderRadius:10, padding:'10px 13px', fontSize:10.5, fontWeight:850, cursor:scopeMode === 'all' ? 'not-allowed' : 'pointer', opacity:scopeMode === 'all' ? .58 : 1 }}>{generating ? 'Mapping…' : `Fill ${activeApp?.name || 'app'} month →`}</button></section>
+        <section style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', margin:'0 0 12px' }}><div><div className="calendar-kicker" style={{ color:'#5f59e8' }}>MONTHLY PUBLISHING RHYTHM</div><p style={{ color:'#69748b', fontSize:10.5, marginTop:4 }}>{scopeMode === 'all' ? 'Review all preserved calendar activity.' : `Build ${activeApp?.name || 'this app'}’s cadence using its saved product truth and creative library.`}</p></div><button type="button" onClick={() => setShowFillModal(true)} disabled={generating || scopeMode === 'all' || !activeApp || !workspaceId || activeApp.workspace_id !== workspaceId} style={{ border:'1px solid #5f59e8', background:'#5f59e8', color:'#fff', borderRadius:10, padding:'10px 13px', fontSize:10.5, fontWeight:850, cursor:generating || scopeMode === 'all' || !activeApp || !workspaceId || activeApp.workspace_id !== workspaceId ? 'not-allowed' : 'pointer', opacity:generating || scopeMode === 'all' || !activeApp || !workspaceId || activeApp.workspace_id !== workspaceId ? .58 : 1 }}>{generating ? 'Mapping…' : `Fill ${activeApp?.name || 'app'} month →`}</button></section>
 
         {/* Calendar grid */}
         <div className="calendar-board">
@@ -249,8 +366,8 @@ export default function AICalendar() {
             {getMediaForPost(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:9, overflowX:'auto', marginBottom:16 }}>{getMediaForPost(selectedPost.id).map(asset => <div key={asset.id} style={{ width:112, height:112, borderRadius:10, overflow:'hidden', background:'#e7e7e7', flexShrink:0 }}>{asset.kind === 'video' ? <video src={asset.asset_url} controls playsInline preload="metadata" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <img src={asset.asset_url} alt="Scheduled campaign creative" style={{ width:'100%', height:'100%', objectFit:'cover' }} />}</div>)}</div>}
             {selectedPost.scheduled_at && <div style={{ fontSize: 12, color: '#727272', marginBottom: 20, fontWeight: 500 }}>Scheduled: {new Date(selectedPost.scheduled_at).toLocaleString()}</div>}
             <div style={{ display: 'flex', gap: 12 }}>
-              {selectedPost.status !== 'approved' && <button onClick={() => approvePost(selectedPost.id)} style={{ flex: 1, padding: '10px', background: '#f9f9f9', border: '1px solid #e0e0e0', borderRadius: 10, color: '#747474', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Approve Post</button>}
-              <button onClick={() => deletePost(selectedPost.id)} style={{ flex: 1, padding: '10px', background: '#f5f5f5', border: '1px solid #d5d5d5', borderRadius: 10, color: '#4d4d4d', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Delete Post</button>
+              {selectedPost.status === 'pending' && <button onClick={() => approvePost(selectedPost)} disabled={mutatingPostId === selectedPost.id} style={{ flex: 1, padding: '10px', background: '#f9f9f9', border: '1px solid #e0e0e0', borderRadius: 10, color: '#747474', fontSize: 13, fontWeight: 700, cursor: mutatingPostId === selectedPost.id ? 'wait' : 'pointer', opacity: mutatingPostId === selectedPost.id ? .65 : 1, fontFamily: 'inherit' }}>{mutatingPostId === selectedPost.id ? 'Approving…' : 'Approve Post'}</button>}
+              <button onClick={() => deletePost(selectedPost)} disabled={mutatingPostId === selectedPost.id} style={{ flex: 1, padding: '10px', background: '#f5f5f5', border: '1px solid #d5d5d5', borderRadius: 10, color: '#4d4d4d', fontSize: 13, fontWeight: 700, cursor: mutatingPostId === selectedPost.id ? 'wait' : 'pointer', opacity: mutatingPostId === selectedPost.id ? .65 : 1, fontFamily: 'inherit' }}>{mutatingPostId === selectedPost.id ? 'Deleting…' : 'Delete Post'}</button>
             </div>
           </div>
         </div>
@@ -265,7 +382,7 @@ export default function AICalendar() {
             <textarea value={fillPrompt} onChange={e => setFillPrompt(e.target.value)} placeholder={`e.g. Focus ${activeApp?.name || 'this app'} on a practical outcome, target audience, and this month’s content goal.`} rows={4} style={{ width: '100%', background: '#fafafa', border: '1px solid #d4d4d4', borderRadius: 12, padding: '14px 16px', color: '#171717', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', outline: 'none', marginBottom: 20, boxSizing: 'border-box', lineHeight: 1.6 }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
               <button onClick={() => setShowFillModal(false)} style={{ padding: '10px 18px', background: '#f4f4f4', border: 'none', borderRadius: 10, color: '#727272', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-              <button onClick={fillMonth} style={{ padding: '10px 24px', background: 'linear-gradient(135deg,#535353,#555555,#535353)', border: 'none', borderRadius: 10, color: '#ffffff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(83,83,83,0.3)' }}>Generate app calendar</button>
+              <button onClick={fillMonth} disabled={generating || !fillPrompt.trim() || !activeApp || !workspaceId || activeApp.workspace_id !== workspaceId} style={{ padding: '10px 24px', background: 'linear-gradient(135deg,#535353,#555555,#535353)', border: 'none', borderRadius: 10, color: '#ffffff', fontSize: 13, fontWeight: 700, cursor: generating || !fillPrompt.trim() || !activeApp || !workspaceId || activeApp.workspace_id !== workspaceId ? 'not-allowed' : 'pointer', opacity: generating || !fillPrompt.trim() || !activeApp || !workspaceId || activeApp.workspace_id !== workspaceId ? .6 : 1, fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(83,83,83,0.3)' }}>{generating ? 'Generating…' : 'Generate app calendar'}</button>
             </div>
           </div>
         </div>

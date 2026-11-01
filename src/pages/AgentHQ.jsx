@@ -15,6 +15,10 @@ const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZWYiOiJ4eGtwdm9raHFicGJxZ
 const platforms = ['instagram', 'facebook', 'linkedin', 'tiktok']
 const platformLabel = { instagram:'Instagram', facebook:'Facebook', linkedin:'LinkedIn', tiktok:'TikTok' }
 const stageOrder = ['intake','dna','angles','board']
+const defaultObjective = 'Drive qualified awareness and conversion'
+const defaultPlatforms = ['instagram','facebook']
+const defaultBrandDna = { voice:'Clear, optimistic, and specific', visualDirection:'Editorial product storytelling with confident color', proofPoints:'', audienceMindset:'', restrictedClaims:'' }
+const campaignRenderTokenCost = 10
 const riskyClaimPattern = /(?:\b(?:guaranteed|proven|superior|best|#1|number one|more features|customers report|increased|boosted|saved)\b|\b\d+(?:\.\d+)?\s*%|\b\d+(?:\.\d+)?x\b|\b(?:better|more|faster)\b[\w\s]{0,35}\bthan\b)/i
 const safeProof = 'Show the product making a specific, observable step easier for the intended audience.'
 const safeCta = 'Explore the next step.'
@@ -96,7 +100,7 @@ function buildThesisStarter({ base, route, productName, audience }) {
 export default function AgentHQ() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { activeApp, tokens, useTokens, workspaceId } = useWorkspace()
+  const { activeApp, apps, setActiveApp, refreshApps, tokens, unlimited, useTokens, refundTokens, workspaceId } = useWorkspace()
   const [stage, setStage] = useState('intake')
   const [userId, setUserId] = useState(null)
   const [workspace, setWorkspace] = useState({ brands:[], products:[], campaigns:[], media:[] })
@@ -107,10 +111,10 @@ export default function AgentHQ() {
   const [productName, setProductName] = useState(activeApp?.name || '')
   const [description, setDescription] = useState('')
   const [offerText, setOfferText] = useState('')
-  const [objective, setObjective] = useState('Drive qualified awareness and conversion')
+  const [objective, setObjective] = useState(defaultObjective)
   const [audience, setAudience] = useState('')
-  const [selectedPlatforms, setSelectedPlatforms] = useState(['instagram','facebook'])
-  const [brandDna, setBrandDna] = useState({ voice:'Clear, optimistic, and specific', visualDirection:'Editorial product storytelling with confident color', proofPoints:'', audienceMindset:'', restrictedClaims:'' })
+  const [selectedPlatforms, setSelectedPlatforms] = useState(defaultPlatforms)
+  const [brandDna, setBrandDna] = useState(defaultBrandDna)
   const [sourceFacts, setSourceFacts] = useState({})
   const [urlState, setUrlState] = useState('')
   const [campaign, setCampaign] = useState(null)
@@ -133,6 +137,39 @@ export default function AgentHQ() {
 
   const stageIndex = stageOrder.indexOf(stage)
   const campaignName = useMemo(() => `${brandName || 'New brand'} — ${offerText || objective || 'Campaign'}`, [brandName, offerText, objective])
+  const renderTargets = useMemo(() => {
+    if (!campaign?.id || !selectedConcept?.id) return []
+    return campaignPosts
+      .filter(post => post?.id && post.campaign_id === campaign.id && post.concept_id === selectedConcept.id && post.platform && String(post.content || '').trim())
+      .slice(0, 3)
+  }, [campaign?.id, campaignPosts, selectedConcept?.id])
+  const renderTargetCount = renderTargets.length
+  const renderQuoteCost = renderTargetCount * campaignRenderTokenCost
+  const hasSelectedCampaignConcept = Boolean(campaign?.id && selectedConcept?.id && selectedConcept.campaign_id === campaign.id && (campaign.selected_concept_id === selectedConcept.id || selectedConcept.status === 'selected'))
+  const canRenderCampaign = hasSelectedCampaignConcept && renderTargetCount > 0
+  const renderPrerequisiteMessage = !campaign
+    ? 'Open or create a campaign before requesting campaign visuals.'
+    : !hasSelectedCampaignConcept
+      ? 'Select a creative thesis for this campaign before requesting visuals.'
+      : 'Create at least one renderable post for the selected thesis before requesting visuals.'
+  const renderingCampaign = busy === 'render-campaign'
+
+  const hydrateFromActiveApp = app => {
+    const appBrandDna = app?.brandDna || app?.brand_dna || {}
+    const appPlatforms = (app?.autopilot?.platforms || []).filter(platform => platforms.includes(platform))
+    setActiveBrandId(app?.brand_id || null)
+    setBrandName(app?.brandName || app?.name || '')
+    setWebsiteUrl(app?.product_url || app?.url || '')
+    setProductName(app?.name || '')
+    setDescription(app?.description || '')
+    setOfferText(app?.offer_text || '')
+    setObjective(defaultObjective)
+    setAudience(app?.audience || '')
+    setSelectedPlatforms(appPlatforms.length ? appPlatforms : defaultPlatforms)
+    setBrandDna({ ...defaultBrandDna, ...appBrandDna })
+    setSourceFacts(app?.source_facts || app?.sourceFacts || {})
+    setUrlState('')
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data:{ user } }) => {
@@ -150,16 +187,8 @@ export default function AgentHQ() {
   }, [])
 
   useEffect(() => {
-    if (!activeApp || campaign) return
-    setBrandName(activeApp.brandName || activeApp.name || '')
-    setWebsiteUrl(activeApp.product_url || activeApp.url || '')
-    setProductName(activeApp.name || '')
-    setDescription(activeApp.description || '')
-    setOfferText(activeApp.offer_text || '')
-    setAudience(activeApp.audience || '')
-    setBrandDna(previous => ({ ...previous, ...(activeApp.brandDna || {}) }))
-    setSourceFacts(activeApp.source_facts || activeApp.sourceFacts || {})
-  }, [activeApp?.id])
+    if (!campaign) hydrateFromActiveApp(activeApp)
+  }, [activeApp?.id, campaign?.id])
 
   const refreshWorkspace = async () => { if (userId) setWorkspace(await loadCampaignWorkspace(userId)) }
   const refreshMemory = async brandId => {
@@ -292,22 +321,44 @@ export default function AgentHQ() {
     finally { setBusy('') }
   }
 
+  const openRenderQuote = () => {
+    if (!canRenderCampaign) { setRenderQuoteOpen(false); setError(renderPrerequisiteMessage); return }
+    setError('')
+    setRenderQuoteOpen(true)
+  }
+
   const renderVariants = async () => {
-    if (!campaign || !selectedConcept || !campaignPosts.length) return
-    const targets = campaignPosts.slice(0, 3)
-    setRenderProgress({ complete:0, total:targets.length, failed:0 }); setError('')
+    if (!canRenderCampaign) { setRenderQuoteOpen(false); setError(renderPrerequisiteMessage); return }
+    const targets = renderTargets
+    setBusy('render-campaign'); setRenderProgress({ complete:0, total:targets.length, failed:0 }); setError('')
     const created = []
     let complete = 0; let failed = 0
-    for (let index = 0; index < targets.length; index += 1) {
-      const authorized = await useTokens(10, `Campaign visual ${index + 1} of ${targets.length}`)
-      if (!authorized) break
-      try {
-        const asset = await generateCampaignVariant({ userId, campaign, concept:selectedConcept, post:targets[index], variation:index + 1 })
-        created.push(asset); complete += 1
-      } catch (renderError) { failed += 1; setError(renderError.message || 'One campaign visual could not be rendered.') }
-      setRenderProgress({ complete, total:targets.length, failed })
-    }
-    setCampaignAssets(previous => [...created, ...previous]); await refreshWorkspace(); await refreshMemory(campaign.brand_id)
+    try {
+      for (let index = 0; index < targets.length; index += 1) {
+        const authorized = await useTokens(campaignRenderTokenCost, `Campaign visual ${index + 1} of ${targets.length}`)
+        if (!authorized) break
+        const chargedTokens = unlimited ? 0 : campaignRenderTokenCost
+        try {
+          const asset = await generateCampaignVariant({ userId, campaign, concept:selectedConcept, post:targets[index], variation:index + 1 })
+          created.push(asset); complete += 1
+        } catch (renderError) {
+          failed += 1
+          let refundError = null
+          let refundRecorded = false
+          try { if (chargedTokens) refundRecorded = (await refundTokens(chargedTokens, `campaign visual ${index + 1} that failed to render`)) !== null } catch (error) { refundError = error }
+          const renderMessage = renderError.message || 'One campaign visual could not be rendered.'
+          setError(refundError
+            ? `${renderMessage} The ${chargedTokens}-token refund could not be completed: ${refundError.message || 'please contact support.'}`
+            : refundRecorded
+              ? `${renderMessage} The ${chargedTokens} tokens charged for that failed visual were restored.`
+              : `${renderMessage} No token debit was recorded for that failed visual, so no refund was needed.`)
+        }
+        setRenderProgress({ complete, total:targets.length, failed })
+      }
+      setCampaignAssets(previous => [...created, ...previous])
+      await refreshWorkspace()
+      await refreshMemory(campaign.brand_id)
+    } finally { setBusy('') }
   }
 
   const openExistingCampaign = async item => {
@@ -317,7 +368,14 @@ export default function AgentHQ() {
       const postsResult = await supabase.from('campaign_posts').select('*').eq('campaign_id', item.id).order('created_at')
       const assets = await listCampaignMedia(item.id)
       const selected = conceptsResult.data?.find(concept => concept.id === item.selected_concept_id) || conceptsResult.data?.find(concept => concept.status === 'selected') || null
-      setActiveBrandId(item.brand_id); setCampaign(item); setConcepts(conceptsResult.data || []); setSelectedConcept(selected); setCampaignPosts(postsResult.data || []); setCampaignAssets(assets); setStage(selected ? 'board' : 'angles'); await refreshRunbook(item, item.product_id); await refreshMemory(item.brand_id)
+      let campaignApp = apps.find(app => app.id === item.product_id)
+      if (!campaignApp) {
+        const refreshedApps = await refreshApps(item.product_id)
+        campaignApp = refreshedApps.find(app => app.id === item.product_id)
+      }
+      if (!campaignApp) throw new Error('This campaign product is not available in the current workspace.')
+      setActiveApp(campaignApp)
+      setRenderQuoteOpen(false); setActiveBrandId(item.brand_id); setCampaign(item); setConcepts(conceptsResult.data || []); setSelectedConcept(selected); setCampaignPosts(postsResult.data || []); setCampaignAssets(assets); setStage(selected ? 'board' : 'angles'); await refreshRunbook(item, item.product_id); await refreshMemory(item.brand_id)
     } catch (openError) { setError(openError.message || 'Flo could not load that campaign.') }
     finally { setBusy('') }
   }
@@ -328,7 +386,12 @@ export default function AgentHQ() {
     if (linkedCampaign && campaign?.id !== linkedCampaign.id) openExistingCampaign(linkedCampaign)
   }, [workspace.campaigns, searchParams])
 
-  const startOver = () => { setStage('intake'); setCampaign(null); setConcepts([]); setSelectedConcept(null); setCampaignPosts([]); setCampaignAssets([]); setRunbookContext(null); setRenderProgress(null); setCompareIds([]); setError('') }
+  const startOver = () => {
+    setStage('intake'); setCampaign(null); setConcepts([]); setSelectedConcept(null); setCampaignPosts([]); setCampaignAssets([]); setRunbookContext(null); setRenderProgress(null); setRenderQuoteOpen(false); setCompareIds([]); setEditingConcept(null); setScriptDraft(''); setStarterDraft(null); setAngleNotice(''); setError('')
+    hydrateFromActiveApp(activeApp)
+    if (activeApp?.brand_id) refreshMemory(activeApp.brand_id)
+    else setMemoryBrief(null)
+  }
   const openMomentumAction = target => {
     if (target === 'truth') { setStage('intake'); return }
     if (target === 'thesis') { setStage('angles'); return }
@@ -411,13 +474,13 @@ CTA: ..." style={{ ...fieldStyle, resize:'vertical' }} /><div style={{ display:'
             <p style={{ color:'rgba(232,232,232,.5)', fontSize:10.5, lineHeight:1.5, marginTop:13 }}>Keep exploring, saving a reference, or dismissing a thesis neither advances nor harms the Campaign Runbook. Only an explicit selection with its stored fields creates thesis evidence.</p>
           </section>}
           {stage === 'board' && <section style={{ padding:'26px 28px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'#ededed' }}>04 / Campaign board</div><h2 style={{ color:'#ffffff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>{campaign?.name}</h2><p style={{ color:'rgba(232,232,232,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>One selected concept, connected posts, reviewable creative family, controlled experiments, and learning all stay linked to one durable campaign.</p></div><div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><button onClick={() => setRenderQuoteOpen(true)} disabled={Boolean(renderProgress && renderProgress.complete < renderProgress.total)} className="studio-button">{renderProgress ? `Rendering ${renderProgress.complete}/${renderProgress.total}` : 'Quote 3 campaign visuals · 30'}</button><button onClick={() => openMomentumAction('review')} className="studio-button studio-button--soft">Open Review Queue →</button></div></div>
+            <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'flex-start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'#ededed' }}>04 / Campaign board</div><h2 style={{ color:'#ffffff', fontSize:27, letterSpacing:'-.06em', marginTop:7 }}>{campaign?.name}</h2><p style={{ color:'rgba(232,232,232,.62)', fontSize:12, lineHeight:1.65, marginTop:8 }}>One selected concept, connected posts, reviewable creative family, controlled experiments, and learning all stay linked to one durable campaign.</p></div><div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><button onClick={openRenderQuote} disabled={!canRenderCampaign || renderingCampaign} title={!canRenderCampaign ? renderPrerequisiteMessage : undefined} className="studio-button">{renderingCampaign ? `Rendering ${renderProgress?.complete || 0}/${renderProgress?.total || renderTargetCount}` : `Quote ${renderTargetCount} campaign visual${renderTargetCount === 1 ? '' : 's'} · ${renderQuoteCost} tokens`}</button><button onClick={() => openMomentumAction('review')} className="studio-button studio-button--soft">Open Review Queue →</button></div></div>
             {selectedConcept && <div style={{ padding:'15px 16px', marginTop:20, borderRadius:13, background:'rgba(114,114,114,.16)', border:'1px solid rgba(197,197,197,.18)' }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.1em' }}>SELECTED CREATIVE THESIS</div><div style={{ color:'#ffffff', fontSize:17, fontWeight:800, marginTop:5 }}>{selectedConcept.title}</div><div style={{ color:'#dbdbdb', fontFamily:'Playfair Display,serif', fontSize:18, marginTop:6 }}>“{selectedConcept.hook}”</div><div style={{ color:'rgba(232,232,232,.68)', fontSize:11.5, marginTop:8, lineHeight:1.55 }}>{selectedConcept.visual_recipe?.direction}</div></div>}
             <div style={{ marginTop:17 }}><CampaignMomentumMap runbook={runbookContext?.runbook} checkpoints={runbookContext?.checkpoints || []} nextAction={runbookContext?.nextAction} context={runbookContext} deletedAt={runbookContext?.runbookDeletedAt} onNavigate={openMomentumAction} onChanged={() => refreshRunbook(campaign, campaign?.product_id || activeApp?.id)} onRecreate={recreateRunbook} onDeleted={() => refreshRunbook(campaign, campaign?.product_id || activeApp?.id)} /></div>
             <JevThesisReview workspaceId={campaign?.workspace_id || workspaceId} productId={campaign?.product_id || activeApp?.id} campaign={campaign} selectedConcept={selectedConcept} />
             <div className="engine-board-grid" style={{ display:'grid', gridTemplateColumns:'1fr .94fr', gap:15, marginTop:17 }}><div style={{ border:'1px solid rgba(255,255,255,.11)', borderRadius:13, overflow:'hidden' }}><div style={{ padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,.1)', color:'#ffffff', fontSize:12, fontWeight:800 }}>Platform delivery plan</div>{campaignPosts.map(post => <div key={post.id} style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'13px 14px', borderBottom:'1px solid rgba(255,255,255,.08)' }}><div><div style={{ color:'#e9e9e9', font:'600 9px DM Mono,monospace', letterSpacing:'.08em' }}>{platformLabel[post.platform]?.toUpperCase() || post.platform}</div><div style={{ color:'rgba(232,232,232,.76)', fontSize:11, lineHeight:1.48, marginTop:4, maxWidth:360 }}>{post.content}</div></div><span style={{ color:'#ededed', fontSize:10, fontWeight:750, flexShrink:0 }}>{post.status}</span></div>)}</div><div style={{ border:'1px solid rgba(255,255,255,.11)', borderRadius:13, overflow:'hidden' }}><div style={{ padding:'12px 14px', borderBottom:'1px solid rgba(255,255,255,.1)', color:'#ffffff', fontSize:12, fontWeight:800 }}>Creative variants</div>{campaignAssets.length ? <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:7, padding:10 }}>{campaignAssets.map(asset => <div key={asset.id} style={{ aspectRatio:'4/5', borderRadius:9, overflow:'hidden', background:'rgba(255,255,255,.07)' }}><img src={asset.asset_url} alt="Campaign creative variant" style={{ width:'100%', height:'100%', objectFit:'cover' }} /></div>)}</div> : <div style={{ padding:20, minHeight:180, display:'grid', placeItems:'center', textAlign:'center', color:'rgba(232,232,232,.55)', fontSize:11.5, lineHeight:1.55 }}>A queued or failed render is not campaign progress. Generate or attach real completed assets when you are ready.</div>}</div></div>
-            <div style={{ marginTop:15 }}><CreativeFamilyPanel workspaceId={campaign?.workspace_id || workspaceId} userId={userId} productId={campaign?.product_id || activeApp?.id} campaign={campaign} selectedConcept={selectedConcept} assets={campaignAssets} reviews={runbookContext?.reviews || []} runbook={runbookContext?.runbook} onGenerate={() => setRenderQuoteOpen(true)} onOpenLibrary={() => openMomentumAction('review')} onChanged={async () => { const assets = await listCampaignMedia(campaign.id); setCampaignAssets(assets); await refreshRunbook(campaign, campaign?.product_id || activeApp?.id) }} /></div>
-            {renderQuoteOpen && <div style={{ marginTop:15, padding:14, borderRadius:12, background:'rgba(207,203,255,.1)', border:'1px solid rgba(207,203,255,.25)' }}><div className="studio-kicker" style={{ color:'#dedaff' }}>VARIABLE-COST RENDER QUOTE</div><h3 style={{ color:'#fff', fontSize:15, marginTop:5 }}>Three campaign visuals · 30 tokens</h3><p style={{ color:'rgba(242,241,255,.67)', fontSize:10.5, lineHeight:1.55, marginTop:5 }}>Provider: OpenAI image generation. Estimated output: up to three sequential 4:5 visuals. A render that fails after a token debit should be handled by the existing refund route; completed but unreviewed outputs remain drafts and do not complete a runbook stage.</p><div style={{ display:'flex', gap:7, marginTop:10 }}><button onClick={() => { setRenderQuoteOpen(false); renderVariants() }} className="studio-button" style={{ padding:'8px 10px', fontSize:10 }}>Confirm render request</button><button onClick={() => setRenderQuoteOpen(false)} className="studio-button studio-button--soft" style={{ padding:'8px 10px', fontSize:10 }}>Not now</button></div></div>}
+            <div style={{ marginTop:15 }}><CreativeFamilyPanel workspaceId={campaign?.workspace_id || workspaceId} userId={userId} productId={campaign?.product_id || activeApp?.id} campaign={campaign} selectedConcept={selectedConcept} assets={campaignAssets} reviews={runbookContext?.reviews || []} runbook={runbookContext?.runbook} onGenerate={openRenderQuote} onOpenLibrary={() => openMomentumAction('review')} onChanged={async () => { const assets = await listCampaignMedia(campaign.id); setCampaignAssets(assets); await refreshRunbook(campaign, campaign?.product_id || activeApp?.id) }} /></div>
+            {renderQuoteOpen && <div style={{ marginTop:15, padding:14, borderRadius:12, background:'rgba(207,203,255,.1)', border:'1px solid rgba(207,203,255,.25)' }}><div className="studio-kicker" style={{ color:'#dedaff' }}>VARIABLE-COST RENDER QUOTE</div><h3 style={{ color:'#fff', fontSize:15, marginTop:5 }}>{renderTargetCount} campaign visual{renderTargetCount === 1 ? '' : 's'} · {renderQuoteCost} tokens</h3><p style={{ color:'rgba(242,241,255,.67)', fontSize:10.5, lineHeight:1.55, marginTop:5 }}>Provider: OpenAI image generation. Estimated output: {renderTargetCount} sequential 4:5 visual{renderTargetCount === 1 ? '' : 's'} for the selected thesis. Each target costs {campaignRenderTokenCost} tokens. If a visual fails after a debit, Flo requests an exact token-ledger refund before this run continues; completed but unreviewed outputs remain drafts and do not complete a runbook stage.</p><div style={{ display:'flex', gap:7, marginTop:10 }}><button onClick={() => { setRenderQuoteOpen(false); renderVariants() }} disabled={!canRenderCampaign || renderingCampaign} className="studio-button" style={{ padding:'8px 10px', fontSize:10 }}>Confirm {renderTargetCount} render request{renderTargetCount === 1 ? '' : 's'} · {renderQuoteCost} tokens</button><button onClick={() => setRenderQuoteOpen(false)} className="studio-button studio-button--soft" style={{ padding:'8px 10px', fontSize:10 }}>Not now</button></div></div>}
           </section>}
           {error && <div style={{ margin:'0 28px 24px', padding:'10px 12px', borderRadius:10, background:'rgba(123,123,123,.15)', color:'#d2d2d2', border:'1px solid rgba(123,123,123,.25)', fontSize:11.5 }}>{error}</div>}
         </main>

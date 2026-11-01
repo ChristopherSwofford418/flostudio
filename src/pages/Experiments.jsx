@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { supabase } from '../supabase'
@@ -20,9 +20,25 @@ const fieldStyle = { width:'100%', boxSizing:'border-box', background:'rgba(5,5,
 const blankExperiment = { title:'', channel:'store_listing', objective:'conversion_rate', primaryMetric:'Install conversion rate', hypothesis:'', campaignId:'' }
 const blankVariant = { label:'', changeSummary:'', hypothesis:'', isControl:false, mediaAssetId:'' }
 
+const hasRequiredObservation = form => {
+  const value = String(form?.value ?? '').trim()
+  const observedAt = form?.observedAt ? new Date(form.observedAt) : null
+  return Boolean(value) && Number.isFinite(Number(value)) && Boolean(form?.unit?.trim()) && Boolean(form?.source?.trim()) && Boolean(observedAt && Number.isFinite(observedAt.getTime()))
+}
+
+const readinessRequirementMessage = experiment => {
+  const variants = experiment.experiment_variants || []
+  if (!variants.some(variant => variant.is_control && variant.change_summary?.trim())) return 'Ready is blocked: add a control with a saved change summary.'
+  if (!variants.some(variant => !variant.is_control && variant.change_summary?.trim())) return 'Ready is blocked: add a single-variable challenger with a saved change summary.'
+  if (variants.some(variant => !variant.media_asset_id)) return 'Ready is blocked: attach a completed creative or listing asset to every variant, including the control and challenger.'
+  return ''
+}
+
 export default function Experiments() {
-  const { apps, workspaceId } = useWorkspace()
+  const { apps, activeApp, setActiveApp, workspaceId } = useWorkspace()
   const [searchParams] = useSearchParams()
+  const requestedAppId = searchParams.get('app')
+  const handledAppQueryRef = useRef({ handled:false, value:null })
   const [userId, setUserId] = useState(null)
   const [experiments, setExperiments] = useState([])
   const [runbooks, setRunbooks] = useState([])
@@ -35,7 +51,28 @@ export default function Experiments() {
   const [busy, setBusy] = useState('')
   const [notice, setNotice] = useState('')
 
-  useEffect(() => { if (!productId && (searchParams.get('app') || apps[0]?.id)) setProductId(searchParams.get('app') || apps[0].id) }, [apps, productId, searchParams])
+  useEffect(() => {
+    if (!apps.length) return
+    if (handledAppQueryRef.current.handled && handledAppQueryRef.current.value === requestedAppId) return
+    handledAppQueryRef.current = { handled:true, value:requestedAppId }
+    if (requestedAppId) {
+      const requestedApp = apps.find(app => app.id === requestedAppId)
+      if (!requestedApp) {
+        setProductId('')
+        setNotice('The app in this link is not available in this workspace. Choose one of your apps before creating an experiment.')
+        return
+      }
+      setProductId(requestedApp.id)
+      if (activeApp?.id !== requestedApp.id) setActiveApp(requestedApp)
+      return
+    }
+    const initialApp = apps.find(app => app.id === activeApp?.id) || apps[0]
+    setProductId(initialApp.id)
+    if (activeApp?.id !== initialApp.id) setActiveApp(initialApp)
+  }, [activeApp?.id, apps, requestedAppId, setActiveApp])
+  useEffect(() => {
+    if (productId && !apps.some(app => app.id === productId)) setProductId('')
+  }, [apps, productId])
   const refresh = async (id = userId) => {
     if (!id || !workspaceId) return
     setLoading(true)
@@ -51,6 +88,17 @@ export default function Experiments() {
   const scoped = useMemo(() => experiments.filter(experiment => !productId || experiment.product_id === productId), [experiments, productId])
   const selectedApp = apps.find(app => app.id === productId)
 
+  const selectProductApp = appId => {
+    const app = apps.find(candidate => candidate.id === appId)
+    if (!app) {
+      setProductId('')
+      setNotice('Choose an app available in this workspace before planning an experiment.')
+      return false
+    }
+    setProductId(app.id)
+    if (activeApp?.id !== app.id) setActiveApp(app)
+    return true
+  }
   const updateExperiment = (key, value) => setExperimentForm(previous => ({ ...previous, [key]:value }))
   const updateVariant = (experimentId, key, value) => setVariantForms(previous => ({ ...previous, [experimentId]:{ ...(previous[experimentId] || blankVariant), [key]:value } }))
   const updateOutcome = (variantId, key, value) => setOutcomeForms(previous => ({ ...previous, [variantId]:{ ...(previous[variantId] || { value:'', unit:'', source:'', observedAt:'' }), [key]:value } }))
@@ -63,7 +111,10 @@ export default function Experiments() {
     try {
       const context = await loadCampaignRunbookContext({ workspaceId, userId, productId:chosen.product_id, campaignId })
       setRunbookContext(context)
-      setProductId(chosen.product_id)
+      if (!selectProductApp(chosen.product_id)) {
+        updateExperiment('campaignId', '')
+        return
+      }
       const thesis = context?.concepts?.find(concept => concept.id === context?.campaign?.selected_concept_id) || context?.concepts?.find(concept => concept.status === 'selected')
       setExperimentForm(previous => ({ ...previous, campaignId, title:previous.title || `${context?.campaign?.name || 'Campaign'} — controlled test`, primaryMetric:previous.primaryMetric || 'Primary metric', hypothesis:previous.hypothesis || (thesis ? `If we change one element of “${thesis.title}”, we expect a measurable difference because the thesis has a defined hook, proof, and CTA.` : '') }))
     } catch (error) { setNotice(error.message || 'Could not load the selected Campaign Runbook.') }
@@ -75,7 +126,7 @@ export default function Experiments() {
 
   const create = async event => {
     event.preventDefault()
-    if (!productId) { setNotice('Choose an app before planning an experiment.'); return }
+    if (!selectedApp) { setNotice('Choose an app available in this workspace before planning an experiment.'); return }
     if (!experimentForm.title.trim() || !experimentForm.hypothesis.trim()) { setNotice('Add a title and hypothesis before creating an experiment.'); return }
     setBusy('create'); setNotice('')
     try {
@@ -96,9 +147,42 @@ export default function Experiments() {
 
   const recordOutcome = async (experiment, variant, decision) => {
     const form = outcomeForms[variant.id] || {}
+    if (!hasRequiredObservation(form)) {
+      setNotice('Enter a real numeric value, unit, source, and observation time before recording an outcome.')
+      return
+    }
     setBusy(`outcome-${variant.id}`); setNotice('')
     try { await recordExperimentOutcome({ experiment, variant, userId, outcomeValue:form.value, outcomeUnit:form.unit, outcomeSource:form.source, observedAt:form.observedAt, decision }); setNotice(decision === 'winner' ? 'Sourced outcome recorded. Add the Learning Statement to preserve its interpretation.' : 'Outcome recorded as evidence.'); await refresh() }
     catch (error) { setNotice(error.message || 'Could not record this outcome.') }
+    finally { setBusy('') }
+  }
+
+  const validateReadyPrerequisites = async experiment => {
+    const basicRequirement = readinessRequirementMessage(experiment)
+    if (basicRequirement) return basicRequirement
+    const variants = experiment.experiment_variants || []
+    const assetIds = [...new Set(variants.map(variant => variant.media_asset_id).filter(Boolean))]
+    const { data:assets, error } = await supabase.from('media_assets').select('id,workspace_id,product_id,render_status,asset_url').in('id', assetIds)
+    if (error) throw error
+    const assetsById = new Map((assets || []).map(asset => [asset.id, asset]))
+    const invalidVariant = variants.find(variant => {
+      const asset = assetsById.get(variant.media_asset_id)
+      return !asset || asset.workspace_id !== experiment.workspace_id || asset.product_id !== experiment.product_id || !['ready', 'completed'].includes(asset.render_status) || !asset.asset_url
+    })
+    return invalidVariant ? 'Ready is blocked: every variant must link to a completed creative or listing asset that belongs to this app and workspace.' : ''
+  }
+
+  const changeExperimentStatus = async (experiment, status) => {
+    if (status === experiment.status) return
+    setBusy(`status-${experiment.id}`); setNotice('')
+    try {
+      if (['ready', 'running'].includes(status)) {
+        const prerequisiteMessage = await validateReadyPrerequisites(experiment)
+        if (prerequisiteMessage) { setNotice(prerequisiteMessage); return }
+      }
+      await setExperimentStatus({ experimentId:experiment.id, status })
+      await refresh()
+    } catch (error) { setNotice(error.message || 'Could not change experiment status.') }
     finally { setBusy('') }
   }
 
@@ -119,7 +203,7 @@ export default function Experiments() {
       <section className="studio-panel flo-dark-surface experiments-plan" style={{ padding:20, marginTop:16 }}>
         <div className="studio-kicker" style={{ color:'#c9c9c9' }}>PLAN A CONTROLLED TEST</div>
         <form onSubmit={create} className="experiment-form-grid" style={{ display:'grid', gridTemplateColumns:'1.1fr .8fr .8fr', gap:10, marginTop:12 }}>
-          <label style={{ display:'grid', gap:6 }}><span style={{ color:'rgba(242,242,242,.7)', fontSize:10.5 }}>App</span><select value={productId} onChange={event => setProductId(event.target.value)} style={fieldStyle}><option value="">Select an app</option>{apps.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}</select></label><label style={{ display:'grid', gap:6 }}><span style={{ color:'rgba(242,242,242,.7)', fontSize:10.5 }}>Campaign Runbook (optional)</span><select value={experimentForm.campaignId} onChange={event => selectRunbook(event.target.value)} style={fieldStyle}><option value="">Standalone experiment</option>{runbooks.filter(runbook => runbook.product_id === productId && runbook.status !== 'archived').map(runbook => <option key={runbook.id} value={runbook.campaign_id}>{runbook.chosen_focus ? `Focus · ${runbook.chosen_focus}` : `Campaign ${runbook.campaign_id.slice(0, 8)}`}</option>)}</select></label>
+          <label style={{ display:'grid', gap:6 }}><span style={{ color:'rgba(242,242,242,.7)', fontSize:10.5 }}>App</span><select value={productId} onChange={event => selectProductApp(event.target.value)} style={fieldStyle}><option value="">Select an app</option>{apps.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}</select></label><label style={{ display:'grid', gap:6 }}><span style={{ color:'rgba(242,242,242,.7)', fontSize:10.5 }}>Campaign Runbook (optional)</span><select value={experimentForm.campaignId} onChange={event => selectRunbook(event.target.value)} style={fieldStyle}><option value="">Standalone experiment</option>{runbooks.filter(runbook => runbook.product_id === productId && runbook.status !== 'archived').map(runbook => <option key={runbook.id} value={runbook.campaign_id}>{runbook.chosen_focus ? `Focus · ${runbook.chosen_focus}` : `Campaign ${runbook.campaign_id.slice(0, 8)}`}</option>)}</select></label>
           <label style={{ display:'grid', gap:6 }}><span style={{ color:'rgba(242,242,242,.7)', fontSize:10.5 }}>Channel</span><select value={experimentForm.channel} onChange={event => updateExperiment('channel', event.target.value)} style={fieldStyle}>{channelOptions.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
           <label style={{ display:'grid', gap:6 }}><span style={{ color:'rgba(242,242,242,.7)', fontSize:10.5 }}>Objective</span><select value={experimentForm.objective} onChange={event => updateExperiment('objective', event.target.value)} style={fieldStyle}>{objectiveOptions.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
           <label style={{ display:'grid', gap:6, gridColumn:'span 2' }}><span style={{ color:'rgba(242,242,242,.7)', fontSize:10.5 }}>Experiment title</span><input value={experimentForm.title} onChange={event => updateExperiment('title', event.target.value)} placeholder="e.g. Social proof in first App Store screenshot" style={fieldStyle}/></label>
@@ -133,8 +217,9 @@ export default function Experiments() {
       <section className="experiments-ledger" style={{ marginTop:24 }}>
         <div style={{ display:'flex', alignItems:'end', justifyContent:'space-between', gap:12, marginBottom:12 }}><div><div className="studio-kicker" style={{ color:'#c0c0c0' }}>EXPERIMENT LEDGER</div><h2 style={{ color:'#ffffff', fontSize:24, letterSpacing:'-.05em', marginTop:5 }}>{selectedApp ? `${selectedApp.name} — learning in progress` : 'Choose an app to inspect its tests'}</h2></div><span style={{ color:'rgba(242,242,242,.52)', fontSize:11 }}>Results shown only when you add real observations.</span></div>
         {loading ? <div className="studio-panel flo-dark-surface" style={{ padding:28, color:'rgba(255,255,255,.62)' }}>Loading experiment evidence…</div> : !productId ? <div className="studio-panel flo-dark-surface" style={{ padding:28, color:'rgba(255,255,255,.62)' }}>Select a portfolio app to begin its first controlled test.</div> : scoped.length === 0 ? <div className="studio-panel flo-dark-surface" style={{ padding:30, borderStyle:'dashed', textAlign:'center' }}><h3 style={{ color:'#ffffff', margin:0, fontSize:18 }}>No experiments yet.</h3><p style={{ color:'rgba(242,242,242,.58)', margin:'8px auto 0', maxWidth:470, fontSize:12, lineHeight:1.6 }}>Start with the highest-confidence business question. A single control and challenger will produce more reusable learning than a collection of unrelated generations.</p></div> : <div style={{ display:'grid', gap:14 }}>{scoped.map(experiment => <article key={experiment.id} className="studio-panel flo-dark-surface experiment-card" style={{ padding:20, borderLeft:'4px solid #727272' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'#c9c9c9' }}>{channelOptions.find(item => item[0] === experiment.channel)?.[1] || experiment.channel} · {experiment.primary_metric}</div><h3 style={{ color:'#ffffff', fontSize:19, marginTop:5 }}>{experiment.title}</h3><p style={{ color:'rgba(242,242,242,.67)', fontSize:11.5, lineHeight:1.6, maxWidth:760, marginTop:7 }}><b style={{ color:'#ededed' }}>Hypothesis:</b> {experiment.hypothesis}</p></div><div style={{ display:'flex', gap:7, alignItems:'center' }}><span className="studio-chip" style={{ color:statusColor[experiment.status] || '#ffffff', borderColor:`${statusColor[experiment.status] || '#ffffff'}55` }}>{experiment.status}</span><select value={experiment.status} onChange={async event => { setBusy(`status-${experiment.id}`); try { await setExperimentStatus({ experimentId:experiment.id, status:event.target.value }); await refresh() } catch (error) { setNotice(error.message || 'Could not change experiment status.') } finally { setBusy('') } }} style={{ ...fieldStyle, width:'auto', padding:'7px 9px' }}><option value="planned">Planned</option><option value="ready">Ready</option><option value="running">Running</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></div></div>
-          <div className="variant-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:16 }}>{(experiment.experiment_variants || []).map(variant => { const latest = variant.metrics?.latest; const outcome = outcomeForms[variant.id] || { value:'', unit:'', source:'', observedAt:'' }; return <section key={variant.id} style={{ padding:14, borderRadius:12, background:'rgba(255,255,255,.035)', border:'1px solid rgba(255,255,255,.1)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}><div><span style={{ color:variant.is_control ? '#d7d7d7' : '#c0c0c0', font:'600 9px DM Mono,monospace', letterSpacing:'.08em' }}>{variant.is_control ? 'CONTROL' : 'CHALLENGER'} · {variant.metrics?.latest?.decision === 'needs_more_evidence' ? 'NEEDS MORE EVIDENCE' : variant.status.toUpperCase()}</span><h4 style={{ color:'#ffffff', fontSize:14, marginTop:5 }}>{variant.label}</h4></div>{latest && <span className="studio-chip" style={{ color:'#e9e9e9', height:'fit-content' }}>{latest.value} {latest.unit}</span>}</div><p style={{ color:'rgba(242,242,242,.62)', fontSize:10.5, lineHeight:1.55, marginTop:7 }}>{variant.change_summary}</p>{variant.media_asset_id && <p style={{ color:'rgba(242,242,242,.44)', fontSize:9.5, marginTop:5 }}>Linked completed asset · controlled change summary saved</p>}{latest ? <div style={{ color:'rgba(242,242,242,.42)', fontSize:9.5, marginTop:8 }}>Observed via {latest.source} · {new Date(latest.observedAt).toLocaleString()}</div> : <div style={{ color:'rgba(242,242,242,.42)', fontSize:9.5, marginTop:8 }}>No sourced numeric observation recorded.</div>}<div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7, marginTop:11 }}><input value={outcome.value} onChange={event => updateOutcome(variant.id, 'value', event.target.value)} placeholder="Numeric value" inputMode="decimal" style={fieldStyle}/><input value={outcome.unit} onChange={event => updateOutcome(variant.id, 'unit', event.target.value)} placeholder="Unit (%, installs…)" style={fieldStyle}/><input value={outcome.source} onChange={event => updateOutcome(variant.id, 'source', event.target.value)} placeholder="Source: ASC, Meta…" style={{ ...fieldStyle, gridColumn:'1 / -1' }}/><input type="datetime-local" value={outcome.observedAt} onChange={event => updateOutcome(variant.id, 'observedAt', event.target.value ? new Date(event.target.value).toISOString() : '')} aria-label="Observed at" style={{ ...fieldStyle, gridColumn:'1 / -1' }}/></div><div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}><button type="button" onClick={() => recordOutcome(experiment, variant, 'needs_more_evidence')} disabled={busy === `outcome-${variant.id}`} className="studio-button studio-button--soft" style={{ padding:'7px 9px', fontSize:9.5 }}>Needs evidence</button><button type="button" onClick={() => recordOutcome(experiment, variant, 'inconclusive')} disabled={busy === `outcome-${variant.id}`} className="studio-button studio-button--soft" style={{ padding:'7px 9px', fontSize:9.5 }}>Inconclusive</button><button type="button" onClick={() => recordOutcome(experiment, variant, 'loser')} disabled={busy === `outcome-${variant.id}`} className="studio-button studio-button--soft" style={{ padding:'7px 9px', fontSize:9.5 }}>Loser</button><button type="button" onClick={() => recordOutcome(experiment, variant, 'winner')} disabled={busy === `outcome-${variant.id}`} className="studio-button" style={{ padding:'7px 9px', fontSize:9.5 }}>Winner</button></div></section> })}
+          <div style={{ display:'flex', justifyContent:'space-between', gap:16, alignItems:'start', flexWrap:'wrap' }}><div><div className="studio-kicker" style={{ color:'#c9c9c9' }}>{channelOptions.find(item => item[0] === experiment.channel)?.[1] || experiment.channel} · {experiment.primary_metric}</div><h3 style={{ color:'#ffffff', fontSize:19, marginTop:5 }}>{experiment.title}</h3><p style={{ color:'rgba(242,242,242,.67)', fontSize:11.5, lineHeight:1.6, maxWidth:760, marginTop:7 }}><b style={{ color:'#ededed' }}>Hypothesis:</b> {experiment.hypothesis}</p></div><div style={{ display:'flex', gap:7, alignItems:'center' }}><span className="studio-chip" style={{ color:statusColor[experiment.status] || '#ffffff', borderColor:`${statusColor[experiment.status] || '#ffffff'}55` }}>{experiment.status}</span><select value={experiment.status} onChange={event => changeExperimentStatus(experiment, event.target.value)} disabled={busy === `status-${experiment.id}`} style={{ ...fieldStyle, width:'auto', padding:'7px 9px' }}><option value="planned">Planned</option><option value="ready">Ready</option><option value="running">Running</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="archived">Archived</option></select></div></div>
+          {readinessRequirementMessage(experiment) && <div style={{ marginTop:11, color:'rgba(242,242,242,.62)', fontSize:10.5, lineHeight:1.5 }}>{readinessRequirementMessage(experiment)} Selecting Ready or Running remains unavailable until this checklist is complete.</div>}
+          <div className="variant-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:16 }}>{(experiment.experiment_variants || []).map(variant => { const latest = variant.metrics?.latest; const outcome = outcomeForms[variant.id] || { value:'', unit:'', source:'', observedAt:'' }; const observationComplete = hasRequiredObservation(outcome); return <section key={variant.id} style={{ padding:14, borderRadius:12, background:'rgba(255,255,255,.035)', border:'1px solid rgba(255,255,255,.1)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:8 }}><div><span style={{ color:variant.is_control ? '#d7d7d7' : '#c0c0c0', font:'600 9px DM Mono,monospace', letterSpacing:'.08em' }}>{variant.is_control ? 'CONTROL' : 'CHALLENGER'} · {variant.metrics?.latest?.decision === 'needs_more_evidence' ? 'NEEDS MORE EVIDENCE' : variant.status.toUpperCase()}</span><h4 style={{ color:'#ffffff', fontSize:14, marginTop:5 }}>{variant.label}</h4></div>{latest && <span className="studio-chip" style={{ color:'#e9e9e9', height:'fit-content' }}>{latest.value} {latest.unit}</span>}</div><p style={{ color:'rgba(242,242,242,.62)', fontSize:10.5, lineHeight:1.55, marginTop:7 }}>{variant.change_summary}</p>{variant.media_asset_id && <p style={{ color:'rgba(242,242,242,.44)', fontSize:9.5, marginTop:5 }}>Linked completed asset · controlled change summary saved</p>}{latest ? <div style={{ color:'rgba(242,242,242,.42)', fontSize:9.5, marginTop:8 }}>Observed via {latest.source} · {new Date(latest.observedAt).toLocaleString()}</div> : <div style={{ color:'rgba(242,242,242,.42)', fontSize:9.5, marginTop:8 }}>No sourced numeric observation recorded.</div>}<div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7, marginTop:11 }}><input value={outcome.value} onChange={event => updateOutcome(variant.id, 'value', event.target.value)} placeholder="Numeric value" inputMode="decimal" style={fieldStyle}/><input value={outcome.unit} onChange={event => updateOutcome(variant.id, 'unit', event.target.value)} placeholder="Unit (%, installs…)" style={fieldStyle}/><input value={outcome.source} onChange={event => updateOutcome(variant.id, 'source', event.target.value)} placeholder="Source: ASC, Meta…" style={{ ...fieldStyle, gridColumn:'1 / -1' }}/><input type="datetime-local" value={outcome.observedAt} onChange={event => updateOutcome(variant.id, 'observedAt', event.target.value ? new Date(event.target.value).toISOString() : '')} aria-label="Observed at" style={{ ...fieldStyle, gridColumn:'1 / -1' }}/></div>{!observationComplete && <div style={{ color:'rgba(242,242,242,.46)', fontSize:9.5, lineHeight:1.45, marginTop:8 }}>Add a real numeric value, unit, source, and observation time to enable an evidence decision.</div>}<div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}><button type="button" onClick={() => recordOutcome(experiment, variant, 'needs_more_evidence')} disabled={busy === `outcome-${variant.id}` || !observationComplete} className="studio-button studio-button--soft" style={{ padding:'7px 9px', fontSize:9.5 }}>Needs evidence</button><button type="button" onClick={() => recordOutcome(experiment, variant, 'inconclusive')} disabled={busy === `outcome-${variant.id}` || !observationComplete} className="studio-button studio-button--soft" style={{ padding:'7px 9px', fontSize:9.5 }}>Inconclusive</button><button type="button" onClick={() => recordOutcome(experiment, variant, 'loser')} disabled={busy === `outcome-${variant.id}` || !observationComplete} className="studio-button studio-button--soft" style={{ padding:'7px 9px', fontSize:9.5 }}>Loser</button><button type="button" onClick={() => recordOutcome(experiment, variant, 'winner')} disabled={busy === `outcome-${variant.id}` || !observationComplete} className="studio-button" style={{ padding:'7px 9px', fontSize:9.5 }}>Winner</button></div></section> })}
             <section style={{ padding:14, borderRadius:12, background:'rgba(114,114,114,.1)', border:'1px dashed rgba(179,179,179,.34)' }}><div style={{ color:'#ededed', font:'600 9px DM Mono,monospace', letterSpacing:'.08em' }}>ADD A CONTROLLED VARIANT</div><div style={{ display:'grid', gap:7, marginTop:9 }}><input value={(variantForms[experiment.id] || blankVariant).label} onChange={event => updateVariant(experiment.id, 'label', event.target.value)} placeholder="Variant name" style={fieldStyle}/><input value={(variantForms[experiment.id] || blankVariant).changeSummary} onChange={event => updateVariant(experiment.id, 'changeSummary', event.target.value)} placeholder="One change: hook, proof, visual…" style={fieldStyle}/><input value={(variantForms[experiment.id] || blankVariant).hypothesis} onChange={event => updateVariant(experiment.id, 'hypothesis', event.target.value)} placeholder="Why this may work" style={fieldStyle}/>{runbookContext?.campaign?.id === experiment.campaign_id && <select value={(variantForms[experiment.id] || blankVariant).mediaAssetId || ''} onChange={event => updateVariant(experiment.id, 'mediaAssetId', event.target.value)} style={fieldStyle}><option value="">No linked asset yet</option>{(runbookContext.mediaAssets || []).filter(asset => ['ready','completed'].includes(asset.render_status) && asset.asset_url && asset.metadata?.change_summary?.trim()).map(asset => <option key={asset.id} value={asset.id}>Completed asset · {asset.metadata.change_summary.slice(0, 48)}</option>)}</select>}<label style={{ color:'rgba(242,242,242,.62)', fontSize:10.5, display:'flex', gap:7, alignItems:'center' }}><input type="checkbox" checked={Boolean((variantForms[experiment.id] || blankVariant).isControl)} onChange={event => updateVariant(experiment.id, 'isControl', event.target.checked)}/> This is the control</label><button type="button" onClick={() => addVariant(experiment)} disabled={busy === `variant-${experiment.id}`} className="studio-button" style={{ justifySelf:'start', padding:'8px 10px', fontSize:10 }}>{busy === `variant-${experiment.id}` ? 'Adding…' : 'Add variant'}</button></div></section>
           </div>
           {runbookContext?.runbook?.campaign_id === experiment.campaign_id ? <LearningStatementForm runbook={runbookContext.runbook} experiment={experiment} selectedConcept={runbookContext.concepts?.find(concept => concept.id === runbookContext.campaign?.selected_concept_id) || runbookContext.concepts?.find(concept => concept.status === 'selected')} existingStatement={(runbookContext.learningStatements || []).find(statement => statement.experiment_id === experiment.id)} onSaved={async () => { await refresh(); await selectRunbook(experiment.campaign_id) }} /> : experiment.campaign_id ? <div style={{ marginTop:13, color:'rgba(242,242,242,.46)', fontSize:10 }}>Select this experiment’s Campaign Runbook above to write its Learning Statement.</div> : null}

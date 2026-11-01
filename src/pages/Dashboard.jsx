@@ -59,11 +59,12 @@ export default function Dashboard() {
     setInsightLoading(false)
   }
 
+  const reviewNeededStatuses = ['pending', 'ready_for_review']
   const stats = {
     total: posts.length,
     published: posts.filter(p => p.status === 'published').length,
     approved: posts.filter(p => p.status === 'approved').length,
-    pending: posts.filter(p => p.status === 'pending').length,
+    reviewNeeded: posts.filter(p => reviewNeededStatuses.includes(p.status)).length,
   }
 
   const recentPosts = posts.slice(0, 5)
@@ -72,13 +73,13 @@ export default function Dashboard() {
   const videoMedia = completedMedia.filter(asset => asset.kind === 'video')
   const activeAppPosts = activeApp ? posts.filter(post => post.product_id === activeApp.id) : []
   const activeAppMedia = activeApp ? completedMedia.filter(asset => asset.product_id === activeApp.id) : []
-  const activeAppReviewCount = activeAppPosts.filter(post => ['pending', 'ready_for_review', 'approved'].includes(post.status)).length
+  const activeAppReviewCount = activeAppPosts.filter(post => reviewNeededStatuses.includes(post.status)).length
   const activeAppPublishedCount = activeAppPosts.filter(post => post.status === 'published').length
   const activeAppName = activeApp?.name || 'Your active app'
   const growthNextMove = !activeApp
     ? 'Choose an app from the global app switcher to create an app-specific growth plan.'
     : activeAppReviewCount > 0
-      ? `${activeAppReviewCount} app-scoped draft${activeAppReviewCount === 1 ? '' : 's'} need${activeAppReviewCount === 1 ? 's' : ''} review before publishing.`
+      ? `${activeAppReviewCount} app-scoped draft${activeAppReviewCount === 1 ? '' : 's'} await${activeAppReviewCount === 1 ? 's' : ''} review before publishing.`
       : activeAppMedia.length > 0
         ? 'A completed creative is ready to turn into an app-scoped social draft.'
         : 'Start with a real image or video in Creative Lab, then carry it into an app-scoped draft.'
@@ -87,7 +88,7 @@ export default function Dashboard() {
     { label: 'Total Posts', value: stats.total, color: '#535353', badge: 'All Active' },
     { label: 'Approved', value: stats.approved, color: '#747474', badge: 'Ready to Publish' },
     { label: 'Published', value: stats.published, color: '#555555', badge: 'Live in Feed' },
-    { label: 'Pending Review', value: stats.pending, color: '#535353', badge: stats.pending > 0 ? 'Requires Action' : 'All Clear' },
+    { label: 'Needs Review', value: stats.reviewNeeded, color: '#535353', badge: stats.reviewNeeded > 0 ? 'Requires Action' : 'All Clear' },
   ]
 
   return (
@@ -101,7 +102,7 @@ export default function Dashboard() {
             <div><div className="studio-kicker" style={{ color:'#e2e2e2', marginBottom:13 }}>Performance desk / Live signal</div><h2 className="studio-display" style={{ fontSize:'clamp(31px,4vw,49px)', maxWidth:540 }}>Make the next move <span className="studio-serif" style={{ color:'#dadada' }}>with intent.</span></h2></div>
             <div style={{ display:'flex', alignItems:'flex-start', gap:11, maxWidth:540, paddingTop:20, borderTop:'1px solid rgba(255,255,255,.15)' }}><span style={{ width:8, height:8, borderRadius:99, background:'#e2e2e2', marginTop:5, flexShrink:0 }}/><div><div style={{ fontFamily:'DM Mono, monospace', color:'#e2e2e2', fontSize:9.5, letterSpacing:'.1em', marginBottom:5 }}>FLO'S LATEST READ</div><div style={{ fontSize:12.5, color:'rgba(251,251,251,.78)', lineHeight:1.6 }}>{insightLoading ? 'Reading your current creative mix…' : aiInsight}</div></div></div>
           </div>
-          <div style={{ position:'relative', minHeight:270, overflow:'hidden' }}><img src="/visuals/flo-preview-lifestyle.jpg" alt="Campaign creative in progress" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center' }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#191919 0%,transparent 34%),linear-gradient(to top,rgba(23,23,23,.7),transparent 45%)' }}/><div className="abundance-glass" style={{ position:'absolute', right:18, bottom:18, color:'#ffffff', padding:'10px 12px', borderRadius:12, minWidth:126 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, color:'#ededed', letterSpacing:'.08em' }}>CREATIVE STATUS</div><div style={{ fontWeight:800, fontSize:12, marginTop:3 }}>{stats.pending} ideas need review</div></div></div>
+          <div style={{ position:'relative', minHeight:270, overflow:'hidden' }}><img src="/visuals/flo-preview-lifestyle.jpg" alt="Campaign creative in progress" style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'center' }}/><div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg,#191919 0%,transparent 34%),linear-gradient(to top,rgba(23,23,23,.7),transparent 45%)' }}/><div className="abundance-glass" style={{ position:'absolute', right:18, bottom:18, color:'#ffffff', padding:'10px 12px', borderRadius:12, minWidth:126 }}><div style={{ fontFamily:'DM Mono,monospace', fontSize:9, color:'#ededed', letterSpacing:'.08em' }}>CREATIVE STATUS</div><div style={{ fontWeight:800, fontSize:12, marginTop:3 }}>{stats.reviewNeeded} draft{stats.reviewNeeded === 1 ? '' : 's'} awaiting review</div></div></div>
         </section>
 
         {/* Active app command center: read-only counts and existing workflow shortcuts. */}
@@ -118,7 +119,7 @@ export default function Dashboard() {
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:9 }}>
             <div style={{ minWidth:0, padding:'13px 12px', borderRadius:13, background:'#f1f2fb', border:'1px solid #e1e4f1' }}><div className="studio-kicker" style={{ color:'#737a94', fontSize:8 }}>READY MEDIA</div><b style={{ display:'block', color:'#20243d', fontSize:24, marginTop:6 }}>{activeApp ? activeAppMedia.length : '—'}</b><span style={{ display:'block', color:'#737a94', fontSize:10, marginTop:3 }}>app-scoped</span></div>
-            <div style={{ minWidth:0, padding:'13px 12px', borderRadius:13, background:'#f1f2fb', border:'1px solid #e1e4f1' }}><div className="studio-kicker" style={{ color:'#737a94', fontSize:8 }}>IN REVIEW</div><b style={{ display:'block', color:'#20243d', fontSize:24, marginTop:6 }}>{activeApp ? activeAppReviewCount : '—'}</b><span style={{ display:'block', color:'#737a94', fontSize:10, marginTop:3 }}>drafts</span></div>
+            <div style={{ minWidth:0, padding:'13px 12px', borderRadius:13, background:'#f1f2fb', border:'1px solid #e1e4f1' }}><div className="studio-kicker" style={{ color:'#737a94', fontSize:8 }}>NEEDS REVIEW</div><b style={{ display:'block', color:'#20243d', fontSize:24, marginTop:6 }}>{activeApp ? activeAppReviewCount : '—'}</b><span style={{ display:'block', color:'#737a94', fontSize:10, marginTop:3 }}>awaiting review</span></div>
             <div style={{ minWidth:0, padding:'13px 12px', borderRadius:13, background:'#f1f2fb', border:'1px solid #e1e4f1' }}><div className="studio-kicker" style={{ color:'#737a94', fontSize:8 }}>PUBLISHED</div><b style={{ display:'block', color:'#20243d', fontSize:24, marginTop:6 }}>{activeApp ? activeAppPublishedCount : '—'}</b><span style={{ display:'block', color:'#737a94', fontSize:10, marginTop:3 }}>this app</span></div>
           </div>
         </section>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { useWorkspace } from '../context/WorkspaceContext'
@@ -43,18 +43,29 @@ function SummaryValue({ label, children }) {
 
 export default function FacebookPageKits() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { apps, activeApp, setActiveApp, workspaceLoading, workspaceError } = useWorkspace()
   const requestedId = searchParams.get('app') || ''
   const [selectedId, setSelectedId] = useState(requestedId || activeApp?.id || '')
   const [draft, setDraft] = useState(null)
   const [notice, setNotice] = useState('')
   const [copied, setCopied] = useState(false)
+  const onePagerRef = useRef(null)
+  const focusRequestRef = useRef(0)
+  const handledFocusRequestRef = useRef(0)
+  const [focusRequest, setFocusRequest] = useState(null)
 
-  const selectedApp = useMemo(() => apps.find(app => app.id === selectedId) || apps.find(app => app.id === requestedId) || activeApp || apps[0] || null, [activeApp, apps, requestedId, selectedId])
+  const selectedApp = useMemo(() => apps.find(app => app.id === requestedId) || apps.find(app => app.id === selectedId) || activeApp || apps[0] || null, [activeApp, apps, requestedId, selectedId])
   const generatedKit = useMemo(() => selectedApp ? buildFacebookPageKit(selectedApp) : null, [selectedApp])
   const kit = draft || generatedKit
   const appKits = useMemo(() => apps.map(buildFacebookPageKit), [apps])
+
+  useEffect(() => {
+    const requestedApp = apps.find(app => app.id === requestedId)
+    if (!requestedApp) return
+    if (selectedId !== requestedApp.id) setSelectedId(requestedApp.id)
+    if (activeApp?.id !== requestedApp.id) setActiveApp(requestedApp)
+  }, [activeApp?.id, apps, requestedId, selectedId, setActiveApp])
 
   useEffect(() => {
     if (!selectedApp?.id) return
@@ -63,13 +74,33 @@ export default function FacebookPageKits() {
     setCopied(false)
   }, [selectedApp?.id])
 
+  useEffect(() => {
+    if (!focusRequest || focusRequest.appId !== selectedApp?.id || handledFocusRequestRef.current === focusRequest.id) return
+    handledFocusRequestRef.current = focusRequest.id
+    const frame = window.requestAnimationFrame(() => {
+      const onePager = onePagerRef.current
+      if (!onePager) return
+      onePager.focus({ preventScroll:true })
+      onePager.scrollIntoView({ behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'start' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [focusRequest, selectedApp?.id])
+
   const chooseApp = app => {
     if (!app?.id) return
-    setActiveApp(app)
+    if (activeApp?.id !== app.id) setActiveApp(app)
+    if (requestedId !== app.id) {
+      const nextSearchParams = new URLSearchParams(searchParams)
+      nextSearchParams.set('app', app.id)
+      setSearchParams(nextSearchParams)
+    }
     setSelectedId(app.id)
     setDraft(buildFacebookPageKit(app))
     setNotice('')
     setCopied(false)
+    const focusRequestId = focusRequestRef.current + 1
+    focusRequestRef.current = focusRequestId
+    setFocusRequest({ id:focusRequestId, appId:app.id })
     trackFloEvent('facebook_page_kit_opened', { product_id:app.id, has_artwork:Boolean(buildFacebookPageKit(app).artworkUrl) })
   }
 
@@ -129,8 +160,8 @@ export default function FacebookPageKits() {
         </section>
 
         {kit && <section style={{ display:'grid', gridTemplateColumns:'minmax(0,1.15fr) minmax(320px,.85fr)', gap:16, alignItems:'start' }}>
-          <article className="studio-panel" style={{ padding:22, minWidth:0 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start', flexWrap:'wrap' }}><div style={{ display:'flex', alignItems:'center', gap:13 }}><AppArtwork kit={kit} /><div><div className="studio-kicker">FACEBOOK PAGE ONE-PAGER</div><h2 style={{ color:'#20233f', fontSize:25, letterSpacing:'-.055em', marginTop:4 }}>{kit.appName}</h2><p style={{ color:'#717895', fontSize:11, marginTop:4 }}>Prepared from this app’s saved facts — editable before export.</p></div></div><Availability tone={kit.requiresReview ? 'review' : 'ready'}>{kit.requiresReview ? 'Regulated review' : 'Review ready'}</Availability></div>
+          <article ref={onePagerRef} tabIndex={-1} role="region" aria-labelledby="facebook-page-one-pager-title" className="studio-panel facebook-kits-one-pager" style={{ padding:22, minWidth:0, scrollMarginTop:20 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start', flexWrap:'wrap' }}><div style={{ display:'flex', alignItems:'center', gap:13 }}><AppArtwork kit={kit} /><div><div className="studio-kicker">FACEBOOK PAGE ONE-PAGER</div><h2 id="facebook-page-one-pager-title" style={{ color:'#20233f', fontSize:25, letterSpacing:'-.055em', marginTop:4 }}>{kit.appName}</h2><p style={{ color:'#717895', fontSize:11, marginTop:4 }}>Prepared from this app’s saved facts — editable before export.</p></div></div><Availability tone={kit.requiresReview ? 'review' : 'ready'}>{kit.requiresReview ? 'Regulated review' : 'Review ready'}</Availability></div>
             {kit.requiresReview && <div role="note" style={{ marginTop:16, padding:12, borderRadius:10, background:'rgba(245,158,11,.09)', border:'1px solid rgba(245,158,11,.26)', color:'#805016', fontSize:11.5, lineHeight:1.55 }}>This app may involve a regulated or sensitive topic. Verify claims, qualifiers, links, and Page policies before using any copy or graphic externally. FloStudio has not created or published a Facebook Page.</div>}
             <div style={{ display:'grid', gap:13, marginTop:18 }}>
               <label className="facebook-kit-field"><span>Page name</span><input value={kit.appName || ''} onChange={event => updateDraft('appName', event.target.value)} /></label>
@@ -162,7 +193,7 @@ export default function FacebookPageKits() {
       {notice && <div role="status" style={{ position:'sticky', bottom:12, zIndex:5, padding:'11px 13px', borderRadius:10, color:'#fff', background:'rgba(24,25,57,.95)', boxShadow:'0 12px 28px rgba(18,19,51,.25)', fontSize:11.5 }}>{notice}</div>}
     </div>
     <style>{`
-      .facebook-kits-page{padding:0 0 4px}.flo-main .facebook-kits-hero{background:linear-gradient(132deg,#181932 0%,#29275b 54%,#34307c 100%)!important;border-color:rgba(166,160,255,.36)!important;box-shadow:0 20px 44px rgba(35,31,98,.22),0 1px 0 rgba(255,255,255,.13) inset!important}.flo-main .facebook-kits-hero .studio-display{color:#fff!important}.flo-main .facebook-kits-hero .studio-kicker{color:#bcb8ff!important}.flo-main .facebook-kits-hero p{color:rgba(242,242,255,.76)!important}.facebook-kit-field{display:grid;gap:6px;color:#5f6783;font:700 9px 'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase}.facebook-kit-field input,.facebook-kit-field textarea{width:100%;border:1px solid #dfe1f0;border-radius:9px;padding:10px 11px;color:#252742;background:#fff;font:500 12.5px 'Bricolage Grotesque',Inter,sans-serif;line-height:1.5;letter-spacing:normal;text-transform:none}.facebook-kit-field textarea{resize:vertical}.facebook-kit-field small{font:500 10px 'Bricolage Grotesque',Inter,sans-serif;line-height:1.4;color:#8a90a9;letter-spacing:normal;text-transform:none}.facebook-kits-tabs::-webkit-scrollbar{height:5px}.facebook-kits-tabs::-webkit-scrollbar-thumb{background:#d8d8ee;border-radius:999px}@media(max-width:960px){.facebook-kits-page>section[style*='grid-template-columns']{grid-template-columns:1fr!important}}@media(max-width:620px){.facebook-kits-hero{padding:22px 18px!important}.facebook-kits-page{padding-bottom:12px}.facebook-kit-field{font-size:8px}}
+      .facebook-kits-page{padding:0 0 4px}.flo-main .facebook-kits-hero{background:linear-gradient(132deg,#181932 0%,#29275b 54%,#34307c 100%)!important;border-color:rgba(166,160,255,.36)!important;box-shadow:0 20px 44px rgba(35,31,98,.22),0 1px 0 rgba(255,255,255,.13) inset!important}.flo-main .facebook-kits-hero .studio-display{color:#fff!important}.flo-main .facebook-kits-hero .studio-kicker{color:#bcb8ff!important}.flo-main .facebook-kits-hero p{color:rgba(242,242,255,.76)!important}.facebook-kits-one-pager:focus{outline:3px solid rgba(81,72,223,.48);outline-offset:3px}.facebook-kit-field{display:grid;gap:6px;color:#5f6783;font:700 9px 'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase}.facebook-kit-field input,.facebook-kit-field textarea{width:100%;border:1px solid #dfe1f0;border-radius:9px;padding:10px 11px;color:#252742;background:#fff;font:500 12.5px 'Bricolage Grotesque',Inter,sans-serif;line-height:1.5;letter-spacing:normal;text-transform:none}.facebook-kit-field textarea{resize:vertical}.facebook-kit-field small{font:500 10px 'Bricolage Grotesque',Inter,sans-serif;line-height:1.4;color:#8a90a9;letter-spacing:normal;text-transform:none}.facebook-kits-tabs::-webkit-scrollbar{height:5px}.facebook-kits-tabs::-webkit-scrollbar-thumb{background:#d8d8ee;border-radius:999px}@media(max-width:960px){.facebook-kits-page>section[style*='grid-template-columns']{grid-template-columns:1fr!important}}@media(max-width:620px){.facebook-kits-hero{padding:22px 18px!important}.facebook-kits-page{padding-bottom:12px}.facebook-kit-field{font-size:8px}}
     `}</style>
   </Layout>
 }

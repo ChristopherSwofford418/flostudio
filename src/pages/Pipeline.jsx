@@ -75,22 +75,46 @@ export default function Pipeline() {
   const [batchVisualProgress, setBatchVisualProgress] = useState(null)
   const [publishing, setPublishing] = useState({})
   const [publishErrors, setPublishErrors] = useState({})
+  const [actionError, setActionError] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [assetUpdating, setAssetUpdating] = useState({})
+  const [statusUpdating, setStatusUpdating] = useState({})
 
   const activeProductId = activeApp?.id || ''
+  const productIdForPost = post => post?.campaign?.product_id || post?.product_id || ''
+
+  const clearVisualProgress = postIds => {
+    setVisualGenerating(previous => {
+      const next = { ...previous }
+      postIds.forEach(postId => delete next[postId])
+      return next
+    })
+  }
+
+  const recordMemoryEventAfterSuccess = async values => {
+    try {
+      await recordMemoryEvent(values)
+    } catch (error) {
+      setActionError(`Your change was saved, but FloStudio could not record its creative-memory event: ${error.message || 'Unknown error'}`)
+    }
+  }
 
   const loadPosts = async () => {
     setLoading(true)
     setLoadError('')
     try {
-      const [postResult, campaignResult, mediaResult] = await Promise.all([
+      const [postResult, campaignResult] = await Promise.all([
         supabase.from('campaign_posts').select('*').order('scheduled_at', { ascending:true }),
         supabase.from('campaigns').select('id,product_id,name,workspace_id,selected_concept_id'),
-        listMediaAssets(activeProductId).catch(() => []),
       ])
       if (postResult.error) throw postResult.error
       if (campaignResult.error) throw campaignResult.error
       const campaignById = Object.fromEntries((campaignResult.data || []).map(campaign => [campaign.id, campaign]))
       const enriched = (postResult.data || []).map(post => ({ ...post, campaign:campaignById[post.campaign_id] || null }))
+      const mediaProductIds = scopeMode === 'all'
+        ? [...new Set(enriched.map(productIdForPost).filter(Boolean))]
+        : activeProductId ? [activeProductId] : []
+      const mediaResult = (await Promise.all(mediaProductIds.map(productId => listMediaAssets(productId).catch(() => [])))).flat()
       const assigned = enriched.filter(post => post.campaign?.product_id)
       const unassigned = enriched.length - assigned.length
       const scoped = scopeMode === 'app' && activeProductId
@@ -118,8 +142,16 @@ export default function Pipeline() {
     published:allPosts.filter(post => post.status === 'published').length,
   }), [allPosts])
 
-  const attachedAssets = postId => mediaAssets.filter(asset => asset.campaign_post_id === postId)
-  const availableAssets = mediaAssets.filter(asset => !asset.campaign_post_id)
+  const attachedAssets = postId => {
+    const post = allPosts.find(item => item.id === postId)
+    const productId = productIdForPost(post)
+    return productId ? mediaAssets.filter(asset => asset.campaign_post_id === postId && asset.product_id === productId) : []
+  }
+  const selectedPostProductId = productIdForPost(selectedPost)
+  const availableAssets = selectedPostProductId
+    ? mediaAssets.filter(asset => !asset.campaign_post_id && asset.product_id === selectedPostProductId)
+    : []
+  const eligibleVisualPosts = posts.filter(post => Boolean(post.workspace_id && productIdForPost(post)) && attachedAssets(post.id).length === 0 && visualGenerating[post.id] !== 'working')
 
   const refreshCampaignReviews = async campaignId => {
     if (!campaignId) { setCampaignReviews([]); return }
@@ -132,22 +164,48 @@ export default function Pipeline() {
     setEditContent(post.content || '')
     setAiSuggestion('')
     setAiError('')
+    setActionError('')
     setShowAssetPicker(false)
     refreshCampaignReviews(post.campaign_id).catch(() => setCampaignReviews([]))
   }
 
   const attachAsset = async asset => {
-    if (!selectedPost) return
-    await updateMediaAsset(asset.id, { campaign_post_id:selectedPost.id })
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (user && selectedPost.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:selectedPost.campaign_id, mediaAssetId:asset.id, eventType:'asset_attached', attributes:{ platform:selectedPost.platform, method:'pipeline_review' } })
-    setShowAssetPicker(false)
-    await loadPosts()
+    if (!selectedPost || assetUpdating[asset.id]) return
+    if (!selectedPostProductId || asset.product_id !== selectedPostProductId || asset.campaign_post_id) {
+      setActionError('This Creative Lab asset does not belong to the selected post’s app or is already attached to another post.')
+      return
+    }
+    setActionError('')
+    setAssetUpdating(previous => ({ ...previous, [asset.id]:true }))
+    try {
+      await updateMediaAsset(asset.id, { campaign_post_id:selectedPost.id })
+      const { data:{ user } } = await supabase.auth.getUser()
+      if (user && selectedPost.campaign_id) await recordMemoryEventAfterSuccess({ userId:user.id, campaignId:selectedPost.campaign_id, mediaAssetId:asset.id, eventType:'asset_attached', attributes:{ platform:selectedPost.platform, method:'pipeline_review' } })
+      setShowAssetPicker(false)
+      await loadPosts()
+    } catch (error) {
+      setActionError(error.message || 'FloStudio could not attach this Creative Lab asset.')
+    } finally {
+      setAssetUpdating(previous => ({ ...previous, [asset.id]:false }))
+    }
   }
 
   const detachAsset = async asset => {
-    await updateMediaAsset(asset.id, { campaign_post_id:null })
-    await loadPosts()
+    if (!selectedPost || assetUpdating[asset.id]) return
+    if (!selectedPostProductId || asset.product_id !== selectedPostProductId) {
+      setActionError('This Creative Lab asset does not belong to the selected post’s app.')
+      return
+    }
+    setActionError('')
+    setAssetUpdating(previous => ({ ...previous, [asset.id]:true }))
+    try {
+      await updateMediaAsset(asset.id, { campaign_post_id:null })
+      await loadPosts()
+    } catch (error) {
+      setActionError(error.message || 'FloStudio could not remove this Creative Lab asset.')
+    } finally {
+      setAssetUpdating(previous => ({ ...previous, [asset.id]:false }))
+    }
   }
 
   const generateVisual = async post => {
@@ -155,7 +213,10 @@ export default function Pipeline() {
     setVisualGenerating(previous => ({ ...previous, [post.id]:'working' }))
     try {
       const authorized = await useTokens(10, 'Campaign visual')
-      if (!authorized) return
+      if (!authorized) {
+        clearVisualProgress([post.id])
+        return
+      }
       await generateVisualForPost(post)
       setVisualGenerating(previous => ({ ...previous, [post.id]:'done' }))
       await loadPosts()
@@ -165,45 +226,77 @@ export default function Pipeline() {
   }
 
   const generateQueueVisuals = async () => {
-    const targets = posts.filter(post => attachedAssets(post.id).length === 0).slice(0, 5)
-    if (!targets.length) return
+    if (batchVisualProgress) return
+    const targets = eligibleVisualPosts.slice(0, 5)
+    if (!targets.length) {
+      setBatchVisualProgress(null)
+      return
+    }
     setBatchVisualProgress({ complete:0, total:targets.length, failed:0 })
     let complete = 0
     let failed = 0
-    for (const post of targets) {
-      setVisualGenerating(previous => ({ ...previous, [post.id]:'working' }))
-      try {
-        const authorized = await useTokens(10, 'Campaign visual')
-        if (!authorized) break
-        await generateVisualForPost(post)
-        complete += 1
-        setVisualGenerating(previous => ({ ...previous, [post.id]:'done' }))
-      } catch (error) {
-        failed += 1
-        setVisualGenerating(previous => ({ ...previous, [post.id]:`error:${error.message || 'Generation failed'}` }))
+    try {
+      for (const post of targets) {
+        setVisualGenerating(previous => ({ ...previous, [post.id]:'working' }))
+        try {
+          const authorized = await useTokens(10, 'Campaign visual')
+          if (!authorized) {
+            clearVisualProgress([post.id])
+            break
+          }
+          await generateVisualForPost(post)
+          complete += 1
+          setVisualGenerating(previous => ({ ...previous, [post.id]:'done' }))
+        } catch (error) {
+          failed += 1
+          setVisualGenerating(previous => ({ ...previous, [post.id]:`error:${error.message || 'Generation failed'}` }))
+        }
+        setBatchVisualProgress({ complete, total:targets.length, failed })
       }
-      setBatchVisualProgress({ complete, total:targets.length, failed })
+      if (complete) await loadPosts()
+    } finally {
+      clearVisualProgress(targets.map(post => post.id))
+      setBatchVisualProgress(null)
     }
-    await loadPosts()
   }
 
   const saveEdit = async () => {
     if (!selectedPost) return
-    await supabase.from('campaign_posts').update({ content:editContent }).eq('id', selectedPost.id)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (user && selectedPost.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:selectedPost.campaign_id, eventType:'post_rewritten', attributes:{ platform:selectedPost.platform, changed:Boolean(editContent !== selectedPost.content) } })
-    setSelectedPost(null)
-    await loadPosts()
+    setActionError('')
+    setSavingEdit(true)
+    try {
+      const { data, error } = await supabase.from('campaign_posts').update({ content:editContent }).eq('id', selectedPost.id).select('id').single()
+      if (error) throw error
+      if (!data) throw new Error('This post could not be found or changed.')
+      const { data:{ user } } = await supabase.auth.getUser()
+      if (user && selectedPost.campaign_id) await recordMemoryEventAfterSuccess({ userId:user.id, campaignId:selectedPost.campaign_id, eventType:'post_rewritten', attributes:{ platform:selectedPost.platform, changed:Boolean(editContent !== selectedPost.content) } })
+      setSelectedPost(null)
+      await loadPosts()
+    } catch (error) {
+      setActionError(error.message || 'FloStudio could not save these post changes.')
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   const updateStatus = async (id, status) => {
-    if (status === 'published') return
+    if (status === 'published' || statusUpdating[id]) return
     const post = allPosts.find(item => item.id === id)
-    await supabase.from('campaign_posts').update({ status }).eq('id', id)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (user && post?.campaign_id && status === 'approved') await recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:'post_approved', attributes:{ platform:post.platform, postId:id, status } })
-    if (selectedPost?.id === id) setSelectedPost(null)
-    await loadPosts()
+    setActionError('')
+    setStatusUpdating(previous => ({ ...previous, [id]:true }))
+    try {
+      const { data, error } = await supabase.from('campaign_posts').update({ status }).eq('id', id).select('id').single()
+      if (error) throw error
+      if (!data) throw new Error('This post could not be found or updated.')
+      const { data:{ user } } = await supabase.auth.getUser()
+      if (user && post?.campaign_id && status === 'approved') await recordMemoryEventAfterSuccess({ userId:user.id, campaignId:post.campaign_id, eventType:'post_approved', attributes:{ platform:post.platform, postId:id, status } })
+      if (selectedPost?.id === id) setSelectedPost(null)
+      await loadPosts()
+    } catch (error) {
+      setActionError(error.message || 'FloStudio could not approve this post.')
+    } finally {
+      setStatusUpdating(previous => ({ ...previous, [id]:false }))
+    }
   }
 
   const publishPost = async post => {
@@ -217,7 +310,7 @@ export default function Pipeline() {
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || 'FloStudio could not publish this post.')
       const { data:{ user } } = await supabase.auth.getUser()
-      if (user && post.campaign_id) await recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:'post_published', attributes:{ platform:post.platform, postId:post.id, providerPostId:data.providerPostId || null } })
+      if (user && post.campaign_id) await recordMemoryEventAfterSuccess({ userId:user.id, campaignId:post.campaign_id, eventType:'post_published', attributes:{ platform:post.platform, postId:post.id, providerPostId:data.providerPostId || null } })
       await loadPosts()
     } catch (error) {
       setPublishErrors(previous => ({ ...previous, [post.id]:error.message || 'FloStudio could not publish this post.' }))
@@ -225,21 +318,37 @@ export default function Pipeline() {
   }
 
   const deletePost = async id => {
-    await supabase.from('campaign_posts').delete().eq('id', id)
-    if (selectedPost?.id === id) setSelectedPost(null)
-    await loadPosts()
+    setActionError('')
+    try {
+      const { data, error } = await supabase.from('campaign_posts').delete().eq('id', id).select('id').single()
+      if (error) throw error
+      if (!data) throw new Error('This post could not be found or deleted.')
+      if (selectedPost?.id === id) setSelectedPost(null)
+      await loadPosts()
+    } catch (error) {
+      setActionError(error.message || 'FloStudio could not delete this post.')
+    }
   }
 
   const bulkApproveAll = async () => {
+    if (bulkApproving) return
     setBulkApproving(true)
-    const pendingIds = allPosts.filter(post => post.status === 'pending').map(post => post.id)
-    if (pendingIds.length) {
-      await supabase.from('campaign_posts').update({ status:'approved' }).in('id', pendingIds)
+    setActionError('')
+    try {
+      const pendingPosts = allPosts.filter(post => post.status === 'pending')
+      const pendingIds = pendingPosts.map(post => post.id)
+      if (!pendingIds.length) return
+      const { data, error } = await supabase.from('campaign_posts').update({ status:'approved' }).in('id', pendingIds).select('id')
+      if (error) throw error
+      if (data?.length !== pendingIds.length) throw new Error('Some pending posts could not be approved.')
       const { data:{ user } } = await supabase.auth.getUser()
-      if (user) await Promise.all(allPosts.filter(post => pendingIds.includes(post.id) && post.campaign_id).map(post => recordMemoryEvent({ userId:user.id, campaignId:post.campaign_id, eventType:'post_approved', attributes:{ platform:post.platform, postId:post.id, method:'bulk_pipeline_review' } })))
+      if (user) await Promise.all(pendingPosts.filter(post => post.campaign_id).map(post => recordMemoryEventAfterSuccess({ userId:user.id, campaignId:post.campaign_id, eventType:'post_approved', attributes:{ platform:post.platform, postId:post.id, method:'bulk_pipeline_review' } })))
+      await loadPosts()
+    } catch (error) {
+      setActionError(error.message || 'FloStudio could not approve the pending posts.')
+    } finally {
+      setBulkApproving(false)
     }
-    await loadPosts()
-    setBulkApproving(false)
   }
 
   const aiRewrite = async () => {
@@ -322,6 +431,7 @@ export default function Pipeline() {
 
       {legacyCount > 0 && scopeMode === 'app' && <div style={{ marginTop:14, padding:'10px 13px', borderRadius:12, border:'1px solid #e7defd', background:'#faf8ff', color:'#625c7d', fontSize:11, lineHeight:1.55 }}><b style={{ color:'#4e47b8' }}>{legacyCount} legacy pipeline record{legacyCount === 1 ? '' : 's'}</b> cannot yet be matched to a portfolio app and remain preserved in <b>All Portfolio</b>. No records have been removed or changed.</div>}
       {loadError && <div style={{ marginTop:14, padding:'10px 13px', borderRadius:12, border:'1px solid #f0c6cd', background:'#fff7f7', color:'#9b3545', fontSize:11.5 }}>{loadError}</div>}
+      {actionError && <div style={{ marginTop:14, padding:'10px 13px', borderRadius:12, border:'1px solid #f0c6cd', background:'#fff7f7', color:'#9b3545', fontSize:11.5 }}>{actionError}</div>}
 
       <section style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:12, marginTop:18 }}>
         {[['pending','Needs review','#6f63d8'],['approved','Approved to ship','#16836b'],['published','Published','#2673c9']].map(([status,label,accent]) => <button key={status} type="button" onClick={() => setActiveTab(status)} className={`pipeline-stat ${activeTab === status ? 'active' : ''}`} style={{ textAlign:'left' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center' }}><span style={{ color:'#68738a', fontSize:9, letterSpacing:'.1em', fontWeight:850, textTransform:'uppercase' }}>{label}</span><span style={{ width:8, height:8, borderRadius:'50%', background:accent }}/></div><b style={{ display:'block', color:'#20273d', fontSize:28, letterSpacing:'-.06em', marginTop:7 }}>{counts[status]}</b><span style={{ color:'#7a8498', fontSize:10.5 }}>in {scopeMode === 'all' ? 'all portfolio' : (activeApp?.name || 'selected app')}</span></button>)}
@@ -331,7 +441,7 @@ export default function Pipeline() {
         <div className="pipeline-filter">{STATUS_TABS.map(tab => <button key={tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>{tab === 'all' ? `All (${allPosts.length})` : `${statusLabel(tab)} (${counts[tab]})`}</button>)}</div>
         <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
           {counts.pending > 0 && <button type="button" onClick={bulkApproveAll} disabled={bulkApproving} className="pipeline-action primary">{bulkApproving ? 'Approving…' : `Approve ${counts.pending} pending`}</button>}
-          <button type="button" onClick={generateQueueVisuals} disabled={Boolean(batchVisualProgress && batchVisualProgress.complete < batchVisualProgress.total)} className="pipeline-action">{batchVisualProgress ? `Creating ${batchVisualProgress.complete}/${batchVisualProgress.total}` : 'Create visuals for next 5'}</button>
+          <button type="button" onClick={generateQueueVisuals} disabled={Boolean(batchVisualProgress) || eligibleVisualPosts.length === 0} className="pipeline-action">{batchVisualProgress ? `Creating ${batchVisualProgress.complete}/${batchVisualProgress.total}` : eligibleVisualPosts.length ? 'Create visuals for next 5' : 'No visuals needed'}</button>
         </div>
       </section>
 
@@ -343,11 +453,11 @@ export default function Pipeline() {
           <div style={{ width:46, height:46, marginTop:1, borderRadius:13, display:'grid', placeItems:'center', background:`${meta.accent}13`, border:`1px solid ${meta.accent}28`, color:meta.accent, fontSize:10, fontWeight:900 }}>{meta.icon}</div>
           <div className="pipeline-preview" style={{ width:134, minHeight:126, borderRadius:13, overflow:'hidden', background:'#f3f5fa', border:'1px solid #e0e6ef', position:'relative' }}>{postAssets[0] ? <AssetThumb asset={postAssets[0]} /> : <div style={{ height:'100%', padding:12, display:'flex', flexDirection:'column', justifyContent:'space-between', background:'linear-gradient(145deg,#f2f0ff,#f8fbff)' }}><span className="pipeline-kicker" style={{ color:'#7068d8' }}>CREATIVE NEEDED</span><button type="button" onClick={() => generateVisual(post)} disabled={visualGenerating[post.id] === 'working'} className="pipeline-action" style={{ padding:'7px 6px', fontSize:9 }}>{visualGenerating[post.id] === 'working' ? 'CREATING…' : 'Generate visual · 10'}</button></div>}</div>
           <div style={{ minWidth:0 }}><div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}><span style={{ color:meta.accent, fontSize:10, fontWeight:850 }}>{meta.label}</span><span style={{ color:'#7c869a', fontSize:10 }}>{dateLabel(post.scheduled_at)}</span>{post.campaign?.name && <span style={{ maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', padding:'3px 7px', borderRadius:6, color:'#626b82', background:'#f2f4f8', fontSize:9.5 }}>{post.campaign.name}</span>}</div><p style={{ color:'#273149', fontSize:12.5, lineHeight:1.65, fontWeight:600, marginTop:8, whiteSpace:'pre-wrap' }}>{post.content}</p><div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginTop:9 }}><span style={{ padding:'4px 8px', borderRadius:20, background:post.status === 'published' ? '#eaf7f2' : post.status === 'approved' ? '#eef5ff' : '#f3f0ff', color:post.status === 'published' ? '#197d61' : post.status === 'approved' ? '#2870b8' : '#6259c8', fontSize:9.5, fontWeight:850, textTransform:'uppercase' }}>{statusLabel(post.status)}</span>{score && score !== 'loading' && !score.error && <span title={score.reason || ''} style={{ color:'#515d75', fontSize:10.5, fontWeight:800 }}>AI score · {score.score}/10</span>}{score?.error && <span title={score.error} style={{ color:'#b84355', fontSize:10.5 }}>AI review unavailable</span>}{publishErrors[post.id] && <span style={{ color:'#b84355', fontSize:10.5 }}>Publish stopped · {publishErrors[post.id]}</span>}</div></div>
-          <div className="pipeline-actions" style={{ display:'flex', flexDirection:'column', gap:7, alignItems:'stretch', justifyContent:'center' }}><button type="button" onClick={() => scorePost(post)} disabled={score === 'loading'} className="pipeline-action">{score === 'loading' ? 'Scoring…' : 'Score'}</button><button type="button" onClick={() => openPost(post)} className="pipeline-action">{postAssets.length ? `Creative ${postAssets.length}` : 'Choose creative'}</button>{post.status === 'pending' && <button type="button" onClick={() => updateStatus(post.id, 'approved')} className="pipeline-action primary">Approve</button>}{post.status === 'approved' && <button type="button" onClick={() => publishPost(post)} disabled={publishing[post.id]} className="pipeline-action primary">{publishing[post.id] ? 'Sending…' : 'Publish'}</button>}<button type="button" onClick={() => deletePost(post.id)} className="pipeline-action danger">Delete</button></div>
+          <div className="pipeline-actions" style={{ display:'flex', flexDirection:'column', gap:7, alignItems:'stretch', justifyContent:'center' }}><button type="button" onClick={() => scorePost(post)} disabled={score === 'loading'} className="pipeline-action">{score === 'loading' ? 'Scoring…' : 'Score'}</button><button type="button" onClick={() => openPost(post)} className="pipeline-action">{postAssets.length ? `Creative ${postAssets.length}` : 'Choose creative'}</button>{post.status === 'pending' && <button type="button" onClick={() => updateStatus(post.id, 'approved')} disabled={statusUpdating[post.id]} className="pipeline-action primary">{statusUpdating[post.id] ? 'Approving…' : 'Approve'}</button>}{post.status === 'approved' && <button type="button" onClick={() => publishPost(post)} disabled={publishing[post.id]} className="pipeline-action primary">{publishing[post.id] ? 'Sending…' : 'Publish'}</button>}<button type="button" onClick={() => deletePost(post.id)} className="pipeline-action danger">Delete</button></div>
         </article>
       })}</div>}
     </div>
 
-    {selectedPost && <div onClick={() => setSelectedPost(null)} style={{ position:'fixed', inset:0, zIndex:1000, display:'grid', placeItems:'center', padding:20, background:'rgba(17,24,39,.54)', backdropFilter:'blur(8px)' }}><section onClick={event => event.stopPropagation()} style={{ width:'min(690px,100%)', maxHeight:'88vh', overflowY:'auto', padding:24, borderRadius:20, background:'#fff', boxShadow:'0 28px 80px rgba(10,15,34,.28)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>REVIEW & REFINEMENT</div><h2 style={{ color:'#273149', fontSize:23, letterSpacing:'-.05em', marginTop:6 }}>Shape this {platformMeta(selectedPost.platform).label} post.</h2></div><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action" style={{ padding:'6px 10px', fontSize:16 }}>×</button></div><textarea value={editContent} onChange={event => setEditContent(event.target.value)} rows={7} style={{ width:'100%', boxSizing:'border-box', marginTop:17, padding:'12px 13px', borderRadius:12, border:'1px solid #dce3ed', background:'#fbfcfe', color:'#273149', font: '500 13px/1.65 inherit', resize:'vertical' }}/><div style={{ marginTop:16, paddingTop:15, borderTop:'1px solid #e6eaf1' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>APP CREATIVE LIBRARY</div><p style={{ color:'#65708a', fontSize:10.5, marginTop:4 }}>Only completed images and videos for <b>{activeApp?.name || 'the selected app'}</b> are available here.</p></div><button type="button" onClick={() => setShowAssetPicker(value => !value)} className="pipeline-action">{showAssetPicker ? 'Close library' : 'Choose Creative Lab asset'}</button></div>{attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:11, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:82, height:82, flex:'0 0 auto', overflow:'hidden', borderRadius:10, background:'#eff2f7' }}><AssetThumb asset={asset} /><button type="button" onClick={() => detachAsset(asset)} style={{ position:'absolute', top:5, right:5, border:0, borderRadius:6, background:'rgba(17,24,39,.78)', color:'#fff', padding:'4px 6px', fontSize:9 }}>Remove</button></div>)}</div>}{showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(105px,1fr))', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button type="button" key={asset.id} onClick={() => attachAsset(asset)} title="Attach this asset" style={{ padding:0, height:100, overflow:'hidden', border:'1px solid #d8dfe9', borderRadius:10, background:'#f7f9fc', cursor:'pointer', position:'relative' }}><AssetThumb asset={asset} />{asset.kind === 'video' && <span style={{ position:'absolute', left:5, bottom:5, padding:'3px 5px', borderRadius:5, background:'rgba(16,24,42,.8)', color:'#fff', fontSize:8, fontWeight:850 }}>VIDEO</span>}</button>) : <p style={{ gridColumn:'1/-1', color:'#758096', fontSize:11 }}>No unassigned media for this app. Generate or upload it in Creative Lab first.</p>}</div>}</div>{selectedPost.campaign && <div style={{ marginTop:15, padding:10, borderRadius:12, background:'#1b1c2f' }}><CreativeFamilyPanel workspaceId={selectedPost.workspace_id || selectedPost.campaign.workspace_id || workspaceId} userId={userId} productId={selectedPost.campaign.product_id} campaign={selectedPost.campaign} selectedConcept={{ id:selectedPost.campaign.selected_concept_id, title:selectedPost.campaign.name }} assets={mediaAssets.filter(asset => asset.campaign_id === selectedPost.campaign_id)} reviews={campaignReviews} onOpenLibrary={() => setShowAssetPicker(true)} onChanged={async () => { await refreshCampaignReviews(selectedPost.campaign_id); await loadPosts() }} /></div>}{aiError && <div style={{ marginTop:15, padding:11, borderRadius:12, background:'#fff7f7', border:'1px solid #f1cbd0', color:'#9b3545', fontSize:11.5 }}>{aiError}</div>}{aiSuggestion && <div style={{ marginTop:15, padding:13, borderRadius:12, background:'#f4f2ff', border:'1px solid #ddd9ff' }}><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>AI REWRITE SUGGESTION</div><p style={{ color:'#3f4960', whiteSpace:'pre-wrap', fontSize:12, lineHeight:1.6, marginTop:7 }}>{aiSuggestion}</p><button type="button" onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} className="pipeline-action primary" style={{ marginTop:9 }}>Use suggestion</button></div>}<div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:19 }}><button type="button" onClick={aiRewrite} disabled={aiRewriting} className="pipeline-action">{aiRewriting ? 'Writing…' : 'AI rewrite'}</button><div style={{ display:'flex', gap:8 }}><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action">Cancel</button><button type="button" onClick={saveEdit} className="pipeline-action primary">Save changes</button></div></div></section></div>}
+    {selectedPost && <div onClick={() => setSelectedPost(null)} style={{ position:'fixed', inset:0, zIndex:1000, display:'grid', placeItems:'center', padding:20, background:'rgba(17,24,39,.54)', backdropFilter:'blur(8px)' }}><section onClick={event => event.stopPropagation()} style={{ width:'min(690px,100%)', maxHeight:'88vh', overflowY:'auto', padding:24, borderRadius:20, background:'#fff', boxShadow:'0 28px 80px rgba(10,15,34,.28)' }}><div style={{ display:'flex', justifyContent:'space-between', gap:14, alignItems:'flex-start' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>REVIEW & REFINEMENT</div><h2 style={{ color:'#273149', fontSize:23, letterSpacing:'-.05em', marginTop:6 }}>Shape this {platformMeta(selectedPost.platform).label} post.</h2></div><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action" style={{ padding:'6px 10px', fontSize:16 }}>×</button></div><textarea value={editContent} onChange={event => setEditContent(event.target.value)} rows={7} style={{ width:'100%', boxSizing:'border-box', marginTop:17, padding:'12px 13px', borderRadius:12, border:'1px solid #dce3ed', background:'#fbfcfe', color:'#273149', font: '500 13px/1.65 inherit', resize:'vertical' }}/><div style={{ marginTop:16, paddingTop:15, borderTop:'1px solid #e6eaf1' }}><div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}><div><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>APP CREATIVE LIBRARY</div><p style={{ color:'#65708a', fontSize:10.5, marginTop:4 }}>Only completed images and videos for <b>{activeApp?.name || 'the selected app'}</b> are available here.</p></div><button type="button" onClick={() => setShowAssetPicker(value => !value)} className="pipeline-action">{showAssetPicker ? 'Close library' : 'Choose Creative Lab asset'}</button></div>{attachedAssets(selectedPost.id).length > 0 && <div style={{ display:'flex', gap:8, marginTop:11, overflowX:'auto' }}>{attachedAssets(selectedPost.id).map(asset => <div key={asset.id} style={{ position:'relative', width:82, height:82, flex:'0 0 auto', overflow:'hidden', borderRadius:10, background:'#eff2f7' }}><AssetThumb asset={asset} /><button type="button" onClick={() => detachAsset(asset)} disabled={assetUpdating[asset.id]} style={{ position:'absolute', top:5, right:5, border:0, borderRadius:6, background:'rgba(17,24,39,.78)', color:'#fff', padding:'4px 6px', fontSize:9 }}>{assetUpdating[asset.id] ? '…' : 'Remove'}</button></div>)}</div>}{showAssetPicker && <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(105px,1fr))', gap:8, marginTop:12 }}>{availableAssets.length ? availableAssets.map(asset => <button type="button" key={asset.id} onClick={() => attachAsset(asset)} disabled={assetUpdating[asset.id]} title="Attach this asset" style={{ padding:0, height:100, overflow:'hidden', border:'1px solid #d8dfe9', borderRadius:10, background:'#f7f9fc', cursor:'pointer', position:'relative' }}><AssetThumb asset={asset} />{asset.kind === 'video' && <span style={{ position:'absolute', left:5, bottom:5, padding:'3px 5px', borderRadius:5, background:'rgba(16,24,42,.8)', color:'#fff', fontSize:8, fontWeight:850 }}>VIDEO</span>}</button>) : <p style={{ gridColumn:'1/-1', color:'#758096', fontSize:11 }}>No unassigned media for this app. Generate or upload it in Creative Lab first.</p>}</div>}</div>{selectedPost.campaign && <div style={{ marginTop:15, padding:10, borderRadius:12, background:'#1b1c2f' }}><CreativeFamilyPanel workspaceId={selectedPost.workspace_id || selectedPost.campaign.workspace_id || workspaceId} userId={userId} productId={selectedPost.campaign.product_id} campaign={selectedPost.campaign} selectedConcept={{ id:selectedPost.campaign.selected_concept_id, title:selectedPost.campaign.name }} assets={mediaAssets.filter(asset => asset.campaign_id === selectedPost.campaign_id && asset.product_id === selectedPostProductId)} reviews={campaignReviews} onOpenLibrary={() => setShowAssetPicker(true)} onChanged={async () => { await refreshCampaignReviews(selectedPost.campaign_id); await loadPosts() }} /></div>}{actionError && <div style={{ marginTop:15, padding:11, borderRadius:12, background:'#fff7f7', border:'1px solid #f1cbd0', color:'#9b3545', fontSize:11.5 }}>{actionError}</div>}{aiError && <div style={{ marginTop:15, padding:11, borderRadius:12, background:'#fff7f7', border:'1px solid #f1cbd0', color:'#9b3545', fontSize:11.5 }}>{aiError}</div>}{aiSuggestion && <div style={{ marginTop:15, padding:13, borderRadius:12, background:'#f4f2ff', border:'1px solid #ddd9ff' }}><div className="pipeline-kicker" style={{ color:'#5f59e8' }}>AI REWRITE SUGGESTION</div><p style={{ color:'#3f4960', whiteSpace:'pre-wrap', fontSize:12, lineHeight:1.6, marginTop:7 }}>{aiSuggestion}</p><button type="button" onClick={() => { setEditContent(aiSuggestion); setAiSuggestion('') }} className="pipeline-action primary" style={{ marginTop:9 }}>Use suggestion</button></div>}<div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap', marginTop:19 }}><button type="button" onClick={aiRewrite} disabled={aiRewriting} className="pipeline-action">{aiRewriting ? 'Writing…' : 'AI rewrite'}</button><div style={{ display:'flex', gap:8 }}><button type="button" onClick={() => setSelectedPost(null)} className="pipeline-action">Cancel</button><button type="button" onClick={saveEdit} disabled={savingEdit} className="pipeline-action primary">{savingEdit ? 'Saving…' : 'Save changes'}</button></div></div></section></div>}
   </Layout>
 }

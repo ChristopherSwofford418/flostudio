@@ -20,9 +20,9 @@ const goals = [
   },
   {
     id:'review_learning',
-    title:'Review verified learning',
-    description:'Open the private Portfolio Learning Review. It shows only linked Campaign Runbook evidence and source-aware next actions.',
-    destination:'Portfolio Learning Review',
+    title:'Open portfolio learning when available',
+    description:'Open Portfolio. When linked Campaign Runbook evidence exists, its private learning review appears there with source-aware next actions.',
+    destination:'Portfolio',
     route:'/portfolio',
   },
 ]
@@ -44,7 +44,7 @@ export default function EasyCommand() {
     if (!currentApp) return
     setActiveApp(currentApp)
     const query = `?app=${encodeURIComponent(currentApp.id)}`
-    navigate(goal.route === '/agent' ? `${goal.route}${query}` : `${goal.route}${query}`)
+    navigate(goal.route === '/portfolio' ? goal.route : `${goal.route}${query}`)
   }
 
   return <Layout title="Easy Growth Center">
