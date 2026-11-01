@@ -49,11 +49,17 @@ export default function EasyCommand() {
 
   return <Layout title="Easy Growth Center">
     <div className="flo-page" style={{ padding:'36px 30px 72px', maxWidth:900, margin:'0 auto' }}>
-      <section className="studio-dark" style={{ padding:'32px 34px', textAlign:'center' }}>
+      <section className="studio-dark easy-growth-hero" style={{ padding:'32px 34px', textAlign:'center' }}>
         <div className="studio-kicker" style={{ color:'#d8d4ff' }}>EASY GROWTH / REAL WORKFLOWS ONLY</div>
         <h1 className="studio-display" style={{ color:'#fff', fontSize:'clamp(34px,4.4vw,50px)', marginTop:9 }}>Choose the next <span className="studio-serif" style={{ color:'#d8d4ff' }}>meaningful action.</span></h1>
         <p style={{ color:'rgba(242,243,255,.72)', fontSize:13, lineHeight:1.7, margin:'12px auto 0', maxWidth:650 }}>This center never reports generated, scheduled, or completed work before a durable Flo Studio record exists. It routes you into the real campaign, experiment, or learning workflow instead.</p>
       </section>
+      <style>{`
+        .flo-main .easy-growth-hero{background:linear-gradient(132deg,#181932 0%,#29275b 54%,#34307c 100%)!important;border-color:rgba(166,160,255,.36)!important;box-shadow:0 20px 44px rgba(35,31,98,.22),0 1px 0 rgba(255,255,255,.13) inset!important}
+        .flo-main .easy-growth-hero .studio-display{color:#fff!important}
+        .flo-main .easy-growth-hero .studio-kicker{color:#d8d4ff!important}
+        .flo-main .easy-growth-hero p{color:rgba(242,243,255,.72)!important}
+      `}</style>
 
       <section className="studio-panel flo-dark-surface" style={{ marginTop:16, padding:'28px clamp(18px,4vw,34px)' }}>
         <div style={{ display:'flex', gap:7, alignItems:'center', marginBottom:24 }}><span className="studio-chip" style={{ color:step >= 1 ? '#e4e0ff' : 'rgba(242,243,255,.45)', borderColor:'rgba(219,215,255,.22)' }}>1 · App</span><span style={{ color:'rgba(242,243,255,.32)' }}>—</span><span className="studio-chip" style={{ color:step >= 2 ? '#e4e0ff' : 'rgba(242,243,255,.45)', borderColor:'rgba(219,215,255,.22)' }}>2 · Goal</span><span style={{ color:'rgba(242,243,255,.32)' }}>—</span><span className="studio-chip" style={{ color:step >= 3 ? '#e4e0ff' : 'rgba(242,243,255,.45)', borderColor:'rgba(219,215,255,.22)' }}>3 · Route</span></div>
