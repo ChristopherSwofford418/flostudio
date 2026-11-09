@@ -18,6 +18,7 @@ import AppInsights from './pages/AppInsights.jsx'
 import SEO from './pages/SEO.jsx'
 import EasyCommand from './pages/EasyCommand.jsx'
 import FacebookPageKits from './pages/FacebookPageKits.jsx'
+import EmailCampaigns from './pages/EmailCampaigns.jsx'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -98,6 +99,7 @@ export default function App() {
         <Route path="/insights" element={session ? <AppInsights /> : <Navigate to="/auth" />} />
         <Route path="/seo" element={session ? <SEO /> : <Navigate to="/auth" />} />
         <Route path="/easy-growth" element={session ? <EasyCommand /> : <Navigate to="/auth" />} />
+        <Route path="/email-campaigns" element={session ? <EmailCampaigns /> : <Navigate to="/auth" />} />
         <Route path="*" element={<Navigate to={session ? '/portfolio' : '/auth'} replace />} />
       </Routes>
     </WorkspaceProvider>

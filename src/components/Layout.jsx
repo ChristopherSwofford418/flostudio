@@ -10,7 +10,7 @@ import WorkspaceProviderKey from './WorkspaceProviderKey.jsx'
 const navGroups = [
   { label: 'PORTFOLIO', items: [['portfolio', 'My Portfolio', '00']] },
   { label: 'CREATE', items: [['agent', 'Campaign Engine', '01'], ['images', 'Creative Lab', '02'], ['ai-calendar', 'Campaign Map', '03'], ['facebook-kits', 'Facebook Page Kits', 'FB']] },
-  { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['experiments', 'Experiments', '05'], ['easy-growth', 'Easy Growth', '06'], ['dashboard', 'Performance', '07'], ['accounts', 'Channels', '08'], ['insights', 'App Insights', '09'], ['seo', 'SEO & ASO', '10']] },
+  { label: 'MANAGE', items: [['pipeline', 'Review Queue', '04'], ['experiments', 'Experiments', '05'], ['easy-growth', 'Easy Growth', '06'], ['dashboard', 'Performance', '07'], ['accounts', 'Channels', '08'], ['insights', 'App Insights', '09'], ['seo', 'SEO & ASO', '10'], ['email-campaigns', 'Email Campaigns', 'EM']] },
 ]
 
 const pageMeta = {
@@ -26,6 +26,7 @@ const pageMeta = {
   '/seo': ['SEO & ASO', 'Grounded website and App Store discovery planning for the selected portfolio app.'],
   '/easy-growth': ['Easy Growth Center', 'Choose a product and open a real campaign, experiment, or learning workflow.'],
   '/pricing': ['Plans & Tokens', 'Scale your creative output with transparent usage.'],
+  '/email-campaigns': ['Email Campaigns', 'Source-linked research, opted-in recipients, reviewed app emails and a shared Gmail sending budget.'],
 }
 
 function AgentDrawer({ onClose, activeApp, apps }) {
