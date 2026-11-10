@@ -144,7 +144,7 @@ export async function researchEmailCandidates({ apiKey, model, product = {}, que
     const response = await (io.fetch || globalThis.fetch)('https://api.openai.com/v1/responses', {
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(45000),
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: chosenModel, store: false, instructions,
+      body: JSON.stringify({ model: chosenModel, ...(chosenModel === 'gpt-5.6-terra' ? { reasoning: { effort: 'low' } } : {}), store: false, instructions,
         input: JSON.stringify({ query, product: facts, limit }), tools: [{ type: 'web_search' }], tool_choice: 'required',
         include: ['web_search_call.action.sources'], max_output_tokens: 2400,
         text: { format: { type: 'json_schema', name: 'public_business_contacts', strict: true,
