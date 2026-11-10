@@ -160,6 +160,26 @@ test('callback consumes state once, verifies stored admin and encrypts connectio
   const again = await finish(state); assert(again.headers.Location.includes('setup_failed'))
   assert.equal(events.filter(event => event.url === 'https://oauth2.googleapis.com/token').length,1)
 })
+test('callback first connection clamps default workspace budget to persisted shared account cap', async () => {
+  const peer = seedConnection({ workspaceId:OTHER }), account = tables.email_gmail_accounts[0]
+  account.daily_budget = 125
+  const originalAccount = structuredClone(account), originalPeer = structuredClone(peer)
+  const { state } = await connect(); exchange()
+  assert.equal((await finish(state)).headers.Location,'/email-campaigns?gmail=connected')
+  const conn = tables.workspace_gmail_connections.find(row => row.workspace_id === W)
+  assert.equal(conn.daily_budget,125); assert.equal(conn.configured,true); assert.equal(conn.sending_enabled,false)
+  assert.equal(conn.encrypted_credentials.algorithm,'aes-256-gcm')
+  assert.equal(decryptEmailCredential(conn.encrypted_credentials,W).refresh_token,'dummy-refresh')
+  assert.deepEqual(account,originalAccount); assert.deepEqual(peer,originalPeer)
+  assert.equal(tables.email_campaigns[0].sending_enabled,false); assert.equal(tables.email_campaigns[1].sending_enabled,true)
+  const accountEvents = events.filter(event => new URL(event.url).pathname === '/rest/v1/email_gmail_accounts')
+  assert.deepEqual(accountEvents.map(event => event.method),['POST','GET'])
+  assert.equal(accountEvents[0].headers.Prefer,'resolution=ignore-duplicates')
+  const read = new URL(accountEvents[1].url)
+  assert.equal(read.searchParams.get('select'),'daily_budget'); assert.equal(read.searchParams.get('limit'),'1')
+  assert.equal(read.searchParams.get('account_key'),`eq.${account.account_key}`)
+  assert.equal(events.filter(event => event.url.startsWith('https://gmail.')).length,0)
+})
 test('callback rejects missing, mismatched, duplicate, expired and concurrently consumed state without exchange', async () => {
   const { state } = await connect()
   for (const input of [{ cookie:'' },{ cookie:`${COOKIE}=${'x'.repeat(43)}` },{ cookie:`${COOKIE}=${state}; ${COOKIE}=${state}` }]) {
@@ -192,13 +212,28 @@ test('callback rejects insufficient scopes, unverified identity and missing refr
     responses = []
   }
 })
-test('same verified identity retains old refresh token and existing account gates and budgets', async () => {
+test('same verified identity retains old refresh token and clamps reconnect budget to current shared cap', async () => {
   const previous = seedConnection({ enabled:true }), { state } = await connect()
+  const originalAccount = structuredClone(tables.email_gmail_accounts[0])
   exchange({ refresh_token:undefined }); assert((await finish(state)).headers.Location.includes('gmail=connected'))
   assert.equal(decryptEmailCredential(previous.encrypted_credentials,W).refresh_token,'dummy-old-refresh')
-  assert.equal(previous.daily_budget,300)
-  assert.equal(tables.email_gmail_accounts[0].daily_budget,200); assert.equal(tables.email_gmail_accounts[0].sending_enabled,true)
+  assert.equal(previous.daily_budget,200); assert.equal(previous.sending_enabled,false)
+  assert.deepEqual(tables.email_gmail_accounts[0],originalAccount)
   assert.equal(tables.email_campaigns[0].sending_enabled,false)
+})
+test('callback never raises a lower workspace budget or resets a higher shared account cap', async () => {
+  const previous = seedConnection(), account = tables.email_gmail_accounts[0]
+  previous.daily_budget = 150; account.daily_budget = 600
+  const originalAccount = structuredClone(account)
+  const { state } = await connect(); exchange()
+  assert.equal((await finish(state)).headers.Location,'/email-campaigns?gmail=connected')
+  assert.equal(previous.daily_budget,150); assert.equal(previous.sending_enabled,false)
+  assert.deepEqual(account,originalAccount)
+  assert.equal(decryptEmailCredential(previous.encrypted_credentials,W).refresh_token,'dummy-refresh')
+  assert.equal(tables.email_campaigns[0].sending_enabled,false)
+  assert.equal(events.filter(event => new URL(event.url).pathname === '/rest/v1/email_gmail_accounts' && event.method !== 'GET').length,1)
+  assert.equal(events.find(event => event.url.includes('/email_gmail_accounts?') && event.method === 'POST').headers.Prefer,'resolution=ignore-duplicates')
+  assert.equal(events.filter(event => event.url.startsWith('https://gmail.')).length,0)
 })
 test('different Google identity cannot silently reuse an old refresh token', async () => {
   seedConnection(); const { state } = await connect()

@@ -78,12 +78,18 @@ export async function emailConnectionStatus(workspaceId,accessToken) {
   return {configured:Boolean(row?.configured) && (!expected || expected===row?.email),email:row?.email || null,expected_email:expected,daily_budget:row?.daily_budget || 400}
 }
 export function emailDeploymentStatus() {
+  let validRedirect = false
+  try {
+    const url = new URL(process.env.GOOGLE_EMAIL_REDIRECT_URI)
+    validRedirect = url.protocol === 'https:' && !url.username && !url.password && !url.hash
+  } catch { /* Missing or invalid OAuth configuration is not ready. */ }
   return {
-    gmailConfigured:Boolean(process.env.GOOGLE_EMAIL_CLIENT_ID && process.env.GOOGLE_EMAIL_CLIENT_SECRET && process.env.GOOGLE_EMAIL_REDIRECT_URI),
+    gmailConfigured:Boolean(process.env.GOOGLE_EMAIL_CLIENT_ID && process.env.GOOGLE_EMAIL_CLIENT_SECRET && validRedirect),
     sendingEnabled:process.env.EMAIL_LIVE_SENDING_ENABLED === 'true',
     cronConfigured:process.env.EMAIL_CRON_ENABLED === 'true' && Boolean(process.env.CRON_SECRET),
     vaultConfigured:Boolean(process.env.EMAIL_CREDENTIALS_ENCRYPTION_KEY || process.env.ASC_CREDENTIALS_ENCRYPTION_KEY || process.env.OPENAI_PROVIDER_VAULT_KEY),
     workerStorageConfigured:Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    draftingModelConfigured:Boolean(cleanEmailText(process.env.OPENAI_EMAIL_TEXT_MODEL || process.env.OPENAI_TEXT_MODEL,120)),
   }
 }
 export function emailPublicOrigin() {

@@ -73,11 +73,13 @@ export default async function handler(req,res) {
       ])
       const readiness={...emailDeploymentStatus(),aiConfigured,blockers:[]}
       if(!readiness.workerStorageConfigured) readiness.blockers.push('Secure background-worker storage is not configured. Campaign setup remains available through your authenticated workspace; Gmail connection and delivery stay blocked until server setup is completed.')
+      if(!readiness.vaultConfigured) readiness.blockers.push('The encrypted Gmail credential vault is not configured. Gmail connection and delivery remain blocked until a stable server-only encryption root is configured.')
       if(!readiness.gmailConfigured) readiness.blockers.push('The app-owned Google OAuth client is not configured. The Manus Gmail connector is not a Flo Studio background-sending connection.')
       if(!connection.configured) readiness.blockers.push('Connect a Gmail sender using the secure Google consent flow.')
       if(!readiness.sendingEnabled) readiness.blockers.push('Live delivery is disabled at deployment level; no messages can be sent.')
       if(!readiness.cronConfigured) readiness.blockers.push('The secure application scheduler is not enabled.')
       if(!aiConfigured) readiness.blockers.push('Connect workspace OpenAI for source research and email drafting.')
+      if(!readiness.draftingModelConfigured) readiness.blockers.push('Configure an available email drafting model before generating email drafts.')
       if(!process.env.OPENAI_EMAIL_RESEARCH_MODEL) readiness.blockers.push('Configure an available web-search-capable email research model before AI contact discovery.')
       readiness.warnings=['One standard paid Workspace mailbox allows up to 2,000 messages per rolling 24 hours across all apps and regular outgoing mail. Use headroom and fair app allocations. Send-only Gmail cannot automatically read bounces or unsubscribe replies.']
       return res.status(200).json({campaign,contacts,drafts,queue,connection,readiness})

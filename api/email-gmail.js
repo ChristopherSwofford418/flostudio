@@ -101,8 +101,11 @@ async function callback(req) {
   const credentials = { refresh_token:refresh, accessToken:tokens.access_token, expires_at:Date.now() + Number(tokens.expires_in) * 1000, scopes, sub:user.sub, email, verified_email:true }
   // Ignore duplicates: reconnecting cannot enable an account or reset its shared budget.
   await emailDb('email_gmail_accounts?on_conflict=account_key', { method:'POST', body:{ account_key:key, daily_budget:400, sending_enabled:false }, prefer:'resolution=ignore-duplicates' })
+  const account = (await emailDb(query('email_gmail_accounts', 'daily_budget', { account_key:`eq.${key}` })))?.[0]
+  if (!Number.isInteger(account?.daily_budget) || account.daily_budget < 1 || account.daily_budget > 2000) throw reconnect()
+  const dailyBudget = Math.min(previous?.account_key === key ? budget(previous.daily_budget) : 400, account.daily_budget)
   await pauseWorkspace(workspaceId)
-  await emailDb('workspace_gmail_connections?on_conflict=workspace_id', { method:'POST', body:{ workspace_id:workspaceId, account_key:key, email, configured:true, sending_enabled:false, daily_budget:previous?.account_key === key ? budget(previous.daily_budget) : 400, created_by:saved.created_by, encrypted_credentials:encryptEmailCredential(credentials, workspaceId) }, prefer:'resolution=merge-duplicates' })
+  await emailDb('workspace_gmail_connections?on_conflict=workspace_id', { method:'POST', body:{ workspace_id:workspaceId, account_key:key, email, configured:true, sending_enabled:false, daily_budget:dailyBudget, created_by:saved.created_by, encrypted_credentials:encryptEmailCredential(credentials, workspaceId) }, prefer:'resolution=merge-duplicates' })
 }
 
 export default async function handler(req, res) {
