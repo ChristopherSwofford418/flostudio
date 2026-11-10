@@ -1,6 +1,9 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "crons": [
+    { "path": "/api/email-cron", "schedule": "*/5 * * * *" }
+  ],
   "rewrites": [
     { "source": "/child-safety", "destination": "/child-safety.html" },
     { "source": "/api/(.*)", "destination": "/api/$1" },

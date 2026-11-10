@@ -71,12 +71,19 @@ export async function emailDb(path, { method = 'GET', body, accessToken, prefer 
   return payload
 }
 export const emailRpc = (name, args) => emailDb(`rpc/${name}`, { method:'POST', body:args })
+export async function emailConnectionStatus(workspaceId,accessToken) {
+  if(!accessToken) throw emailError('AUTH_REQUIRED','Sign in to view the workspace email status.',401)
+  const row=await emailDb('rpc/email_connection_status',{method:'POST',body:{p_workspace_id:workspaceId},accessToken})
+  const expected=row?.expected_email || null
+  return {configured:Boolean(row?.configured) && (!expected || expected===row?.email),email:row?.email || null,expected_email:expected,daily_budget:row?.daily_budget || 400}
+}
 export function emailDeploymentStatus() {
   return {
     gmailConfigured:Boolean(process.env.GOOGLE_EMAIL_CLIENT_ID && process.env.GOOGLE_EMAIL_CLIENT_SECRET && process.env.GOOGLE_EMAIL_REDIRECT_URI),
     sendingEnabled:process.env.EMAIL_LIVE_SENDING_ENABLED === 'true',
     cronConfigured:process.env.EMAIL_CRON_ENABLED === 'true' && Boolean(process.env.CRON_SECRET),
     vaultConfigured:Boolean(process.env.EMAIL_CREDENTIALS_ENCRYPTION_KEY || process.env.ASC_CREDENTIALS_ENCRYPTION_KEY || process.env.OPENAI_PROVIDER_VAULT_KEY),
+    workerStorageConfigured:Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
   }
 }
 export function emailPublicOrigin() {

@@ -48,8 +48,7 @@ export default async function handler(req,res) {
       const already=new Set(existing.map(q=>q.contact_id)),share=shares.get(campaign.id)
       let remaining=Math.max(0,share-existing.length)
       if(!remaining) continue
-      const cutoff=new Date(Date.now()-30*86400000).toISOString()
-      const contacts=await allRows('email_contacts','id,email',{workspace_id:`eq.${campaign.workspace_id}`,product_id:`eq.${campaign.product_id}`,status:'eq.opted_in',or:`(last_contacted_at.is.null,last_contacted_at.lt.${cutoff})`,order:'created_at.asc'})
+      const contacts=await allRows('email_contacts','id,email',{workspace_id:`eq.${campaign.workspace_id}`,product_id:`eq.${campaign.product_id}`,status:'eq.opted_in',last_contacted_at:'is.null',order:'created_at.asc'})
       const eligible=new Set(contacts.map(c=>c.id))
       const drafts=await allRows('email_drafts','id,contact_id',{campaign_id:`eq.${campaign.id}`,status:'eq.approved',order:'created_at.desc'})
       for(const draft of drafts) {
