@@ -4,6 +4,7 @@ import { researchEmailCandidates } from './email-source-research.js'
 import { emailDailyCreativePlan, uniqueEmailDrafts } from './email-content-plan.js'
 import { getEmailCampaignReadiness, activateEmailCampaign } from './email-lifecycle.js'
 import { emailResearchDeploymentStatus, getDailyResearchStatus, saveDailyResearchSettings } from './email-research-settings.js'
+import { dailyCampaignDeploymentStatus, getDailyCampaignStatus, saveDailyCampaignSettings, updateDailyCampaign } from './email-daily-campaign-settings.js'
 
 export const config={maxDuration:180}
 const campaignColumns='id,name,workspace_id,product_id,daily_limit,timezone,send_hour,send_minute,state,sending_enabled,sender_name,postal_address,ad_link,audience,language'
@@ -92,7 +93,8 @@ export default async function handler(req,res) {
       readiness.researchModelConfigured=Boolean(process.env.OPENAI_EMAIL_RESEARCH_MODEL)
       readiness.researchDeployment=emailResearchDeploymentStatus(aiConfigured)
       readiness.researchCronConfigured=readiness.researchDeployment.configured
-      readiness.processing={timer:'Every five minutes; only at or after the saved app-local send time.',delivery:'Existing human-approved recipient copy only.',research:'Independent per-app daily candidate research when explicitly enabled; public email availability is not consent.',drafting:'Manual AI draft generation; every new draft needs human review.'}
+      readiness.dailyCampaignDeployment=dailyCampaignDeploymentStatus()
+      readiness.processing={timer:'Every five minutes; only at or after the saved app-local send time.',delivery:'Existing human-approved recipient copy only.',research:'Independent per-app daily candidate research when explicitly enabled; public email availability is not consent.',drafting:'Daily listing-based campaign templates are created independently when enabled. Recipient-specific AI generation remains manual; every new draft needs human review.'}
       readiness.warnings=['One standard paid Workspace mailbox allows up to 2,000 messages per rolling 24 hours across all apps and regular outgoing mail. Use headroom and fair app allocations. Send-only Gmail cannot automatically read bounces or unsubscribe replies.']
       const pagination={contacts:{offset:contactsOffset,nextOffset:contacts.length===200 && contactsOffset+200<=50000 ? contactsOffset+200 : null},drafts:{offset:draftsOffset,nextOffset:drafts.length===100 && draftsOffset+100<=50000 ? draftsOffset+100 : null}}
       return res.status(200).json({campaign,contacts,drafts,queue,connection,readiness,pagination})
@@ -102,7 +104,17 @@ export default async function handler(req,res) {
       const [research,aiConfigured]=await Promise.all([getDailyResearchStatus({workspaceId,productId,accessToken}),aiStatus(workspaceId,accessToken)])
       return res.status(200).json({research,deployment:emailResearchDeploymentStatus(aiConfigured)})
     }
+    if(action==='get_daily_campaign_status') {
+      const dailyCampaign=await getDailyCampaignStatus({workspaceId,productId,accessToken})
+      return res.status(200).json({dailyCampaign,deployment:dailyCampaignDeploymentStatus()})
+    }
     await assertWorkspaceAdmin({workspaceId,accessToken})
+    if(action==='save_daily_campaign_settings' || action==='update_daily_campaign') {
+      if(action==='save_daily_campaign_settings') await saveDailyCampaignSettings({workspaceId,productId,accessToken,body})
+      else await updateDailyCampaign({workspaceId,productId,accessToken,body})
+      const dailyCampaign=await getDailyCampaignStatus({workspaceId,productId,accessToken})
+      return res.status(200).json({dailyCampaign,deployment:dailyCampaignDeploymentStatus(),message:action==='update_daily_campaign' ? 'Daily campaign copy saved as an unapproved draft. No recipients or sending settings were changed.' : body.enabled ? 'Daily campaign draft creation enabled for this app. The protected draft-only timer also requires its deployment gate. No email sending was enabled.' : 'Daily campaign draft creation paused for this app. Existing drafts, research and delivery settings were preserved.'})
+    }
     if(action==='save_research_settings') {
       await saveDailyResearchSettings({workspaceId,productId,accessToken,body})
       const [research,aiConfigured]=await Promise.all([getDailyResearchStatus({workspaceId,productId,accessToken}),aiStatus(workspaceId,accessToken)])

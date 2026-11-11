@@ -110,7 +110,7 @@ test('malformed successes, provider errors, and transport failures stay sanitize
 const require = createRequire(import.meta.url)
 const esbuild = require(require.resolve('esbuild', { paths: [dirname(require.resolve('vite'))] }))
 const pageSource = readFileSync(new URL('../src/pages/EmailCampaigns.jsx', import.meta.url), 'utf8').replace(/^import .*$/gm, '').replace('export default function EmailCampaigns()', 'function EmailCampaigns()')
-const bindings = ['useCallback', 'useEffect', 'useMemo', 'useRef', 'useState', 'useSearchParams', 'Layout', 'EmailDailyResearchPanel', 'useWorkspace', 'supabase', 'trackFloEvent', ...Object.keys(client), 'gmailCallbackFailureNotice', '__jsx']
+const bindings = ['useCallback', 'useEffect', 'useMemo', 'useRef', 'useState', 'useSearchParams', 'Layout', 'EmailDailyResearchPanel', 'EmailDailyCampaignPanel', 'useWorkspace', 'supabase', 'trackFloEvent', ...Object.keys(client), 'gmailCallbackFailureNotice', '__jsx']
 const compiled = esbuild.transformSync(`const { ${bindings.join(', ')} } = runtime;\n${pageSource}`, { loader: 'jsx', jsxFactory: '__jsx', jsxFragment: 'Array', target: 'es2022' }).code
 const loadPage = new Function('runtime', `${compiled}\nreturn EmailCampaigns;`)
 const nodes = tree => {
@@ -141,6 +141,7 @@ function harness({ workspaceRole = 'owner', sendingEnabled = false, configured =
     useSearchParams: () => [h.params, params => { h.params = params; changed = true }],
     Layout: 'layout',
     EmailDailyResearchPanel: 'daily-research-panel', // Child behavior has its own offline scope/permission suite.
+    EmailDailyCampaignPanel: 'daily-campaign-panel', // Draft-library behavior has its own offline suite.
     trackFloEvent: async () => {},
     gmailCallbackFailureNotice: () => null,
     getEmailCampaigns: async () => data,

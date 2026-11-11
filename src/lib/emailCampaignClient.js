@@ -3,7 +3,7 @@ import { authenticatedHeaders, authenticatedJsonHeaders } from './authenticatedA
 export const EMAIL_DAILY_LIMIT = 100
 export const EMAIL_BATCH_LIMIT = 10
 export const CAMPAIGN_FIELDS = ['name', 'daily_limit', 'timezone', 'send_hour', 'send_minute', 'sender_name', 'postal_address', 'ad_link', 'audience', 'language']
-const ACTIONS = new Set(['save_campaign', 'add_contacts', 'consent_contact', 'suppress_contact', 'generate_drafts', 'approve_draft', 'research_candidates', 'preview_run', 'set_state', 'update_draft'])
+const ACTIONS = new Set(['save_campaign', 'add_contacts', 'consent_contact', 'suppress_contact', 'generate_drafts', 'approve_draft', 'research_candidates', 'preview_run', 'set_state', 'update_draft', 'get_daily_campaign_status', 'save_daily_campaign_settings', 'update_daily_campaign'])
 export const GMAIL_TEST_SUBJECT = 'Flo Studio — Gmail connection test'
 export const GMAIL_TEST_BODY = 'This is a one-time email delivery test from Flo Studio. No daily marketing campaigns have been enabled.'
 export const GMAIL_TEST_ACCEPTED_NOTICE = 'Gmail accepted the test. Check inbox/spam; receipt is not verified.'
@@ -166,11 +166,13 @@ export async function getEmailCampaigns({ workspaceId, productId, signal, contac
   return data
 }
 
-export async function emailCampaignAction({ workspaceId, productId, action, payload = {}, signal }) {
+export async function emailCampaignAction({ workspaceId, productId, action, payload = {}, signal, isCurrent = () => true }) {
   requireScope(workspaceId, productId)
   if (!ACTIONS.has(action)) throw new Error('Unsupported email campaign action.')
   if (action === 'set_state' && payload.state === 'approved' && (payload.confirmSchedule !== true || !/^[a-f0-9]{64}$/i.test(payload.reviewRevision || ''))) throw new Error('Refresh and explicitly confirm the saved recipient and copy review before schedule approval.')
-  const response = await fetch('/api/email-campaigns', { method: 'POST', headers: await authenticatedJsonHeaders(), body: JSON.stringify({ ...payload, workspaceId, productId, action }), signal })
+  const headers = await authenticatedJsonHeaders()
+  if (signal?.aborted || typeof isCurrent !== 'function' || !isCurrent()) throw new DOMException('The selected app or permissions changed before this request.', 'AbortError')
+  const response = await fetch('/api/email-campaigns', { method: 'POST', headers, body: JSON.stringify({ ...payload, workspaceId, productId, action }), signal })
   return responseJson(response, 'Email campaigns')
 }
 
