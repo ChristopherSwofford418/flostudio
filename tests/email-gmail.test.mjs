@@ -364,3 +364,63 @@ test('requested sender is rechecked before unattended refresh and mismatch pause
   assert.equal(tables.email_campaigns[0].sending_enabled,false)
   assert.equal(events.filter(e=>e.url.includes('googleapis.com')).length,0)
 })
+
+test('callback labels rejected client credentials without leaking Google details or retrying consumed grants', async () => {
+  const { state } = await connect()
+  googleResponse('https://oauth2.googleapis.com/token', { error:'invalid_client', error_description:'synthetic-private-secret-detail', access_token:'synthetic-private-token' }, 401)
+  const result = await finish(state)
+  assert.equal(result.headers.Location, '/email-campaigns?gmail=setup_failed&code=GMAIL_CLIENT_CREDENTIALS_REJECTED')
+  assert(!JSON.stringify(result).includes('synthetic-private'))
+  assert(tables.email_oauth_states[0].consumed_at)
+  assert.equal(tables.workspace_gmail_connections.length, 0)
+  assert.equal(events.filter(e => e.url.includes('openidconnect.googleapis.com')).length, 0)
+  await finish(state)
+  assert.equal(events.filter(e => e.url === 'https://oauth2.googleapis.com/token').length, 1)
+  assert.equal(events.filter(e => e.url.startsWith('https://gmail.')).length, 0)
+})
+
+test('callback separates failed grant, unknown provider rejection and malformed token responses', async () => {
+  for (const [payload,status,code] of [
+    [{ error:'invalid_grant', error_description:'synthetic-private-detail' },400,'GMAIL_GRANT_REJECTED'],
+    [{ error:'arbitrary-private-error', error_description:'synthetic-private-detail' },503,'GMAIL_TOKEN_EXCHANGE_FAILED'],
+    [{ token_type:'Bearer', expires_in:3600 },200,'GMAIL_TOKEN_RESPONSE_INVALID'],
+  ]) {
+    const { state } = await connect()
+    googleResponse('https://oauth2.googleapis.com/token', payload, status)
+    const result = await finish(state)
+    assert.equal(result.headers.Location, `/email-campaigns?gmail=setup_failed&code=${code}`)
+    assert(!JSON.stringify(result).includes('synthetic-private'))
+    assert(!result.headers.Location.includes('arbitrary-private-error'))
+  }
+  assert.equal(tables.workspace_gmail_connections.length, 0)
+  assert.equal(events.filter(e => e.url.startsWith('https://gmail.')).length, 0)
+})
+
+test('callback exposes safe scope, identity and offline grant categories without connecting', async () => {
+  for (const [tokenChanges,userChanges,code] of [
+    [{ scope:'openid email' },null,'GMAIL_SEND_PERMISSION_MISSING'],
+    [{},{ email_verified:false },'GMAIL_IDENTITY_UNVERIFIED'],
+    [{ refresh_token:undefined },{},'GMAIL_REFRESH_GRANT_MISSING'],
+  ]) {
+    const { state } = await connect()
+    googleResponse('https://oauth2.googleapis.com/token', tokens(tokenChanges))
+    if (userChanges) googleResponse('https://openidconnect.googleapis.com/v1/userinfo', identity(userChanges))
+    const result = await finish(state)
+    assert.equal(result.headers.Location, `/email-campaigns?gmail=setup_failed&code=${code}`)
+    assert(tables.email_oauth_states.at(-1).consumed_at)
+    assert.equal(tables.workspace_gmail_connections.length, 0)
+  }
+  assert.equal(events.filter(e => e.url.startsWith('https://gmail.')).length, 0)
+})
+
+test('callback accepts Google email-scope alias and retains all connection-disabled invariants', async () => {
+  const { state } = await connect()
+  exchange({ scope:`${SCOPE} openid https://www.googleapis.com/auth/userinfo.email` })
+  const result = await finish(state)
+  assert.equal(result.headers.Location, '/email-campaigns?gmail=connected')
+  assert.equal(tables.workspace_gmail_connections[0].configured, true)
+  assert.equal(tables.workspace_gmail_connections[0].sending_enabled, false)
+  assert.equal(tables.email_gmail_accounts[0].sending_enabled, false)
+  assert.equal(tables.email_campaigns[0].sending_enabled, false)
+  assert.equal(events.filter(e => e.url.startsWith('https://gmail.')).length, 0)
+})

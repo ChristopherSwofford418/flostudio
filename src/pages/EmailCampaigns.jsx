@@ -4,6 +4,7 @@ import Layout from '../components/Layout'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { trackFloEvent } from '../lib/observability'
 import { campaignSavePayload, campaignValidation, campaignValues, consentEvidenceText, defaultEmailCampaign, emailCampaignAction, emailGmailAction, getEmailCampaigns, isApprovedOptIn, isSuppressedContact, parseContactLines, safeEmailUrl, sourceEvidenceText } from '../lib/emailCampaignClient'
+import { gmailCallbackFailureNotice } from '../lib/gmailCallbackStatus'
 import './EmailCampaigns.css'
 
 const labelStatus = value => String(value || 'unknown').replaceAll('_', ' ')
@@ -147,6 +148,7 @@ export default function EmailCampaigns() {
   const selectedContact = contacts.find(contact => contact.id === selectedContactId)
   const connection = data?.connection
   const readiness = data?.readiness
+  const callbackFailure = searchParams.get('gmail') === 'setup_failed' && connection?.configured !== true ? gmailCallbackFailureNotice(searchParams.get('code')) : null
   const budget = Number(connection?.daily_budget)
   const hasBudget = Number.isInteger(budget) && budget > 0 && budget <= 2000
   const displayBudget = hasBudget ? budget : 400
@@ -303,6 +305,7 @@ export default function EmailCampaigns() {
       {selectedApp && <>
         {loadError?.scope === scope && <div className="es-alert es-alert--error" role="alert"><h3>Email configuration unavailable</h3><p>{loadError.text}</p><button type="button" className="es-button es-button--secondary" onClick={() => { void refresh() }} disabled={Boolean(busy) || loading}>Retry authenticated load</button></div>}
         {loading && <div className="es-alert" role="status">Loading {selectedApp.name}’s latest configuration…</div>}
+        {callbackFailure && <div className="es-alert es-alert--error" role="alert"><strong>Gmail connection not completed.</strong> {callbackFailure.message}<p className="es-help">Diagnostic: {callbackFailure.code}. This notice describes the previous callback attempt; connection status below comes from the workspace server. Connecting never starts a campaign.</p></div>}
         {notice?.scope === scope && <div className={`es-alert es-alert--${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'} aria-live="polite">{notice.text}</div>}
         <div className="es-main-grid">
           <div className="es-stack">

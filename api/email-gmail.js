@@ -7,6 +7,10 @@ const COOKIE = '__Host-flo-email-state'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo'
 const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send'
+const CALLBACK_CODES = new Set(['GMAIL_NOT_CONFIGURED', 'GMAIL_RECONNECT_REQUIRED', 'WORKSPACE_ADMIN_REQUIRED', 'GMAIL_WRONG_SENDER', 'GMAIL_CLIENT_CREDENTIALS_REJECTED', 'GMAIL_GRANT_REJECTED', 'GMAIL_TOKEN_EXCHANGE_FAILED', 'GMAIL_TOKEN_RESPONSE_INVALID', 'GMAIL_SEND_PERMISSION_MISSING', 'GMAIL_IDENTITY_UNVERIFIED', 'GMAIL_REFRESH_GRANT_MISSING', 'EMAIL_DATABASE_ERROR', 'EMAIL_MIGRATION_REQUIRED', 'GMAIL_TEMPORARILY_UNAVAILABLE'])
+// Only fixed, reviewed categories may leave the callback. Never forward provider
+// error_description, error.message, OAuth parameters, cookies or credential data.
+export const gmailCallbackFailureCode = error => CALLBACK_CODES.has(error?.code) ? error.code : 'GMAIL_SETUP_FAILED'
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 const query = (table, fields, filters) => `${table}?${new URLSearchParams({ select:fields, ...filters, limit:'1' })}`
 const scoped = workspaceId => `workspace_gmail_connections?${new URLSearchParams({ workspace_id:`eq.${workspaceId}` })}`
@@ -81,11 +85,16 @@ async function callback(req) {
   if (!code || code.length > 4096 || parameter(req, 'error')) throw reconnect()
   const config = oauthConfig()
   const { response, payload:tokens } = await google(TOKEN_URL, form({ ...config, code, grant_type:'authorization_code' }))
+  if (!response.ok) {
+    const failure = tokens?.error === 'invalid_client' || tokens?.error === 'unauthorized_client' ? 'GMAIL_CLIENT_CREDENTIALS_REJECTED' : tokens?.error === 'invalid_grant' ? 'GMAIL_GRANT_REJECTED' : 'GMAIL_TOKEN_EXCHANGE_FAILED'
+    throw emailError(failure, 'Google could not complete the secure authorization exchange.', 409)
+  }
+  if (!tokenValid(tokens)) throw emailError('GMAIL_TOKEN_RESPONSE_INVALID', 'Google returned an incomplete authorization response.', 409)
   const scopes = scopesOf(tokens?.scope)
-  if (!response.ok || !tokenValid(tokens) || !granted(scopes)) throw reconnect()
+  if (!granted(scopes)) throw emailError('GMAIL_SEND_PERMISSION_MISSING', 'The required send-only permission or verified identity scope was not granted.', 409)
   const info = await google(USERINFO_URL, { headers:{ Authorization:`Bearer ${tokens.access_token}` } })
   const user = info.payload
-  if (!info.response.ok || typeof user?.sub !== 'string' || !user.sub.trim() || user.sub.length > 255 || !(user.email_verified === true || user.verified_email === true)) throw reconnect()
+  if (!info.response.ok || typeof user?.sub !== 'string' || !user.sub.trim() || user.sub.length > 255 || !(user.email_verified === true || user.verified_email === true)) throw emailError('GMAIL_IDENTITY_UNVERIFIED', 'Google did not return a verified sender identity.', 409)
   const email = normalizeEmail(user.email), key = accountKey(user.sub), workspaceId = saved.workspace_id
   const expected=await expectedGmailSender(workspaceId)
   if(expected && expected!==email) throw emailError('GMAIL_WRONG_SENDER','Authorize the requested workspace sender account. A different Google login cannot be substituted.',409)
@@ -97,7 +106,7 @@ async function callback(req) {
       if (old.sub === user.sub && old.email === email && old.verified_email === true && granted(old.scopes)) refresh = old.refresh_token
     } catch { /* A mismatched or unavailable old grant must never be retained. */ }
   }
-  if (typeof refresh !== 'string' || !refresh) throw reconnect()
+  if (typeof refresh !== 'string' || !refresh) throw emailError('GMAIL_REFRESH_GRANT_MISSING', 'Google did not provide the offline authorization required for this connection.', 409)
   const credentials = { refresh_token:refresh, accessToken:tokens.access_token, expires_at:Date.now() + Number(tokens.expires_in) * 1000, scopes, sub:user.sub, email, verified_email:true }
   // Ignore duplicates: reconnecting cannot enable an account or reset its shared budget.
   await emailDb('email_gmail_accounts?on_conflict=account_key', { method:'POST', body:{ account_key:key, daily_budget:400, sending_enabled:false }, prefer:'resolution=ignore-duplicates' })
@@ -115,8 +124,9 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     cookie(res)
     let connected = false
-    try { await callback(req); connected = true } catch { /* Never echo OAuth codes, tokens, or provider responses. */ }
-    res.setHeader('Location', connected ? '/email-campaigns?gmail=connected' : '/email-campaigns?gmail=setup_failed&code=GMAIL_SETUP_FAILED')
+    let failure = 'GMAIL_SETUP_FAILED'
+    try { await callback(req); connected = true } catch (error) { failure = gmailCallbackFailureCode(error) }
+    res.setHeader('Location', connected ? '/email-campaigns?gmail=connected' : `/email-campaigns?gmail=setup_failed&code=${failure}`)
     return res.status(303).end()
   }
   if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); return res.status(405).json({ error:'Method not allowed.', code:'METHOD_NOT_ALLOWED' }) }
