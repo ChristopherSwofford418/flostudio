@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { supabase } from '../supabase'
 import { trackFloEvent } from '../lib/observability'
-import { campaignSavePayload, campaignValidation, campaignValues, consentEvidenceText, defaultEmailCampaign, emailCampaignAction, emailGmailAction, getEmailCampaigns, isApprovedOptIn, isSuppressedContact, parseContactLines, safeEmailUrl, sourceEvidenceText } from '../lib/emailCampaignClient'
+import { campaignSavePayload, campaignValidation, campaignValues, consentEvidenceText, defaultEmailCampaign, emailCampaignAction, emailGmailAction, getEmailCampaigns, GMAIL_TEST_BODY, GMAIL_TEST_SUBJECT, gmailTestRecipients, gmailTestResultNotice, isApprovedOptIn, isSuppressedContact, parseContactLines, safeEmailUrl, sourceEvidenceText } from '../lib/emailCampaignClient'
 import { gmailCallbackFailureNotice } from '../lib/gmailCallbackStatus'
 import './EmailCampaigns.css'
 
@@ -72,6 +73,36 @@ function ApprovalDialog({ app, campaign, contacts, draftCount, budget, appCount,
   </div>
 }
 
+function GmailTestDialog({ sender, recipients, recipient, busy, onRecipient, onClose, onSend }) {
+  const dialogRef = useRef(null)
+  const cancelRef = useRef(null)
+  useEffect(() => {
+    const previous = document.activeElement
+    cancelRef.current?.focus()
+    return () => { if (previous?.isConnected) previous.focus() }
+  }, [])
+  const keyDown = e => {
+    if (e.key === 'Escape' && !busy) { e.preventDefault(); onClose(); return }
+    if (e.key !== 'Tab') return
+    const elements = [...dialogRef.current.querySelectorAll('button:not(:disabled), select:not(:disabled)')]
+    const first = elements[0]
+    const last = elements[elements.length - 1]
+    if (!first) { e.preventDefault(); dialogRef.current.focus(); return }
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { e.preventDefault(); last.focus() }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+  }
+  return <div className="es-modal-backdrop" onKeyDown={keyDown}>
+    <section className="es-modal" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="es-test-title" aria-describedby="es-test-note" tabIndex={-1}>
+      <div className="es-kicker">ONE-TIME CONNECTION DIAGNOSTIC</div><h2 id="es-test-title">Review one test email</h2>
+      <p id="es-test-note">This is a nonpromotional connection test, not a campaign. Opening this review sends nothing. Only the final button requests one email; no campaign is launched and daily marketing stays disabled.</p>
+      <dl className="es-review-grid"><div><dt>FROM · connected Gmail</dt><dd>{sender}</dd></div><div><dt>TO · permitted recipient</dt><dd>{recipient}</dd></div><div className="es-wide"><dt>Exact subject</dt><dd>{GMAIL_TEST_SUBJECT}</dd></div><div className="es-wide"><dt>Exact body</dt><dd>{GMAIL_TEST_BODY}</dd></div></dl>
+      <label className="es-field"><span>Test recipient · no other addresses permitted</span><select value={recipient} disabled={busy} onChange={e => onRecipient(e.target.value)} aria-label="One test email recipient">{recipients.map(item => <option key={item.email} value={item.email}>{item.label} · {item.email}</option>)}</select><small>Your authenticated account is selected by default. The connected Gmail account is the only alternative.</small></label>
+      <p className="es-help">One diagnostic per connected Google account, across all apps. There are no automatic retries. If the result is unknown, check inbox/spam and do not send another test. Gmail acceptance is not proof of receipt.</p>
+      <div className="es-actions"><button ref={cancelRef} type="button" className="es-button es-button--secondary" disabled={busy} onClick={onClose}>Cancel</button><button type="button" className="es-button" disabled={busy || !recipients.some(item => item.email === recipient)} onClick={onSend}>{busy ? 'Requesting one test…' : 'Send this one test email'}</button></div>
+    </section>
+  </div>
+}
+
 export default function EmailCampaigns() {
   const { apps = [], activeApp, setActiveApp, workspaceId, workspaceRole, role, workspaceLoading, workspaceError } = useWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -129,6 +160,11 @@ export default function EmailCampaigns() {
   const [disconnectScope, setDisconnectScope] = useState('')
   const [previewResult, setPreviewResult] = useState(null)
   const [budgetDraft, setBudgetDraft] = useState(null)
+  const [authOwner, setAuthOwner] = useState(null)
+  const authIdentityRef = useRef('')
+  const [testReview, setTestReview] = useState(null)
+  const testAttemptsRef = useRef(new Set())
+  const [testAttemptCount, setTestAttemptCount] = useState(0)
   const currentRole = String(workspaceRole || role || 'none').toLowerCase()
   const canEdit = ['owner', 'admin'].includes(currentRole)
   const canConnect = ['owner', 'admin'].includes(currentRole)
@@ -148,6 +184,14 @@ export default function EmailCampaigns() {
   const selectedContact = contacts.find(contact => contact.id === selectedContactId)
   const connection = data?.connection
   const readiness = data?.readiness
+  const owner = authOwner?.scope === scope ? authOwner.user : null
+  const authIdentity = owner?.id && owner?.email ? `${owner.id}:${owner.email.toLowerCase()}` : ''
+  authIdentityRef.current = authIdentity
+  const testRecipients = gmailTestRecipients(owner?.email, connection?.email)
+  const testSenderKey = testRecipients.length ? connection.email.trim().toLowerCase() : ''
+  const testAttempted = Boolean(testAttemptCount && testAttemptsRef.current.has(testSenderKey))
+  const canTest = canConnect && connection?.configured === true && Boolean(authIdentity) && testRecipients.length > 0 && !testAttempted && !busy && !loading && Boolean(data) && readiness?.sendingEnabled === false
+  const testReviewCurrent = testReview?.scope === scope && testReview?.identity === authIdentity && testReview?.sender === connection?.email
   const callbackFailure = searchParams.get('gmail') === 'setup_failed' && connection?.configured !== true ? gmailCallbackFailureNotice(searchParams.get('code')) : null
   const budget = Number(connection?.daily_budget)
   const hasBudget = Number.isInteger(budget) && budget > 0 && budget <= 2000
@@ -182,6 +226,36 @@ export default function EmailCampaigns() {
     return () => { mountedRef.current = false; fetchSequenceRef.current += 1; actionSequenceRef.current += 1; fetchControllerRef.current?.abort(); actionControllerRef.current?.abort() }
   }, [])
 
+  useEffect(() => {
+    let current = true
+    let sequence = 0
+    setAuthOwner(null)
+    setTestReview(null)
+    const verifyOwner = async () => {
+      const requestedSequence = ++sequence
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (current && scopeRef.current === scope && sequence === requestedSequence) setAuthOwner(!error && user?.id && user?.email ? { scope, user: { id: user.id, email: user.email } } : null)
+      } catch { if (current && sequence === requestedSequence) setAuthOwner(null) }
+    }
+    if (scope) void verifyOwner()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      authIdentityRef.current = ''
+      setAuthOwner(null)
+      setTestReview(null)
+      if (actionLockRef.current?.action === 'send_test') {
+        actionSequenceRef.current += 1
+        actionControllerRef.current?.abort()
+        actionLockRef.current = null
+        setBusyState(null)
+      }
+      sequence += 1
+      // Keep the auth callback synchronous; verification runs after it returns.
+      if (session?.user && scope) queueMicrotask(() => { if (current) void verifyOwner() })
+    })
+    return () => { current = false; sequence += 1; subscription.unsubscribe() }
+  }, [scope])
+
   const refresh = useCallback(async () => {
     if (!workspaceId || !productId) return false
     const requestedScope = `${workspaceId}:${productId}`
@@ -214,7 +288,7 @@ export default function EmailCampaigns() {
     setBusyState(null)
     setNotice(null)
     setContactText(''); setSourceEvidence(''); setQuery(''); setSelectedContactId(''); setConsentEvidence(''); setPermissionConfirmed(false)
-    setApprovalScope(''); setDisconnectScope(''); setPreviewResult(null); setBudgetDraft(null)
+    setApprovalScope(''); setDisconnectScope(''); setPreviewResult(null); setBudgetDraft(null); setTestReview(null)
     if (scope && !workspaceLoading && !workspaceError) { void refresh(); event('app_opened') }
     return () => { fetchSequenceRef.current += 1; fetchControllerRef.current?.abort() }
     // Scope primitives, not changing app metadata, control resets and initial reads.
@@ -222,6 +296,8 @@ export default function EmailCampaigns() {
   }, [scope, workspaceLoading, workspaceError])
 
   const perform = async (action, payload = {}, fallback = 'Action completed. Configuration refreshed.', service = 'campaign') => {
+    // Diagnostics must use their own explicit confirmation and fixed response handling.
+    if (action === 'send_test') return false
     if (!scope || actionLockRef.current?.scope === scope || (service === 'gmail' ? !canConnect : !canEdit) || !data || loading) return false
     const requestedScope = scope
     const sequence = ++actionSequenceRef.current
@@ -257,6 +333,47 @@ export default function EmailCampaigns() {
     }
   }
 
+  const sendOneTest = async () => {
+    if (!mountedRef.current || scopeRef.current !== scope || authIdentityRef.current !== authIdentity || !canTest || !testReviewCurrent || actionLockRef.current?.scope === scope || !testRecipients.some(item => item.email === testReview.recipient)) return false
+    const requestedScope = scope
+    const requestedIdentity = authIdentity
+    const recipient = testReview.recipient
+    const sequence = ++actionSequenceRef.current
+    const controller = new AbortController()
+    actionControllerRef.current = controller
+    actionLockRef.current = { scope: requestedScope, sequence, action: 'send_test' }
+    setBusyState({ scope: requestedScope, action: 'send_test' })
+    setNotice(null)
+    const current = () => mountedRef.current && scopeRef.current === requestedScope && authIdentityRef.current === requestedIdentity && actionSequenceRef.current === sequence && !controller.signal.aborted
+    try {
+      // Reverify the auth owner immediately before the only outbound diagnostic request.
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (!current()) return false
+      if (error || !user?.id || !user?.email || `${user.id}:${user.email.toLowerCase()}` !== requestedIdentity || !gmailTestRecipients(user.email, connection.email).some(item => item.email === recipient)) {
+        setTestReview(null)
+        setNotice({ scope: requestedScope, text: 'The authenticated account changed or could not be verified. No test was requested. Refresh and review again.', tone: 'error' })
+        return false
+      }
+      // Persist the local lock across app switches and errors; the server owns the
+      // durable, atomic one-diagnostic-per-Google-account guard across sessions.
+      if (testAttemptsRef.current.has(testSenderKey)) return false
+      testAttemptsRef.current.add(testSenderKey)
+      setTestAttemptCount(count => count + 1)
+      const result = await emailGmailAction({ workspaceId, action: 'send_test', payload: { productId, recipient, confirmTest: true }, signal: controller.signal })
+      if (!current()) return false
+      setTestReview(null)
+      setNotice({ scope: requestedScope, ...gmailTestResultNotice(result) })
+      return true
+    } catch {
+      if (!current()) return false
+      setTestReview(null)
+      setNotice({ scope: requestedScope, text: 'The test outcome is unknown. Gmail may have accepted it. Check inbox/spam; do not retry. No automatic retry will occur. No daily marketing campaign was launched.', tone: 'warning' })
+      return false
+    } finally {
+      if (current()) { actionLockRef.current = null; setBusyState(null) }
+    }
+  }
+
   const showError = text => setNotice({ scope, text, tone: 'error' })
   const saveCampaign = e => {
     e.preventDefault()
@@ -286,6 +403,13 @@ export default function EmailCampaigns() {
   const chooseApp = id => {
     const app = apps.find(item => String(item.id) === id)
     if (!app) return
+    if (app.id !== productId && actionLockRef.current?.action === 'send_test') {
+      actionSequenceRef.current += 1
+      actionControllerRef.current?.abort()
+      actionLockRef.current = null
+      setBusyState(null)
+      setTestReview(null)
+    }
     // URL navigation is the sole input here; the synchronizer updates context once.
     const next = new URLSearchParams(searchParams)
     next.set('app', app.id)
@@ -337,18 +461,19 @@ export default function EmailCampaigns() {
           </div>
 
           <aside className="es-stack es-sidebar">
-            {connection?.expected_email && <section className="es-card"><div className="es-kicker">REQUESTED SHARED SENDER</div><h2 className="es-recipient">{connection.expected_email}</h2><p>All app campaigns in this workspace use this requested Gmail identity. Google consent must verify this account; another login cannot silently replace it.</p><Badge>Not connected until Google consent succeeds</Badge></section>}
+            {connection?.expected_email && <section className="es-card"><div className="es-kicker">REQUESTED SHARED SENDER</div><h2 className="es-recipient">{connection.expected_email}</h2><p>All app campaigns in this workspace use this requested Gmail identity. Google consent must verify this account; another login cannot silently replace it.</p><Badge tone={connection.configured === true ? 'ready' : 'neutral'}>{connection.configured === true ? 'Connected · Google consent verified this sender' : 'Not connected until Google consent succeeds'}</Badge></section>}
             <section className="es-card"><div className="es-kicker">WORKSPACE CONNECTION</div><h2>One Gmail. One budget.</h2><div className="es-connection-status"><Badge tone={connection?.configured === true ? 'ready' : 'warning'}>{data ? connection?.configured === true ? 'Gmail configured' : 'Gmail not connected' : 'Status unavailable'}</Badge>{connection?.configured === true && <p className="es-recipient">{connection.email || 'Connected account email not returned'}</p>}</div><p>Gmail is shared by every app in this workspace. The backend must enforce <strong>{hasBudget ? `${budget} total emails per day` : 'one shared daily cap'}</strong>, not a separate account allowance for each app. This is the configured budget, not verified remaining capacity.</p><p className="es-help">Gmail is for consented, low-volume sending. It is not a bulk subscriber platform. For a verified subscriber audience at scale, use a dedicated email service with domain verification, unsubscribe handling, deliverability controls, and its own lawful permission process.</p>
               {connection?.configured === true ? <><button type="button" className="es-button es-button--secondary" disabled={!canConnect || Boolean(busy) || loading || !data} onClick={() => setDisconnectScope(scope)}>Disconnect Gmail…</button>{disconnectScope === scope && <div className="es-disconnect" role="group" aria-label="Confirm Gmail disconnect"><strong>Disconnect for every app?</strong><p>This removes the workspace’s shared Gmail connection. All app schedules must be blocked until reconnected. It does not delete contact evidence.</p><div className="es-actions"><button type="button" className="es-button es-button--danger" disabled={Boolean(busy)} onClick={() => { void perform('disconnect', {}, 'Shared Gmail account disconnected.', 'gmail') }}>Confirm disconnect</button><button type="button" className="es-button es-button--secondary" disabled={Boolean(busy)} onClick={() => setDisconnectScope('')}>Cancel</button></div></div>}</> : <button type="button" className="es-button" disabled={!canConnect || Boolean(busy) || loading || !data} onClick={() => { void perform('connect', {}, 'Opening Gmail’s secure authorization flow.', 'gmail') }}>{busy === 'connect' ? 'Opening OAuth…' : 'Connect Gmail securely ↗'}</button>}
               <p className="es-help">{canConnect ? 'Google OAuth only. No access tokens, passwords, or credentials are entered on this page.' : 'A workspace owner or admin must manage the shared Gmail connection.'}</p>
               <div className="es-capacity"><h3>100 desired per app. Capacity is shared.</h3><p>{apps.length} apps × 100 desired = <strong>{portfolioDemand.toLocaleString()} emails / day</strong>. {hasBudget ? `Configured shared budget: ${budget.toLocaleString()} / day.` : 'Personal/trial planning default: 400 / day; no configured budget has been verified.'}</p><p>Even split of {allocationBudget.toLocaleString()} across {apps.length} apps: <strong>up to {fairAllocation} / app / day</strong>, capped at 100. {portfolioDemand > allocationBudget ? `This leaves a ${Math.max(0, portfolioDemand - allocationBudget).toLocaleString()} / day gap against the desired portfolio target.` : 'The desired app target fits this planning budget before other mailbox use.'}</p><small>{budgetDraft?.scope === scope ? 'This is a proposed-budget estimate, not a saved allocation.' : 'This is a planning estimate, not a reservation or a verified remaining balance.'} Actual delivery depends on eligible enabled campaigns sharing this account, opted-in recipients, approved copy, suppressions, cooldown, and other mailbox sends. A lower pilot allocation does not fulfill the 100/app target.</small></div>
               <details className="es-disclosure"><summary>Configure the shared mailbox budget</summary><p className="es-help">400/day is the personal or trial safety ceiling. For an eligible paid Google Workspace mailbox, 1,800/day is the conservative recommendation with 200 of headroom; 2,000/day is the maximum only after explicit paid-account confirmation. Other mailbox sends consume the same provider capacity; headroom is not guaranteed remaining capacity.</p><form onSubmit={configureBudget}><fieldset disabled={!canConnect || Boolean(busy) || loading || !data || connection?.configured !== true}><label className="es-field"><span>Explicit account type</span><select value={budgetSettings.accountType} onChange={e => setBudgetDraft({ scope, value: { ...budgetSettings, accountType: e.target.value, dailyBudget: e.target.value === 'workspace' ? 1800 : 400, confirmWorkspace: false, sharedCapConfirmed: false } })} required><option value="">Choose account type…</option><option value="personal">Personal Gmail / trial · max 400</option><option value="workspace">Paid Google Workspace · max 2,000</option></select></label><label className="es-field"><span>Global daily budget · all apps combined</span><input type="number" min={1} max={maxBudget} step={1} value={budgetSettings.dailyBudget} onChange={e => { setBudgetDraft({ scope, value: { ...budgetSettings, dailyBudget: e.target.value, sharedCapConfirmed: false } }) }} required /><small>Do not budget per app. The server must reject over-cap configuration and stop or defer activity when the total shared cap is reached.</small></label>{budgetSettings.accountType === 'workspace' && <label className="es-check"><input type="checkbox" checked={budgetSettings.confirmWorkspace} onChange={e => updateBudget('confirmWorkspace', e.target.checked)} /><span>I confirm this mailbox is eligible paid Google Workspace, not personal Gmail or a trial account. Its verified provider allowance supports this budget.</span></label>}<label className="es-check"><input type="checkbox" checked={budgetSettings.sharedCapConfirmed} onChange={e => updateBudget('sharedCapConfirmed', e.target.checked)} /><span>I understand that all portfolio apps and other mailbox sends share one total sending cap. FloStudio must not bypass the provider’s cap, and reaching it can defer app deliveries.</span></label><button className="es-button es-button--secondary" type="submit" disabled={!budgetValid}>Save shared budget · no activation</button></fieldset></form></details>
             </section>
+            {canConnect && connection?.configured === true && <section className="es-card"><div className="es-kicker">SEPARATE CONNECTION DIAGNOSTIC</div><h2>One email. No campaign.</h2><p>Review a fixed, nonpromotional test from {connection.email || 'the connected Gmail account'} to your authenticated account, or to the connected Gmail account itself. Daily marketing campaigns stay disabled.</p><button type="button" className="es-button es-button--secondary es-button--full" disabled={!canTest} onClick={() => { if (canTest) setTestReview({ scope, identity: authIdentity, sender: connection.email, recipient: testRecipients[0].email }) }}>Send one test email…</button><p className="es-help">{testAttempted ? 'A diagnostic was already requested for this Gmail account in this visit. Check inbox/spam; do not retry, even if the result was unknown.' : !authIdentity || !testRecipients.length ? 'Verifying your authenticated email and the connected Gmail address before review. No arbitrary recipient address is permitted.' : readiness?.sendingEnabled !== false ? 'This diagnostic requires daily campaign live sending to be disabled on the server.' : 'One diagnostic per connected Google account across all apps. Opening the review does not send. Only its final confirmation requests one email; there are no automatic retries.'}</p></section>}
             <section className="es-card es-readiness"><div className="es-kicker">DEPLOYMENT + CONSENT GATES</div><h2>Ready means verified</h2><ul className="es-checklist">{[['Gmail configured', connection?.configured === true && readiness?.gmailConfigured === true], ['Live sending environment enabled', readiness?.sendingEnabled === true], ['Daily server cron configured', readiness?.cronConfigured === true], ['Server AI configured', readiness?.aiConfigured === true]].map(([label, ready]) => <li key={label}><span>{label}</span><Badge tone={ready ? 'ready' : 'warning'}>{ready ? 'Reported ready' : 'Not ready'}</Badge></li>)}</ul><div className="es-evidence-counts"><div><strong>{optedIn.length}</strong><span>Approved opt-ins</span></div><div><strong>{approvedDrafts.length}</strong><span>Eligible approved drafts</span></div></div><p className="es-help">These are counts of actual records returned by this app’s API, not subscribers acquired, sends, opens, or conversions.</p>{blockers.length ? <div className="es-blockers"><h3>Before schedule approval</h3><ul>{blockers.map(blocker => <li key={blocker}>{blocker}</li>)}</ul></div> : <div className="es-alert es-alert--success">Client checks are complete. The server still performs the authoritative approval checks.</div>}{dirty && <p className="es-help">Unsaved configuration changes also block approval.</p>}
               {warnings.length > 0 && <div className="es-alert es-alert--warning" role="note"><h3>Capacity + mailbox caveats</h3><ul className="es-server-warnings">{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
               <button type="button" className="es-button es-button--full" disabled={!canApprove} onClick={() => { setApprovalScope(scope); event('schedule_review_opened') }}>Review + approve schedule</button>
               {data?.campaign?.state === 'approved' && <p className="es-help">Schedule configuration is approved, not a guarantee of sending. Later processing remains subject to permission, approved copy, suppressions, daily caps, and live server gates.</p>}
-              <button type="button" className="es-button es-button--secondary es-button--full" disabled={locked || !data?.campaign?.id || data.campaign.state === 'paused'} onClick={() => { void perform('set_state', { state: 'paused' }, 'Campaign paused for this app.') }}>Pause this app’s campaign</button><p className="es-help">There is no “send now” action. This page cannot activate cron or bypass disabled live sending.</p>
+              <button type="button" className="es-button es-button--secondary es-button--full" disabled={locked || !data?.campaign?.id || data.campaign.state === 'paused'} onClick={() => { void perform('set_state', { state: 'paused' }, 'Campaign paused for this app.') }}>Pause this app’s campaign</button><p className="es-help">There is no campaign “send now” action. The separate one-time Gmail diagnostic does not activate a campaign, cron, or live campaign sending.</p>
             </section>
             <section className="es-card"><div className="es-section-head"><div><div className="es-kicker">ACTUAL QUEUE RECORDS</div><h2>Scheduled activity</h2></div><Badge>{queue.length}</Badge></div>{queue.length ? <ul className="es-queue">{queue.map(item => <li key={item.id}><span><strong>{item.scheduled_day || 'Day not returned'}</strong><small>Record {item.id}</small></span><Badge>{labelStatus(item.status)}</Badge></li>)}</ul> : <div className="es-empty es-empty--small">No queue records returned for this app. Nothing is shown as sent, scheduled, or opened without an actual API record.</div>}<button type="button" className="es-button es-button--secondary es-button--full" onClick={() => { void refresh(); event('configuration_refreshed') }} disabled={Boolean(busy) || loading || dirty}>Refresh server status</button>{dirty && <p className="es-help">Save configuration first; refreshing replaces local settings with saved values.</p>}</section>
           </aside>
@@ -356,5 +481,6 @@ export default function EmailCampaigns() {
       </>}
     </>}
     {approvalScope === scope && scope && data && selectedApp && <ApprovalDialog key={scope} app={selectedApp} campaign={savedForm} contacts={optedIn} draftCount={approvedDrafts.length} budget={hasBudget ? budget : 'unavailable'} appCount={apps.length} busy={Boolean(busy)} onClose={() => setApprovalScope('')} onApprove={approveSchedule} />}
+    {testReviewCurrent && scope && data && canConnect && connection?.configured === true && <GmailTestDialog key={`${scope}:${authIdentity}:${connection.email}`} sender={connection.email} recipients={testRecipients} recipient={testReview.recipient} busy={Boolean(busy)} onRecipient={recipient => { if (testRecipients.some(item => item.email === recipient)) setTestReview(current => ({ ...current, recipient })) }} onClose={() => setTestReview(null)} onSend={() => { void sendOneTest() }} />}
   </div></Layout>
 }

@@ -4,6 +4,29 @@ export const EMAIL_DAILY_LIMIT = 100
 export const EMAIL_BATCH_LIMIT = 10
 export const CAMPAIGN_FIELDS = ['name', 'daily_limit', 'timezone', 'send_hour', 'send_minute', 'sender_name', 'postal_address', 'ad_link', 'audience', 'language']
 const ACTIONS = new Set(['save_campaign', 'add_contacts', 'consent_contact', 'suppress_contact', 'generate_drafts', 'approve_draft', 'research_candidates', 'preview_run', 'set_state', 'update_draft'])
+export const GMAIL_TEST_SUBJECT = 'Flo Studio — Gmail connection test'
+export const GMAIL_TEST_BODY = 'This is a one-time email delivery test from Flo Studio. No daily marketing campaigns have been enabled.'
+export const GMAIL_TEST_ACCEPTED_NOTICE = 'Gmail accepted the test. Check inbox/spam; receipt is not verified.'
+const GMAIL_TEST_UNKNOWN_NOTICE = 'The test outcome is unknown. Gmail may have accepted it. Check inbox/spam; do not retry. No automatic retry will occur.'
+
+function diagnosticEmail(value) {
+  if (typeof value !== 'string') return ''
+  const email = value.trim().toLowerCase()
+  return email.length <= 254 && /^[^\s@,<>;]+@[^\s@,<>;]+\.[^\s@,<>;]+$/.test(email) ? email : ''
+}
+
+export function gmailTestRecipients(ownerEmail, senderEmail) {
+  const owner = diagnosticEmail(ownerEmail)
+  const sender = diagnosticEmail(senderEmail)
+  // Fail closed until the authenticated identity has been verified.
+  if (!owner || !sender) return []
+  return [{ email: owner, label: 'Authenticated account' }, ...(sender !== owner ? [{ email: sender, label: 'Connected Gmail account' }] : [])]
+}
+
+export function gmailTestResultNotice(result) {
+  if (result?.accepted !== true || result?.sendingEnabled !== false || typeof result?.recorded !== 'boolean') return { text: GMAIL_TEST_UNKNOWN_NOTICE, tone: 'warning' }
+  return { text: `${GMAIL_TEST_ACCEPTED_NOTICE}${result.recorded ? '' : ' The follow-up result was not recorded; do not send another test.'} No daily marketing campaigns have been enabled.`, tone: result.recorded ? 'success' : 'warning' }
+}
 
 export function safeEmailUrl(value) {
   try {
@@ -124,7 +147,33 @@ export async function emailCampaignAction({ workspaceId, productId, action, payl
 
 export async function emailGmailAction({ workspaceId, action, payload = {}, signal }) {
   if (!workspaceId) throw new Error('An active workspace is required to connect Gmail.')
-  if (!['connect', 'disconnect', 'configure_budget'].includes(action)) throw new Error('Unsupported Gmail connection action.')
+  if (!['connect', 'disconnect', 'configure_budget', 'send_test'].includes(action)) throw new Error('Unsupported Gmail connection action.')
+  if (action === 'send_test') {
+    requireScope(workspaceId, payload.productId)
+    const recipient = diagnosticEmail(payload.recipient)
+    if (!recipient || payload.confirmTest !== true) throw new Error('Review the permitted recipient and explicitly confirm this one test email.')
+    // Fixed subject/body are server-owned; never forward overrides, flags, or credentials.
+    const testPayload = { workspaceId, action, productId: payload.productId, recipient, confirmTest: true }
+    try {
+      const response = await fetch('/api/email-gmail', { method: 'POST', headers: await authenticatedJsonHeaders(), body: JSON.stringify(testPayload), signal })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        const messages = { 401: 'Sign in again before reviewing a diagnostic email.', 403: 'Only a workspace owner or admin may send a test to the authenticated account or connected Gmail account.', 404: 'The diagnostic email endpoint is unavailable. No automatic retry will occur.' }
+        const error = new Error(messages[response.status] || GMAIL_TEST_UNKNOWN_NOTICE)
+        error.status = response.status
+        error.acceptanceUnknown = ![400, 401, 403, 404, 409].includes(response.status)
+        throw error
+      }
+      if (data?.accepted !== true || diagnosticEmail(data.recipient) !== recipient || typeof data.providerMessageId !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(data.providerMessageId) || typeof data.recorded !== 'boolean' || data.sendingEnabled !== false) throw new Error(GMAIL_TEST_UNKNOWN_NOTICE)
+      return { accepted: true, recipient, providerMessageId: data.providerMessageId, recorded: data.recorded, sendingEnabled: false }
+    } catch (error) {
+      // Never expose transport, credential, provider, or arbitrary API error details.
+      const safe = new Error([401, 403, 404].includes(error?.status) ? error.message : GMAIL_TEST_UNKNOWN_NOTICE)
+      safe.status = error?.status
+      safe.acceptanceUnknown = error?.acceptanceUnknown !== false
+      throw safe
+    }
+  }
   let budgetPayload = {}
   if (action === 'configure_budget') {
     const { accountType, dailyBudget, confirmWorkspace } = payload

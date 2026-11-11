@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
-import { authenticatedProviderUser, assertWorkspaceAdmin } from './provider-key-vault.js'
+import { authenticatedProviderUser, assertWorkspaceAdmin, assertWorkspaceProduct } from './provider-key-vault.js'
 import { emailDb, emailRpc, emailError, encryptEmailCredential, decryptEmailCredential, normalizeEmail, hashEmailToken, randomEmailToken, safeEmailSecretEqual } from './email-core.js'
+import { sendOneGmailDiagnostic } from './email-diagnostic.js'
 
 const SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send'
 const COOKIE = '__Host-flo-email-state'
@@ -159,6 +160,14 @@ export default async function handler(req, res) {
       await emailDb(scoped(workspaceId), { method:'PATCH', body:{ daily_budget:dailyBudget, sending_enabled:false } })
       return res.status(200).json({ configured:true, accountType, dailyBudget, sendingEnabled:false })
     }
+    if (action === 'send_test') {
+      if (body.confirmTest !== true || !uuid(body.productId)) throw emailError('GMAIL_TEST_CONFIRMATION_REQUIRED', 'Explicitly confirm one diagnostic for the selected app.', 400)
+      const product = await assertWorkspaceProduct({workspaceId, productId:body.productId, accessToken})
+      if (product.source_facts?.archived) throw emailError('GMAIL_TEST_UNAVAILABLE', 'Select an active app before testing Gmail.', 409)
+      const connection = await refreshGmailConnection(workspaceId)
+      const result = await sendOneGmailDiagnostic({connection, user, productId:body.productId, recipient:body.recipient})
+      return res.status(200).json(result)
+    }
     if (action === 'disconnect') {
       const previous = (await emailDb(query('workspace_gmail_connections', 'encrypted_credentials', { workspace_id:`eq.${workspaceId}` })))?.[0]
       await invalidate(workspaceId)
@@ -170,12 +179,19 @@ export default async function handler(req, res) {
       cookie(res)
       return res.status(200).json({ configured:false, disconnected:true, sendingEnabled:false })
     }
-    throw emailError('ACTION_INVALID', 'Choose connect, disconnect, or configure_budget.')
+    throw emailError('ACTION_INVALID', 'Choose connect, disconnect, configure_budget, or send_test.')
   } catch (error) {
     const status = error?.status || 500
     // Auth helpers can contain database error detail. Return only curated messages.
     const code = /^[A-Z_]+$/.test(error?.code || '') ? error.code : 'GMAIL_SETUP_FAILED'
-    const message = status === 401 ? 'Sign in again before managing Gmail.' : status === 403 ? 'Only a workspace admin can manage Gmail.' : status === 503 ? 'Gmail OAuth or encrypted storage is unavailable. Ask an administrator to finish server setup.' : 'Gmail setup could not be completed.'
+    const diagnostics = {
+      GMAIL_TEST_CONFIRMATION_REQUIRED:'Confirm the recipient and this one-time diagnostic before sending.',
+      GMAIL_TEST_RECIPIENT_INVALID:'The test recipient must be your signed-in email or the connected Gmail address.',
+      GMAIL_TEST_UNAVAILABLE:'The diagnostic is unavailable or was already attempted. No automatic resend is allowed.',
+      GMAIL_TEST_ACCEPTANCE_UNKNOWN:'Gmail acceptance is unknown. Check inbox and Sent; do not resend automatically.',
+      GMAIL_TEST_REJECTED:'Gmail rejected the diagnostic submission. It will not be retried automatically.',
+    }
+    const message = diagnostics[code] || (status === 401 ? 'Sign in again before managing Gmail.' : status === 403 ? 'Only a workspace admin can manage Gmail.' : status === 503 ? 'Gmail OAuth or encrypted storage is unavailable. Ask an administrator to finish server setup.' : 'Gmail setup could not be completed.')
     return res.status(status).json({ configured:false, error:message, code })
   }
 }
