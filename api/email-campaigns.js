@@ -4,7 +4,7 @@ import { researchEmailCandidates } from './email-source-research.js'
 import { emailDailyCreativePlan, uniqueEmailDrafts } from './email-content-plan.js'
 import { getEmailCampaignReadiness, activateEmailCampaign } from './email-lifecycle.js'
 import { emailResearchDeploymentStatus, getDailyResearchStatus, saveDailyResearchSettings } from './email-research-settings.js'
-import { dailyCampaignDeploymentStatus, getDailyCampaignStatus, saveDailyCampaignSettings, updateDailyCampaign } from './email-daily-campaign-settings.js'
+import { dailyCampaignDeploymentStatus, dailyCampaignScheduledDay, getDailyCampaignStatus, saveDailyCampaignSettings, updateDailyCampaign } from './email-daily-campaign-settings.js'
 
 export const config={maxDuration:180}
 const campaignColumns='id,name,workspace_id,product_id,daily_limit,timezone,send_hour,send_minute,state,sending_enabled,sender_name,postal_address,ad_link,audience,language'
@@ -69,6 +69,7 @@ export default async function handler(req,res) {
   try {
     const body=req.method==='GET' ? req.query : parseProviderBody(req)
     const workspaceId=cleanEmailText(body.workspaceId,100), productId=cleanEmailText(body.productId,100)
+    const dayPayload=req.method==='POST' && String(body.action || '')==='get_daily_campaign_status' && Object.prototype.hasOwnProperty.call(body,'scheduledDay') ? {scheduledDay:dailyCampaignScheduledDay(body.scheduledDay)} : {}
     const {accessToken}=await authenticatedProviderUser(req)
     await assertWorkspaceProduct({workspaceId,productId,accessToken})
     if(req.method==='GET') {
@@ -105,7 +106,7 @@ export default async function handler(req,res) {
       return res.status(200).json({research,deployment:emailResearchDeploymentStatus(aiConfigured)})
     }
     if(action==='get_daily_campaign_status') {
-      const dailyCampaign=await getDailyCampaignStatus({workspaceId,productId,accessToken})
+      const dailyCampaign=await getDailyCampaignStatus({workspaceId,productId,accessToken,...dayPayload})
       return res.status(200).json({dailyCampaign,deployment:dailyCampaignDeploymentStatus()})
     }
     await assertWorkspaceAdmin({workspaceId,accessToken})

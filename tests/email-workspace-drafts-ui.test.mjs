@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
+import { buildEmailDraftResearchPrompt } from '../src/lib/emailDraftResearchPrompt.js'
 
 const require = createRequire(import.meta.url)
 const esbuild = require(require.resolve('esbuild', { paths: [dirname(require.resolve('vite'))] }))
@@ -11,7 +12,7 @@ const dailySource = readFileSync(new globalThis.URL('../src/components/EmailDail
 const strip = value => value.replace(/^import .*$/gm, '').replace(/export default function /g, 'function ').replace(/export (const|function|async function) /g, '$1 ')
 const compile = (value, bindings, result) => new Function('runtime', `${esbuild.transformSync(`const { ${bindings.join(', ')} } = runtime;\n${strip(value)}`, { loader: 'jsx', jsxFactory: '__jsx', target: 'es2022' }).code}\nreturn ${result};`)
 const helpers = compile(dailySource, ['useCallback', 'useEffect', 'useRef', 'useState', 'emailCampaignAction', '__jsx'], '{ dailyCampaignStatusResponse, safeDailyCampaignAppUrl, dailyCampaignCopyPayload }')({})
-const load = compile(source, ['useCallback', 'useEffect', 'useRef', 'useState', 'getEmailWorkspaceAutomation', 'emailCampaignAction', 'dailyCampaignStatusResponse', 'safeDailyCampaignAppUrl', 'dailyCampaignCopyPayload', 'navigator', '__jsx'], '{ Component: EmailWorkspaceDraftsPanel, workspaceDraftAppsResponse, workspaceDailyDraftResponse, workspaceDraftCopyText }')
+const load = compile(source, ['useCallback', 'useEffect', 'useRef', 'useState', 'getEmailWorkspaceAutomation', 'emailCampaignAction', 'dailyCampaignStatusResponse', 'safeDailyCampaignAppUrl', 'dailyCampaignCopyPayload', 'buildEmailDraftResearchPrompt', 'navigator', '__jsx'], '{ Component: EmailWorkspaceDraftsPanel, workspaceDraftAppsResponse, workspaceDailyDraftResponse, workspaceDraftCopyText, workspaceDraftMatchesSearch, workspaceDraftNextDay }')
 const W = '11111111-1111-4111-8111-111111111111', W2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const id = index => `22222222-2222-4222-8222-${String(index + 1).padStart(12, '0')}`
 const recordId = index => `33333333-3333-4333-8333-${String(index + 1).padStart(12, '0')}`
@@ -47,6 +48,7 @@ function harness(props = {}, { clipboardAvailable = true } = {}) {
   }
   const runtime = {
     ...helpers,
+    buildEmailDraftResearchPrompt,
     __jsx: (type, props, ...children) => ({ type, props: props || {}, children }),
     useState(initial) { const i = cursor++; if (!state[i]) state[i] = { value: typeof initial === 'function' ? initial() : initial }; return [state[i].value, next => { if (unmounted) h.updatesAfterUnmount += 1; const value = typeof next === 'function' ? next(state[i].value) : next; if (!Object.is(value, state[i].value)) { state[i].value = value; changed = true } }] },
     useRef(initial) { const i = cursor++; if (!state[i]) state[i] = { current: initial }; return state[i] },
@@ -83,7 +85,8 @@ test('content-only component reuses existing authenticated clients and styling w
   assert.match(source, /import \{ emailCampaignAction \} from '\.\.\/lib\/emailCampaignClient'/)
   assert.match(source, /dailyCampaignStatusResponse, safeDailyCampaignAppUrl/)
   assert.equal((source.match(/action: '/g) || []).length, 1)
-  assert.match(source, /action: 'get_daily_campaign_status', payload: \{\}/)
+  assert.match(source, /const payload = selectedDay \? \{ scheduledDay: selectedDay \} : \{\}/)
+  assert.match(source, /action: 'get_daily_campaign_status', payload,/)
   assert.doesNotMatch(source, /fetch\(|supabase|Firebase|localStorage|setInterval|setTimeout|mailto:|gmail|\bBCC\b|add_contacts|send_test|generate_drafts|approve_draft|save_daily_campaign_settings|update_daily_campaign|set_state|research_candidates|dangerouslySetInnerHTML|import .*\.css|<style/i)
   assert(source.includes('es-card') && source.includes('es-section-head') && source.includes('es-draft'))
   assert.deepEqual(source.match(/style=\{\{[^}]*\}\}/g), ["style={{ whiteSpace: 'pre-wrap' }}", "style={{ whiteSpace: 'pre-wrap' }}"])
@@ -208,7 +211,9 @@ test('user-only clipboard copies exact actual saved fields; optional callback re
   assert.deepEqual(h.copied, [saved.subject, saved.body, `Subject: ${saved.subject}\n\n${saved.body}`])
   assert.deepEqual(events, ['subject', 'body', 'full'].map(field => ({ productId: id(0), field })))
   assert.equal(h.calls.length, 2); assert.match(h.allText(), /nothing was sent/)
-  assert.equal(h.node(item => item.type === 'input'), undefined); assert.equal(h.node(item => item.type === 'form'), undefined)
+  assert.equal(h.node(item => item.type === 'input' && item.props.type === 'date').props.value, DAY)
+  assert.equal(h.node(item => item.type === 'input' && item.props.type === 'search').props.maxLength, 200)
+  assert.equal(h.node(item => item.type === 'form'), undefined)
   const link = h.node(item => item.type === 'a'); assert.equal(link.props.href, URL); assert.equal(link.props.rel, 'noopener noreferrer')
   await h.setProps({ onCopy: () => Promise.reject(new Error('synthetic private telemetry')) }); h.copy('subject'); await h.flush(); assert.match(h.allText(), /Saved text copied/); h.unmount()
 })
@@ -216,7 +221,7 @@ test('user-only clipboard copies exact actual saved fields; optional callback re
 test('clipboard failure exposes a read-only manual textarea without private errors or automatic copying', async () => {
   for (const available of [true, false]) {
     const h = harness({}, { clipboardAvailable: available }); h.clipboard = async () => { throw new Error('private@example.test clipboard') }; await h.flush()
-    h.copy('body'); await h.flush(); const textarea = h.node(item => item.type === 'textarea')
+    h.copy('body'); await h.flush(); const textarea = h.node(item => item.type === 'textarea' && item.props['aria-label']?.includes('manual copy'))
     assert.equal(textarea.props.readOnly, true); assert.equal(textarea.props.value, record().body)
     assert.match(h.allText(), /copy it manually/); assert(!h.allText().includes('@')); assert.equal(h.copied.length, 0)
     await h.setProps({ disabled: true }); assert.equal(h.node(item => item.type === 'textarea'), undefined); h.unmount()
@@ -292,4 +297,117 @@ test('already-dispatched workspace or daily reads cannot update state after unmo
     else pending.reject(new Error('private@example.test late response'))
     await h.flush(); assert.equal(h.updatesAfterUnmount, 0); assert.equal(h.active, 0)
   }
+})
+
+function calendarStatus(productId, workspaceId, selectedDay, campaigns = []) {
+  return status(productId, workspaceId, { campaigns, selectedDay, selected: { scheduled_day: selectedDay, created: campaigns.length === 1 } })
+}
+const changeDate = (h, value) => h.node(item => item.type === 'input' && item.props.type === 'date').props.onChange({ target: { value } })
+const changeSearch = (h, value) => h.node(item => item.type === 'input' && item.props.type === 'search').props.onChange({ target: { value } })
+
+test('calendar browses an exact saved historical day and Today restores the legacy date-free read', async () => {
+  const h = harness(); await h.flush()
+  const oldCopy = h.button('Copy body', 0).props.onClick
+  h.respondDaily = async input => input.payload.scheduledDay ? calendarStatus(input.productId, W, input.payload.scheduledDay, [record(input.productId, W, { scheduled_day: input.payload.scheduledDay, subject: 'Exact October saved draft' })]) : status(input.productId, W)
+  changeDate(h, '2026-10-01'); assert(!text(h.render()).includes('Actual saved subject'))
+  oldCopy(); await h.flush(); assert.equal(h.copied.length, 0)
+  assert.match(h.allText(), /Saved drafts for 2026-10-01/); assert.match(h.allText(), /Exact October saved draft/)
+  assert.equal(h.dispatched.at(-1).payload.scheduledDay, '2026-10-01')
+  h.copy('subject'); await h.flush(); assert.equal(h.copied.at(-1), 'Exact October saved draft')
+  h.button('Today').props.onClick(); await h.flush()
+  assert.deepEqual(h.dispatched.at(-1).payload, {}); assert.match(h.allText(), /Actual saved subject/); h.unmount()
+})
+
+test('Tomorrow uses server-local day and displays not-created rows without substituting today or starting generation', async () => {
+  const h = harness(); await h.flush()
+  h.respondDaily = async input => calendarStatus(input.productId, W, input.payload.scheduledDay)
+  h.button('Tomorrow').props.onClick(); await h.flush()
+  assert.equal(h.dispatched.at(-1).payload.scheduledDay, '2026-11-12')
+  assert.match(h.allText(), /Saved drafts for 2026-11-12/); assert.match(h.allText(), /Not created yet/)
+  assert(!h.allText().includes('Actual saved subject')); assert(!h.allText().includes('Actual saved body'))
+  assert.equal(h.button('Copy body', 0).props.disabled, true)
+  h.copy('body'); await h.flush(); assert.equal(h.copied.length, 0)
+  assert(h.dispatched.filter(c => c.kind === 'daily').every(c => c.action === 'get_daily_campaign_status')); h.unmount()
+})
+
+test('exact-date read errors and wrong selected metadata never render other dates or enable copying', async () => {
+  for (const extra of [
+    { selectedDay: '2026-11-10' },
+    { selected: { scheduled_day: '2026-11-12', created: true } },
+    { campaigns: [record()] },
+    { campaigns: [record(id(1), W, { scheduled_day: '2026-11-12' })] },
+  ]) {
+    const h = harness(); await h.flush()
+    h.respondDaily = async input => ({ ...calendarStatus(input.productId, W, input.payload.scheduledDay), dailyCampaign: { ...calendarStatus(input.productId, W, input.payload.scheduledDay).dailyCampaign, ...extra } })
+    changeDate(h, '2026-11-12'); await h.flush()
+    assert.match(text(h.row(0)), /Read error/); assert(!h.allText().includes('Actual saved subject')); assert.equal(h.button('Copy body', 0).props.disabled, true); h.unmount()
+  }
+})
+
+test('calendar rejects impossible dates locally and date rollover uses UTC calendar arithmetic', async () => {
+  const h = harness(); await h.flush(); const count = h.calls.length
+  for (const value of ['2026-02-31', '0000-01-01', 'not-a-date', '2026-11-12\n']) { changeDate(h, value); await h.flush(); assert.equal(h.calls.length, count) }
+  assert.equal(h.helpers.workspaceDraftNextDay('2026-11-11'), '2026-11-12')
+  assert.equal(h.helpers.workspaceDraftNextDay('2026-12-31'), '2027-01-01')
+  assert.equal(h.helpers.workspaceDraftNextDay('2028-02-28'), '2028-02-29')
+  assert.equal(h.helpers.workspaceDraftNextDay('2026-02-28'), '2026-03-01')
+  assert.equal(h.helpers.workspaceDraftNextDay('9999-12-31'), '')
+  assert.equal(h.helpers.workspaceDraftNextDay('2026-02-31'), ''); h.unmount()
+})
+
+test('search matches app names, subjects, body and dates locally without additional requests', async () => {
+  const h = harness(); h.respondWorkspace = async () => workspace(3); await h.flush(); const count = h.calls.length
+  changeSearch(h, 'ACTUAL APP 2'); await h.flush(); assert.equal(h.rows().length, 1); assert.match(text(h.row(0)), /Actual app 2/)
+  changeSearch(h, 'saved subject 003'); await h.flush(); assert.equal(h.rows().length, 1); assert.match(text(h.row(0)), /Actual app 3/)
+  changeSearch(h, 'saved body'); await h.flush(); assert.equal(h.rows().length, 3)
+  changeSearch(h, '2026-11-11'); await h.flush(); assert.equal(h.rows().length, 3)
+  changeSearch(h, 'no matching saved content'); await h.flush(); assert.equal(h.rows().length, 0); assert.match(h.allText(), /No drafts match/)
+  h.button('Clear search').props.onClick(); await h.flush(); assert.equal(h.rows().length, 3); assert.equal(h.calls.length, count); h.unmount()
+})
+
+test('search cannot copy a hidden captured row and pending clipboard does not leave controls locked', async () => {
+  const h = harness(); await h.flush(); const oldCopy = h.button('Copy body', 0).props.onClick
+  changeSearch(h, 'hidden'); await h.flush(); oldCopy(); await h.flush(); assert.equal(h.copied.length, 0)
+  changeSearch(h, ''); await h.flush(); const pending = deferred(); h.clipboard = () => pending.promise
+  h.copy('body'); await h.flush(); changeSearch(h, 'hidden'); await h.flush(); pending.resolve(); await h.flush()
+  changeSearch(h, ''); await h.flush(); assert.equal(h.button('Copy body', 0).props.disabled, false); assert(!h.allText().includes('Saved text copied'))
+  h.clipboard = async value => h.copied.push(value); h.copy('subject'); await h.flush(); assert.equal(h.copied.length, 1); h.unmount()
+})
+
+test('date changes cancel in-flight reads and newest date wins even if old transport ignores cancellation', async () => {
+  const h = harness(); await h.flush(); const pending = deferred()
+  h.respondDaily = async input => input.payload.scheduledDay === '2026-11-12' ? pending.promise : calendarStatus(input.productId, W, input.payload.scheduledDay)
+  changeDate(h, '2026-11-12'); await h.flush(); const attempted = h.calls.at(-1)
+  changeDate(h, '2026-11-13'); await h.flush(); assert.equal(attempted.signal.aborted, true)
+  pending.resolve(calendarStatus(id(0), W, '2026-11-12', [record(id(0), W, { scheduled_day: '2026-11-12', subject: 'Stale November 12 copy' })])); await h.flush()
+  assert.match(h.allText(), /Saved drafts for 2026-11-13/); assert(!h.allText().includes('Stale November 12')); assert.match(h.allText(), /Not created yet/); h.unmount()
+})
+
+test('each saved draft has a bounded app/date research prompt and a separate one-click copy control', async () => {
+  const events = [], h = harness({ onCopy: event => events.push(event) }); await h.flush()
+  const expected = buildEmailDraftResearchPrompt({ productId: id(0), appName: app(0).name, scheduledDay: DAY, appStoreUrl: URL })
+  const textarea = h.node(item => item.type === 'textarea' && item.props['aria-label']?.startsWith('Research prompt for'))
+  assert.equal(textarea.props.readOnly, true); assert.equal(textarea.props.maxLength, 1500); assert.equal(textarea.props.value, expected.prompt)
+  const count = h.calls.length; h.button('Copy research prompt', 0).props.onClick(); await h.flush()
+  assert.deepEqual(h.copied, [expected.prompt]); assert.equal(h.calls.length, count)
+  assert.deepEqual(events, [{ productId: id(0), field: 'research' }]); assert.match(h.allText(), /No search was run and nothing was sent/)
+  assert.match(expected.prompt, /UP TO 80/); assert(expected.prompt.includes(URL)); assert(expected.prompt.includes(DAY)); h.unmount()
+})
+
+test('future or unverified drafts have no generated research prompt or captured copy capability', async () => {
+  const h = harness(); await h.flush(); const old = h.button('Copy research prompt', 0).props.onClick
+  h.respondDaily = async input => calendarStatus(input.productId, W, input.payload.scheduledDay)
+  h.button('Tomorrow').props.onClick(); await h.flush()
+  assert.equal(h.button('Copy research prompt', 0), undefined)
+  assert.equal(h.node(item => item.type === 'textarea'), undefined)
+  old(); await h.flush(); assert.equal(h.copied.length, 0); h.unmount()
+})
+
+test('research prompt clipboard failure supplies only the bounded prompt and date changes clear it', async () => {
+  const h = harness({}, { clipboardAvailable: false }); await h.flush()
+  h.button('Copy research prompt', 0).props.onClick(); await h.flush()
+  const manual = h.node(item => item.type === 'textarea' && item.props['aria-label'] === 'Saved research for manual copy')
+  assert.equal(manual.props.readOnly, true); assert.match(manual.props.value, /UP TO 80/); assert(!manual.props.value.includes('Actual saved body'))
+  h.respondDaily = async input => calendarStatus(input.productId, W, input.payload.scheduledDay)
+  changeDate(h, '2026-11-12'); await h.flush(); assert.equal(h.node(item => item.type === 'textarea'), undefined); h.unmount()
 })

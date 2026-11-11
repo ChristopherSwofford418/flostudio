@@ -21,8 +21,39 @@ export function dailyCampaignSettingsPayload(body = {}) {
   return { p_enabled: body.enabled, p_timezone: timezone, p_start_hour: Number(hour) }
 }
 
-export async function getDailyCampaignStatus({ workspaceId, productId, accessToken }) {
-  return emailDb('rpc/get_email_daily_campaign_status', { method: 'POST', accessToken, body: { p_workspace_id: workspaceId, p_product_id: productId } })
+function isDailyCampaignDay(value) {
+  if (typeof value !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  return year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1]
+}
+
+export function dailyCampaignScheduledDay(value) {
+  if (!isDailyCampaignDay(value)) throw emailError('DAILY_CAMPAIGN_DAY_INVALID', 'Choose a valid calendar date in YYYY-MM-DD format.')
+  return value
+}
+
+const dailyCampaignColumns = ['workspace_id', 'product_id', 'id', 'name', 'scheduled_day', 'subject', 'body', 'app_store_url', 'status', 'content_source', 'created_at', 'updated_at']
+const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+function datedCampaignStatus(value, { workspaceId, productId, scheduledDay }) {
+  const invalid = () => emailError('DAILY_CAMPAIGN_STATUS_INVALID', 'The saved campaign drafts could not be verified for the selected app and date. Refresh and try again.', 503)
+  if (!object(value) || !object(value.settings) || value.settings.workspace_id !== workspaceId || value.settings.product_id !== productId || !object(value.today) || !isDailyCampaignDay(value.today.scheduled_day) || typeof value.today.created !== 'boolean' || !Array.isArray(value.campaigns) || value.campaigns.length > 1 || value.selectedDay !== scheduledDay || !object(value.selected) || value.selected.scheduled_day !== scheduledDay || value.selected.created !== (value.campaigns.length === 1)) throw invalid()
+  const campaigns = value.campaigns.map(row => {
+    if (!object(row) || row.workspace_id !== workspaceId || row.product_id !== productId || row.scheduled_day !== scheduledDay || typeof row.id !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(row.id) || ['name', 'subject', 'body', 'app_store_url', 'created_at', 'updated_at'].some(field => typeof row[field] !== 'string' || !row[field].trim()) || row.status !== 'draft' || row.content_source !== 'listing_template' || !Number.isFinite(Date.parse(row.created_at)) || !Number.isFinite(Date.parse(row.updated_at))) throw invalid()
+    return Object.fromEntries(dailyCampaignColumns.map(field => [field, row[field]]))
+  })
+  return { settings: value.settings, campaigns, today: value.today, selectedDay: scheduledDay, selected: { scheduled_day: scheduledDay, created: campaigns.length === 1 } }
+}
+
+export async function getDailyCampaignStatus(args) {
+  const { workspaceId, productId, accessToken } = args
+  if (!Object.prototype.hasOwnProperty.call(args, 'scheduledDay')) return emailDb('rpc/get_email_daily_campaign_status', { method: 'POST', accessToken, body: { p_workspace_id: workspaceId, p_product_id: productId } })
+  const scheduledDay = dailyCampaignScheduledDay(args.scheduledDay)
+  // Date reads remain on the caller-JWT RPC boundary; private tables need no new grants.
+  if (!accessToken) throw emailError('AUTH_REQUIRED', 'Sign in to view the saved campaign drafts.', 401)
+  const value = await emailDb('rpc/get_email_daily_campaign_date_status', { method: 'POST', accessToken, body: { p_workspace_id: workspaceId, p_product_id: productId, p_scheduled_day: scheduledDay } })
+  return datedCampaignStatus(value, { workspaceId, productId, scheduledDay })
 }
 
 export async function saveDailyCampaignSettings({ workspaceId, productId, accessToken, body }) {

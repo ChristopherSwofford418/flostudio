@@ -166,13 +166,24 @@ export async function getEmailCampaigns({ workspaceId, productId, signal, contac
   return data
 }
 
+function dailyCampaignScheduledDay(value) {
+  if (typeof value === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number)
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    if (year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1]) return value
+  }
+  throw new Error('Choose a valid calendar date in YYYY-MM-DD format.')
+}
+
 export async function emailCampaignAction({ workspaceId, productId, action, payload = {}, signal, isCurrent = () => true }) {
   requireScope(workspaceId, productId)
   if (!ACTIONS.has(action)) throw new Error('Unsupported email campaign action.')
   if (action === 'set_state' && payload.state === 'approved' && (payload.confirmSchedule !== true || !/^[a-f0-9]{64}$/i.test(payload.reviewRevision || ''))) throw new Error('Refresh and explicitly confirm the saved recipient and copy review before schedule approval.')
+  const actionPayload = action === 'get_daily_campaign_status' ? (payload && Object.prototype.hasOwnProperty.call(payload, 'scheduledDay') ? { scheduledDay: dailyCampaignScheduledDay(payload.scheduledDay) } : {}) : payload
   const headers = await authenticatedJsonHeaders()
   if (signal?.aborted || typeof isCurrent !== 'function' || !isCurrent()) throw new DOMException('The selected app or permissions changed before this request.', 'AbortError')
-  const response = await fetch('/api/email-campaigns', { method: 'POST', headers, body: JSON.stringify({ ...payload, workspaceId, productId, action }), signal })
+  const response = await fetch('/api/email-campaigns', { method: 'POST', headers, body: JSON.stringify({ ...actionPayload, workspaceId, productId, action }), signal })
   return responseJson(response, 'Email campaigns')
 }
 
