@@ -130,10 +130,16 @@ const instructions = `Find only publicly posted business/organization role email
 
 // Server-only: caller supplies its resolved OpenAI key; no access tokens, key
 // persistence, database writes or email sending. No paid retries/fallback calls.
-export async function researchEmailCandidates({ apiKey, model, product = {}, query = '', limit = 10 } = {}, io = {}) {
+export async function researchEmailCandidates({ apiKey, model, product = {}, query = '', limit = 10, excludeEmails = [] } = {}, io = {}) {
   if (typeof apiKey !== 'string' || !apiKey.trim() || /[\r\n]/.test(apiKey)) throw error('A server-side OpenAI key is required.', 'EMAIL_RESEARCH_KEY_REQUIRED', 400)
   query = clean(query, 500)
   limit = Math.max(1, Math.min(10, Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : 10))
+  // Only bounded public business-role identifiers may be supplied as exclusions.
+  // Consumer/personal recipient data never enters the search prompt through this field.
+  const exclusions = [...new Set((Array.isArray(excludeEmails) ? excludeEmails.slice(0, 100) : []).map(value => clean(value, 254).toLowerCase()).filter(value => {
+    const parts = value.split('@')
+    return parts.length === 2 && ROLES.test(parts[0]) && !CONSUMER_MAIL.has(parts[1]) && /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(parts[1])
+  }))]
   const facts = Object.fromEntries(['name', 'productName', 'title', 'category', 'description', 'audience', 'niche'].map(key => [key, clean(product?.[key], key === 'description' ? 1000 : 240)]).filter(([, value]) => value))
   if (!query && !Object.keys(facts).length) return { candidates: [], summary: 'No public business contact candidates: supply a niche query or product facts.' }
   const chosenModel = clean(process.env.OPENAI_EMAIL_RESEARCH_MODEL || model, 120)
@@ -145,8 +151,8 @@ export async function researchEmailCandidates({ apiKey, model, product = {}, que
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(45000),
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: chosenModel, ...(chosenModel === 'gpt-5.6-terra' ? { reasoning: { effort: 'low' } } : {}), store: false, instructions,
-        input: JSON.stringify({ query, product: facts, limit }), tools: [{ type: 'web_search' }], tool_choice: 'required',
-        include: ['web_search_call.action.sources'], max_output_tokens: 2400,
+        input: JSON.stringify({ query, product: facts, limit, ...(exclusions.length ? { excludePublicRoleEmails: exclusions } : {}) }), tools: [{ type: 'web_search' }], tool_choice: 'required',
+        include: ['web_search_call.action.sources'], max_output_tokens: 2400, max_tool_calls: 3, service_tier: 'default',
         text: { format: { type: 'json_schema', name: 'public_business_contacts', strict: true,
           schema: { type: 'object', additionalProperties: false, required: ['candidates'], properties: {
             candidates: { type: 'array', maxItems: 10, items: { type: 'object', additionalProperties: false, properties: fields, required: Object.keys(fields) } },
@@ -166,9 +172,10 @@ export async function researchEmailCandidates({ apiKey, model, product = {}, que
   const addUrl = value => { try { cited.add(safeBusinessUrl(value).href) } catch {} }
   content.flatMap(item => item.annotations || []).filter(a => a.type === 'url_citation').forEach(a => addUrl(a.url))
   output.filter(item => item.type === 'web_search_call' && item.status === 'completed').flatMap(item => item.action?.sources || []).forEach(s => addUrl(s.url))
-  const candidates = [], seen = new Set(), pages = new Map()
+  const candidates = [], seen = new Set(exclusions), pages = new Map()
   for (const row of rows.slice(0, 10)) {
     if (!row || typeof row !== 'object' || candidates.length >= limit) continue
+    if (seen.has(clean(row.email, 254).toLowerCase())) continue
     try {
       const url = safeBusinessUrl(row.source_url).href
       if (!cited.has(url)) continue

@@ -3,6 +3,7 @@ import { emailDb, emailError, cleanEmailText, normalizeEmail, emailHttpsUrl, ema
 import { researchEmailCandidates } from './email-source-research.js'
 import { emailDailyCreativePlan, uniqueEmailDrafts } from './email-content-plan.js'
 import { getEmailCampaignReadiness, activateEmailCampaign } from './email-lifecycle.js'
+import { emailResearchDeploymentStatus, getDailyResearchStatus, saveDailyResearchSettings } from './email-research-settings.js'
 
 export const config={maxDuration:180}
 const campaignColumns='id,name,workspace_id,product_id,daily_limit,timezone,send_hour,send_minute,state,sending_enabled,sender_name,postal_address,ad_link,audience,language'
@@ -89,13 +90,25 @@ export default async function handler(req,res) {
       if(!aiConfigured) readiness.preparationBlockers.push('Connect workspace OpenAI before source research or email drafting.')
       if(!readiness.draftingModelConfigured) readiness.preparationBlockers.push('Configure an available email drafting model before generating new drafts.')
       readiness.researchModelConfigured=Boolean(process.env.OPENAI_EMAIL_RESEARCH_MODEL)
-      readiness.processing={timer:'Every five minutes; only at or after the saved app-local send time.',delivery:'Existing human-approved recipient copy only.',research:'Manual candidate research; public email availability is not consent.',drafting:'Manual AI draft generation; every new draft needs human review.'}
+      readiness.researchDeployment=emailResearchDeploymentStatus(aiConfigured)
+      readiness.researchCronConfigured=readiness.researchDeployment.configured
+      readiness.processing={timer:'Every five minutes; only at or after the saved app-local send time.',delivery:'Existing human-approved recipient copy only.',research:'Independent per-app daily candidate research when explicitly enabled; public email availability is not consent.',drafting:'Manual AI draft generation; every new draft needs human review.'}
       readiness.warnings=['One standard paid Workspace mailbox allows up to 2,000 messages per rolling 24 hours across all apps and regular outgoing mail. Use headroom and fair app allocations. Send-only Gmail cannot automatically read bounces or unsubscribe replies.']
       const pagination={contacts:{offset:contactsOffset,nextOffset:contacts.length===200 && contactsOffset+200<=50000 ? contactsOffset+200 : null},drafts:{offset:draftsOffset,nextOffset:drafts.length===100 && draftsOffset+100<=50000 ? draftsOffset+100 : null}}
       return res.status(200).json({campaign,contacts,drafts,queue,connection,readiness,pagination})
     }
-    await assertWorkspaceAdmin({workspaceId,accessToken})
     const action=String(body.action || '')
+    if(action==='get_research_status') {
+      const [research,aiConfigured]=await Promise.all([getDailyResearchStatus({workspaceId,productId,accessToken}),aiStatus(workspaceId,accessToken)])
+      return res.status(200).json({research,deployment:emailResearchDeploymentStatus(aiConfigured)})
+    }
+    await assertWorkspaceAdmin({workspaceId,accessToken})
+    if(action==='save_research_settings') {
+      await saveDailyResearchSettings({workspaceId,productId,accessToken,body})
+      const [research,aiConfigured]=await Promise.all([getDailyResearchStatus({workspaceId,productId,accessToken}),aiStatus(workspaceId,accessToken)])
+      const deployment=emailResearchDeploymentStatus(aiConfigured)
+      return res.status(200).json({research,deployment,message:body.enabled ? 'Daily app research settings saved. Candidates remain unapproved; execution also requires the separately enabled, secured research deployment.' : 'Daily candidate research paused for this app. Existing contacts, permission evidence and campaigns were preserved.'})
+    }
     const filters=scope(workspaceId,productId)
     const campaign=await campaignFor(workspaceId,productId,accessToken)
     if(action==='save_campaign') {
