@@ -75,7 +75,8 @@ export async function emailConnectionStatus(workspaceId,accessToken) {
   if(!accessToken) throw emailError('AUTH_REQUIRED','Sign in to view the workspace email status.',401)
   const row=await emailDb('rpc/email_connection_status',{method:'POST',body:{p_workspace_id:workspaceId},accessToken})
   const expected=row?.expected_email || null
-  return {configured:Boolean(row?.configured) && (!expected || expected===row?.email),email:row?.email || null,expected_email:expected,daily_budget:row?.daily_budget || 400}
+  const pauseReasons=new Set(['provider_rejected','submission_unknown','reconnect_required'])
+  return {configured:Boolean(row?.configured) && (!expected || expected===row?.email),email:row?.email || null,expected_email:expected,daily_budget:row?.daily_budget || 400,connection_sending_enabled:row?.connection_sending_enabled===true,account_sending_enabled:row?.account_sending_enabled===true,pause_reason:pauseReasons.has(row?.pause_reason) ? row.pause_reason : null}
 }
 export function emailDeploymentStatus() {
   let validRedirect = false

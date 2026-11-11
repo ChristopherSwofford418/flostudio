@@ -2,12 +2,18 @@ import { authenticatedProviderUser, assertWorkspaceAdmin, assertWorkspaceProduct
 import { emailDb, emailError, cleanEmailText, normalizeEmail, emailHttpsUrl, emailSchedule, emailDeploymentStatus, emailConnectionStatus } from './email-core.js'
 import { researchEmailCandidates } from './email-source-research.js'
 import { emailDailyCreativePlan, uniqueEmailDrafts } from './email-content-plan.js'
+import { getEmailCampaignReadiness, activateEmailCampaign } from './email-lifecycle.js'
 
 export const config={maxDuration:180}
 const campaignColumns='id,name,workspace_id,product_id,daily_limit,timezone,send_hour,send_minute,state,sending_enabled,sender_name,postal_address,ad_link,audience,language'
 const scope = (workspaceId, productId) => ({ workspace_id:`eq.${workspaceId}`, product_id:`eq.${productId}` })
 const query = args => new URLSearchParams(args).toString()
 const first = rows => Array.isArray(rows) ? rows[0] : null
+function pageOffset(value=0) {
+  const offset=Number(value)
+  if(!Number.isInteger(offset) || offset<0 || offset>50000) throw emailError('EMAIL_PAGE_INVALID','Choose a valid saved-record page.')
+  return offset
+}
 async function readTable(table, fields, filters, accessToken, limit=100) { return await emailDb(`${table}?${query({select:fields,...filters,limit:String(limit)})}`,{accessToken}) || [] }
 async function readAll(table,fields,filters,accessToken) {
   const result=[]
@@ -64,25 +70,29 @@ export default async function handler(req,res) {
     const {accessToken}=await authenticatedProviderUser(req)
     await assertWorkspaceProduct({workspaceId,productId,accessToken})
     if(req.method==='GET') {
-      const [campaign,contacts,drafts,queue,connection,aiConfigured]=await Promise.all([
+      const contactsOffset=pageOffset(body.contactsOffset),draftsOffset=pageOffset(body.draftsOffset)
+      const [campaign,contacts,drafts,queue,connection,aiConfigured,launch]=await Promise.all([
         campaignFor(workspaceId,productId,accessToken),
-        readTable('email_contacts','id,email,organization,status,source_url,source_evidence,consent_evidence', {...scope(workspaceId,productId),order:'created_at.desc'},accessToken,200),
-        readTable('email_drafts','id,contact_id,subject,body,status',{...scope(workspaceId,productId),order:'created_at.desc'},accessToken,100),
+        readTable('email_contacts','id,email,organization,status,source_url,source_evidence,consent_evidence', {...scope(workspaceId,productId),order:'created_at.desc,id.desc',offset:String(contactsOffset)},accessToken,200),
+        readTable('email_drafts','id,contact_id,subject,body,status,email_contacts(id,email,organization,status,consent_evidence)',{...scope(workspaceId,productId),order:'created_at.desc,id.desc',offset:String(draftsOffset)},accessToken,100),
         readTable('email_send_queue','id,status,scheduled_day',{...scope(workspaceId,productId),order:'created_at.desc'},accessToken,100),
         connectionFor(workspaceId,accessToken),aiStatus(workspaceId,accessToken),
+        getEmailCampaignReadiness({workspaceId,productId,accessToken}),
       ])
-      const readiness={...emailDeploymentStatus(),aiConfigured,blockers:[]}
+      const readiness={...emailDeploymentStatus(),aiConfigured,launch,blockers:[],preparationBlockers:[]}
       if(!readiness.workerStorageConfigured) readiness.blockers.push('Secure background-worker storage is not configured. Campaign setup remains available through your authenticated workspace; Gmail connection and delivery stay blocked until server setup is completed.')
       if(!readiness.vaultConfigured) readiness.blockers.push('The encrypted Gmail credential vault is not configured. Gmail connection and delivery remain blocked until a stable server-only encryption root is configured.')
       if(!readiness.gmailConfigured) readiness.blockers.push('The app-owned Google OAuth client is not configured. The Manus Gmail connector is not a Flo Studio background-sending connection.')
       if(!connection.configured) readiness.blockers.push('Connect a Gmail sender using the secure Google consent flow.')
       if(!readiness.sendingEnabled) readiness.blockers.push('Live delivery is disabled at deployment level; no messages can be sent.')
       if(!readiness.cronConfigured) readiness.blockers.push('The secure application scheduler is not enabled.')
-      if(!aiConfigured) readiness.blockers.push('Connect workspace OpenAI for source research and email drafting.')
-      if(!readiness.draftingModelConfigured) readiness.blockers.push('Configure an available email drafting model before generating email drafts.')
-      if(!process.env.OPENAI_EMAIL_RESEARCH_MODEL) readiness.blockers.push('Configure an available web-search-capable email research model before AI contact discovery.')
+      if(!aiConfigured) readiness.preparationBlockers.push('Connect workspace OpenAI before source research or email drafting.')
+      if(!readiness.draftingModelConfigured) readiness.preparationBlockers.push('Configure an available email drafting model before generating new drafts.')
+      readiness.researchModelConfigured=Boolean(process.env.OPENAI_EMAIL_RESEARCH_MODEL)
+      readiness.processing={timer:'Every five minutes; only at or after the saved app-local send time.',delivery:'Existing human-approved recipient copy only.',research:'Manual candidate research; public email availability is not consent.',drafting:'Manual AI draft generation; every new draft needs human review.'}
       readiness.warnings=['One standard paid Workspace mailbox allows up to 2,000 messages per rolling 24 hours across all apps and regular outgoing mail. Use headroom and fair app allocations. Send-only Gmail cannot automatically read bounces or unsubscribe replies.']
-      return res.status(200).json({campaign,contacts,drafts,queue,connection,readiness})
+      const pagination={contacts:{offset:contactsOffset,nextOffset:contacts.length===200 && contactsOffset+200<=50000 ? contactsOffset+200 : null},drafts:{offset:draftsOffset,nextOffset:drafts.length===100 && draftsOffset+100<=50000 ? draftsOffset+100 : null}}
+      return res.status(200).json({campaign,contacts,drafts,queue,connection,readiness,pagination})
     }
     await assertWorkspaceAdmin({workspaceId,accessToken})
     const action=String(body.action || '')
@@ -159,11 +169,9 @@ export default async function handler(req,res) {
       return res.status(200).json({message:action==='approve_draft' ? 'Draft approved for this opted-in recipient. It has not been sent.' : 'Draft updated. Previous approval was removed.'})
     }
     if(action==='preview_run') {
-      const contacts=await readTable('email_contacts','id,status',filters,accessToken,1000)
-      const drafts=await readTable('email_drafts','id,contact_id,status',{...filters,status:'eq.approved'},accessToken,1000)
-      const eligible=new Set(contacts.filter(c=>c.status==='opted_in').map(c=>c.id))
-      const suppression=await readTable('email_suppressions','email',{workspace_id:`eq.${workspaceId}`},accessToken,1000)
-      return res.status(200).json({message:`Preview only: ${Math.min(campaign?.daily_limit || 100,new Set(drafts.filter(d=>eligible.has(d.contact_id)).map(d=>d.contact_id)).size)} reviewed recipients before suppression, permanent no-repeat recipient history and shared account quota checks. ${suppression.length} workspace suppression records. No queue was created and nothing was sent.`})
+      const view=await getEmailCampaignReadiness({workspaceId,productId,accessToken})
+      const count=Number.isSafeInteger(view?.counts?.eligibleRecipients) ? view.counts.eligibleRecipients : 0
+      return res.status(200).json({message:`Preview only: ${count} reviewed, unsuppressed, never-contacted recipients; up to ${Math.min(campaign?.daily_limit || 100,count)} before shared account quota and exact claim-time checks. No queue was created and nothing was sent.`})
     }
     if(action==='set_state') {
       if(!campaign) throw emailError('CAMPAIGN_REQUIRED','Save the campaign first.')
@@ -171,12 +179,9 @@ export default async function handler(req,res) {
       const status=emailDeploymentStatus(),connection=await connectionFor(workspaceId,accessToken)
       if(body.state!=='approved') throw emailError('CAMPAIGN_STATE_INVALID','Choose approved or paused.')
       if(!status.sendingEnabled || !status.cronConfigured || !connection.configured) throw emailError('EMAIL_LAUNCH_BLOCKED','Live sending remains disabled until the Gmail connection, scheduler, deployment gates and recipient permissions are ready.',409)
-      if(!campaign.sender_name || !campaign.postal_address || !campaign.ad_link) throw emailError('SENDER_DETAILS_REQUIRED','Complete sender name, valid postal address and app link before approving the schedule.')
-      await writeTable('email_campaigns','PATCH',{state:'approved',sending_enabled:true},{...filters,id:`eq.${campaign.id}`},accessToken)
-      const sender=first(await readTable('workspace_gmail_connections','account_key',{workspace_id:`eq.${workspaceId}`,configured:'eq.true'},null,1))
-      if(!sender?.account_key) throw emailError('GMAIL_CONNECTION_REQUIRED','Reconnect the verified Gmail sender before activation.',409)
-      await emailDb(`email_gmail_accounts?${query({account_key:`eq.${sender.account_key}`})}`,{method:'PATCH',body:{sending_enabled:true}})
-      await emailDb(`workspace_gmail_connections?${query({workspace_id:`eq.${workspaceId}`})}`,{method:'PATCH',body:{sending_enabled:true}})
+      if(!status.workerStorageConfigured || !status.vaultConfigured) throw emailError('EMAIL_LAUNCH_BLOCKED','Finish the secure worker and vault setup before schedule approval.',409)
+      if(body.confirmSchedule!==true) throw emailError('EMAIL_REVIEW_REQUIRED','Explicitly confirm the saved recipients and copy before schedule approval.',409)
+      await activateEmailCampaign({workspaceId,productId,campaignId:campaign.id,reviewRevision:body.reviewRevision,accessToken})
       return res.status(200).json({message:'The selected app’s reviewed, consent-gated daily schedule is approved. Actual sends remain subject to account quotas and delivery checks.'})
     }
     throw emailError('EMAIL_ACTION_INVALID','Unknown email campaign action.')

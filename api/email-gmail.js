@@ -48,9 +48,15 @@ export async function expectedGmailSender(workspaceId) {
   const preference=(await emailDb(query('workspace_email_preferences','expected_sender_email',{workspace_id:`eq.${workspaceId}`})))?.[0]
   return preference?.expected_sender_email ? normalizeEmail(preference.expected_sender_email) : ''
 }
-async function invalidate(workspaceId) {
+async function invalidate(workspaceId, mailboxWide = true) {
+  const paused = mailboxWide ? await emailDb('rpc/email_pause_mailbox', { method:'POST', body:{ p_workspace_id:workspaceId, p_reason:'reconnect_required' } }) : null
+  if (!mailboxWide) await pauseWorkspace(workspaceId)
+  else if (paused?.allowed !== true || paused?.code !== 'EMAIL_MAILBOX_PAUSED') {
+    // No existing mailbox can be submitted; explicit disconnect may still pause this workspace.
+    if (paused?.code === 'GMAIL_CONNECTION_REQUIRED') await pauseWorkspace(workspaceId)
+    else throw emailError('GMAIL_PAUSE_UNAVAILABLE', 'Gmail delivery could not be safely paused.', 503)
+  }
   await emailDb(scoped(workspaceId), { method:'PATCH', body:{ configured:false, sending_enabled:false } })
-  await pauseWorkspace(workspaceId)
 }
 const reconnect = () => emailError('GMAIL_RECONNECT_REQUIRED', 'Reconnect Gmail before sending any more email.', 409)
 async function callbackAdmin(workspaceId, userId) {
@@ -160,6 +166,10 @@ export default async function handler(req, res) {
       await emailDb(scoped(workspaceId), { method:'PATCH', body:{ daily_budget:dailyBudget, sending_enabled:false } })
       return res.status(200).json({ configured:true, accountType, dailyBudget, sendingEnabled:false })
     }
+    if (action === 'check_connection') {
+      const connection = await refreshGmailConnection(workspaceId)
+      return res.status(200).json({ configured:true, email:connection.email, message:'Gmail identity and send-only authorization verified. No email was sent and no campaign was enabled.' })
+    }
     if (action === 'send_test') {
       if (body.confirmTest !== true || !uuid(body.productId)) throw emailError('GMAIL_TEST_CONFIRMATION_REQUIRED', 'Explicitly confirm one diagnostic for the selected app.', 400)
       const product = await assertWorkspaceProduct({workspaceId, productId:body.productId, accessToken})
@@ -170,7 +180,7 @@ export default async function handler(req, res) {
     }
     if (action === 'disconnect') {
       const previous = (await emailDb(query('workspace_gmail_connections', 'encrypted_credentials', { workspace_id:`eq.${workspaceId}` })))?.[0]
-      await invalidate(workspaceId)
+      await invalidate(workspaceId, false)
       await emailDb(scoped(workspaceId), { method:'DELETE' })
       try {
         const credentials = decryptEmailCredential(previous?.encrypted_credentials, workspaceId)
@@ -179,7 +189,7 @@ export default async function handler(req, res) {
       cookie(res)
       return res.status(200).json({ configured:false, disconnected:true, sendingEnabled:false })
     }
-    throw emailError('ACTION_INVALID', 'Choose connect, disconnect, configure_budget, or send_test.')
+    throw emailError('ACTION_INVALID', 'Choose connect, disconnect, configure_budget, check_connection, or send_test.')
   } catch (error) {
     const status = error?.status || 500
     // Auth helpers can contain database error detail. Return only curated messages.

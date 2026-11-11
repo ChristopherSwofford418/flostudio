@@ -39,6 +39,15 @@ async function mockFetch(input, options = {}) {
       for (const campaign of tables.email_campaigns) if (campaign.workspace_id === body.p_workspace_id) Object.assign(campaign, { sending_enabled:false,state:'paused' })
       return json(null)
     }
+    if (url.pathname === '/rest/v1/rpc/email_pause_mailbox') {
+      const connection=tables.workspace_gmail_connections.find(row=>row.workspace_id===body.p_workspace_id)
+      if(!connection)return json({allowed:false,code:'GMAIL_CONNECTION_REQUIRED',status:'blocked'})
+      const workspaces=new Set(tables.workspace_gmail_connections.filter(row=>row.account_key===connection.account_key).map(row=>row.workspace_id))
+      for(const row of tables.workspace_gmail_connections)if(workspaces.has(row.workspace_id))row.sending_enabled=false
+      for(const row of tables.email_gmail_accounts)if(row.account_key===connection.account_key)row.sending_enabled=false
+      for(const campaign of tables.email_campaigns)if(workspaces.has(campaign.workspace_id)&&campaign.state==='approved')Object.assign(campaign,{sending_enabled:false,state:'paused'})
+      return json({allowed:true,code:'EMAIL_MAILBOX_PAUSED',status:'paused'})
+    }
     assert(url.pathname.startsWith('/rest/v1/'))
     const name = url.pathname.split('/').at(-1)
     assert.notEqual(name,'email_campaigns','Service must use pause RPC, not direct campaign writes')
@@ -423,4 +432,27 @@ test('callback accepts Google email-scope alias and retains all connection-disab
   assert.equal(tables.email_gmail_accounts[0].sending_enabled, false)
   assert.equal(tables.email_campaigns[0].sending_enabled, false)
   assert.equal(events.filter(e => e.url.startsWith('https://gmail.')).length, 0)
+})
+
+test('connection health verifies an expired token without sending, enabling or returning credentials', async () => {
+  seedConnection({ expired:true, enabled:false })
+  googleResponse('https://oauth2.googleapis.com/token',tokens())
+  const res=response()
+  await handler(post({workspaceId:W,action:'check_connection'}),res)
+  assert.equal(res.statusCode,200)
+  assert.equal(res.data.configured,true)
+  assert.match(res.data.message,/No email was sent and no campaign was enabled/)
+  assert(!JSON.stringify(res.data).includes('dummy-access'))
+  assert(!JSON.stringify(res.data).includes('dummy-refresh'))
+  assert(!events.some(event=>event.url.includes('/messages/send')))
+  assert(tables.workspace_gmail_connections.every(row=>row.sending_enabled===false))
+  assert(tables.email_gmail_accounts.every(row=>row.sending_enabled===false))
+})
+
+test('non-admin connection health is denied before credential or provider access',async()=>{
+  admin=false
+  const res=response()
+  await handler(post({workspaceId:W,action:'check_connection'}),res)
+  assert.equal(res.statusCode,403)
+  assert(!events.some(event=>event.url.includes('workspace_gmail_connections')||event.url.startsWith('https://oauth2.googleapis.com')))
 })

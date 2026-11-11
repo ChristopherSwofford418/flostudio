@@ -73,7 +73,7 @@ export function campaignValidation(campaign, { complete = false } = {}) {
   try { new Intl.DateTimeFormat('en', { timeZone: campaign?.timezone || '__invalid__' }).format() } catch { errors.push('Enter a valid IANA timezone, such as America/New_York or Europe/London.') }
   if (campaign?.send_hour === '' || !Number.isInteger(Number(campaign?.send_hour)) || Number(campaign.send_hour) < 0 || Number(campaign.send_hour) > 23) errors.push('Choose a valid send hour.')
   if (campaign?.send_minute === '' || !Number.isInteger(Number(campaign?.send_minute)) || Number(campaign.send_minute) < 0 || Number(campaign.send_minute) > 59) errors.push('Choose a valid send minute.')
-  if (campaign?.ad_link && !safeEmailUrl(campaign.ad_link)) errors.push('The ad link must be a full HTTP or HTTPS URL without embedded credentials.')
+  if (campaign?.ad_link && (!safeEmailUrl(campaign.ad_link) || new URL(campaign.ad_link).protocol !== 'https:')) errors.push('The ad link must be a full HTTPS URL without embedded credentials.')
   if (complete) {
     for (const [field, label] of [['sender_name', 'Sender name'], ['postal_address', 'Physical postal address'], ['ad_link', 'Ad link'], ['audience', 'Audience'], ['language', 'Language']]) {
       if (!String(campaign?.[field] || '').trim()) errors.push(`${label} is required before schedule approval.`)
@@ -129,9 +129,37 @@ async function responseJson(response, service) {
   return data
 }
 
-export async function getEmailCampaigns({ workspaceId, productId, signal }) {
+export function emailPageOffset(value = 0) {
+  const offset = Number(value)
+  if (!Number.isInteger(offset) || offset < 0 || offset > 50000) throw new Error('Choose a valid saved-record page.')
+  return offset
+}
+
+export function mergeEmailRecords(previous = [], page = []) {
+  const records = new Map(previous.filter(record => record?.id).map(record => [record.id, record]))
+  for (const record of page) if (record?.id) records.set(record.id, record)
+  return [...records.values()]
+}
+
+export function gmailDeliveryState(connection, campaign, readiness) {
+  if (connection?.configured !== true) return { label: 'Gmail not connected', tone: 'warning' }
+  const reasons = {
+    provider_rejected: 'Mailbox paused after provider rejection. Review the failed attempt before reapproval.',
+    submission_unknown: 'Mailbox paused after an uncertain submission. Check the recorded attempt; never retry it automatically.',
+    reconnect_required: 'Mailbox paused because authorization needs review. Reconnect only if the server reports it is required.',
+  }
+  if (Object.prototype.hasOwnProperty.call(reasons, connection?.pause_reason)) return { label: 'Delivery paused · owner review required', tone: 'warning', reason: reasons[connection.pause_reason] }
+  if (readiness?.sendingEnabled !== true || readiness?.cronConfigured !== true) return { label: 'Gmail connected · automation disabled', tone: 'neutral' }
+  if (campaign?.state !== 'approved' || campaign?.sending_enabled !== true) return { label: 'Gmail connected · campaign not approved', tone: 'neutral' }
+  if (connection.connection_sending_enabled !== true || connection.account_sending_enabled !== true) return { label: 'Campaign approved · mailbox delivery paused', tone: 'warning' }
+  return { label: 'Delivery gates enabled · receipt unverified', tone: 'ready' }
+}
+
+export async function getEmailCampaigns({ workspaceId, productId, signal, contactsOffset = 0, draftsOffset = 0 }) {
   requireScope(workspaceId, productId)
   const query = new URLSearchParams({ workspaceId, productId })
+  if (contactsOffset !== 0) query.set('contactsOffset', String(emailPageOffset(contactsOffset)))
+  if (draftsOffset !== 0) query.set('draftsOffset', String(emailPageOffset(draftsOffset)))
   const response = await fetch(`/api/email-campaigns?${query}`, { headers: await authenticatedHeaders(), signal })
   const data = await responseJson(response, 'Email campaigns')
   if (!Object.prototype.hasOwnProperty.call(data, 'campaign') || !Array.isArray(data.contacts) || !Array.isArray(data.drafts) || !Array.isArray(data.queue) || !data.connection || !data.readiness) throw new Error('Email campaigns returned an incomplete setup response. Check the API contract before approving anything.')
@@ -141,13 +169,14 @@ export async function getEmailCampaigns({ workspaceId, productId, signal }) {
 export async function emailCampaignAction({ workspaceId, productId, action, payload = {}, signal }) {
   requireScope(workspaceId, productId)
   if (!ACTIONS.has(action)) throw new Error('Unsupported email campaign action.')
+  if (action === 'set_state' && payload.state === 'approved' && (payload.confirmSchedule !== true || !/^[a-f0-9]{64}$/i.test(payload.reviewRevision || ''))) throw new Error('Refresh and explicitly confirm the saved recipient and copy review before schedule approval.')
   const response = await fetch('/api/email-campaigns', { method: 'POST', headers: await authenticatedJsonHeaders(), body: JSON.stringify({ ...payload, workspaceId, productId, action }), signal })
   return responseJson(response, 'Email campaigns')
 }
 
 export async function emailGmailAction({ workspaceId, action, payload = {}, signal }) {
   if (!workspaceId) throw new Error('An active workspace is required to connect Gmail.')
-  if (!['connect', 'disconnect', 'configure_budget', 'send_test'].includes(action)) throw new Error('Unsupported Gmail connection action.')
+  if (!['connect', 'disconnect', 'configure_budget', 'check_connection', 'send_test'].includes(action)) throw new Error('Unsupported Gmail connection action.')
   if (action === 'send_test') {
     requireScope(workspaceId, payload.productId)
     const recipient = diagnosticEmail(payload.recipient)

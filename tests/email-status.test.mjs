@@ -14,7 +14,7 @@ test('safe Gmail status uses the caller JWT without a service key and returns a 
   }
   try {
     const status=await emailConnectionStatus('workspace-test','dummy-member-session')
-    assert.deepEqual(status,{configured:true,email:'required@example.test',expected_email:'required@example.test',daily_budget:1800})
+    assert.deepEqual(status,{configured:true,email:'required@example.test',expected_email:'required@example.test',daily_budget:1800,connection_sending_enabled:false,account_sending_enabled:false,pause_reason:null})
   }finally{globalThis.fetch=old}
 })
 test('status never falls back to privileged credentials when a caller session is missing',async()=>{

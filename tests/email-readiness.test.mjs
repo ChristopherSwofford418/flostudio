@@ -48,8 +48,9 @@ test('readiness reports stable vault roots and explicit drafting configuration s
   withConfig({ OPENAI_TEXT_MODEL: 'dummy-model' }, () => assert.equal(emailDeploymentStatus().draftingModelConfigured, true))
 })
 
-test('campaign readiness surfaces missing vault and drafting model as blockers', () => {
+test('campaign readiness separates the required delivery vault from optional AI preparation', () => {
   const source = readFileSync(new URL('../api/email-campaigns.js', import.meta.url), 'utf8')
   assert.match(source, /if\(!readiness\.vaultConfigured\) readiness\.blockers\.push\(/)
-  assert.match(source, /if\(!readiness\.draftingModelConfigured\) readiness\.blockers\.push\(/)
+  assert.match(source, /if\(!readiness\.draftingModelConfigured\) readiness\.preparationBlockers\.push\(/)
+  assert.doesNotMatch(source, /if\(!readiness\.draftingModelConfigured\) readiness\.blockers\.push\(/)
 })
