@@ -4,6 +4,7 @@ import Layout from '../components/Layout'
 import EmailDailyResearchPanel from '../components/EmailDailyResearchPanel'
 import EmailDailyCampaignPanel from '../components/EmailDailyCampaignPanel'
 import EmailWorkspaceAutomationPanel from '../components/EmailWorkspaceAutomationPanel'
+import EmailWorkspaceDraftsPanel from '../components/EmailWorkspaceDraftsPanel'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { supabase } from '../supabase'
 import { trackFloEvent } from '../lib/observability'
@@ -461,6 +462,7 @@ export default function EmailCampaigns() {
     {workspaceLoading && <div className="es-card es-empty" role="status">Restoring your workspace…</div>}
     {!workspaceLoading && !workspaceError && <>
       {workspaceId && <EmailWorkspaceAutomationPanel key={`workspace-automation:${workspaceId}`} workspaceId={workspaceId} workspaceName="Current workspace" canEdit={canEdit} disabled={Boolean(busy)} connection={connection} readiness={readiness} onConnect={() => { void perform('connect', {}, 'Opening the single shared Gmail connection for this workspace.', 'gmail') }} onChanged={() => { event('workspace_schedule_changed'); if (!dirty && !busy && !loading) void refresh() }} onDailyCheck={() => event('workspace_daily_check')} />}
+      {workspaceId && <EmailWorkspaceDraftsPanel key={`workspace-drafts:${workspaceId}:${owner?.id || 'pending'}`} workspaceId={workspaceId} workspaceName="Current workspace" disabled={Boolean(busy) || !owner?.id} onCopy={({ productId: copiedProductId, field }) => { void trackFloEvent('email_studio_workspace_draft_copied', { productId: copiedProductId, field }).catch(() => {}) }} />}
       <section className="es-card es-app-bar"><div><div className="es-kicker">SELECTED APP</div><h2>{selectedApp?.name || 'Choose a portfolio app'}</h2><p>Contacts, drafts, and approval stay with this app. Gmail is shared by the workspace.</p></div><label className="es-field"><span>App</span><select value={selectedId} onChange={e => chooseApp(e.target.value)} disabled={!apps.length} aria-label="Choose email campaign app">{!selectedApp && <option value="">Select an app</option>}{apps.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}</select></label></section>
       {linkWarning && <div className="es-alert es-alert--warning" role="status">{linkWarning}</div>}
       {!canEdit && <div className="es-alert es-alert--warning" role="note">Read-only workspace access ({currentRole}). A workspace owner or admin must make campaign changes. The server independently verifies permissions.</div>}

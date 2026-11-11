@@ -110,7 +110,7 @@ test('malformed successes, provider errors, and transport failures stay sanitize
 const require = createRequire(import.meta.url)
 const esbuild = require(require.resolve('esbuild', { paths: [dirname(require.resolve('vite'))] }))
 const pageSource = readFileSync(new URL('../src/pages/EmailCampaigns.jsx', import.meta.url), 'utf8').replace(/^import .*$/gm, '').replace('export default function EmailCampaigns()', 'function EmailCampaigns()')
-const bindings = ['useCallback', 'useEffect', 'useMemo', 'useRef', 'useState', 'useSearchParams', 'Layout', 'EmailDailyResearchPanel', 'EmailDailyCampaignPanel', 'EmailWorkspaceAutomationPanel', 'useWorkspace', 'supabase', 'trackFloEvent', ...Object.keys(client), 'gmailCallbackFailureNotice', '__jsx']
+const bindings = ['useCallback', 'useEffect', 'useMemo', 'useRef', 'useState', 'useSearchParams', 'Layout', 'EmailDailyResearchPanel', 'EmailDailyCampaignPanel', 'EmailWorkspaceAutomationPanel', 'EmailWorkspaceDraftsPanel', 'useWorkspace', 'supabase', 'trackFloEvent', ...Object.keys(client), 'gmailCallbackFailureNotice', '__jsx']
 const compiled = esbuild.transformSync(`const { ${bindings.join(', ')} } = runtime;\n${pageSource}`, { loader: 'jsx', jsxFactory: '__jsx', jsxFragment: 'Array', target: 'es2022' }).code
 const loadPage = new Function('runtime', `${compiled}\nreturn EmailCampaigns;`)
 const nodes = tree => {
@@ -143,6 +143,7 @@ function harness({ workspaceRole = 'owner', sendingEnabled = false, configured =
     EmailDailyResearchPanel: 'daily-research-panel', // Child behavior has its own offline scope/permission suite.
     EmailDailyCampaignPanel: 'daily-campaign-panel', // Draft-library behavior has its own offline suite.
     EmailWorkspaceAutomationPanel: 'workspace-automation-panel', // All-app controls have their own offline suite.
+    EmailWorkspaceDraftsPanel: 'workspace-drafts-panel', // Content-only reads/copies have their own offline suite.
     trackFloEvent: async () => {},
     gmailCallbackFailureNotice: () => null,
     getEmailCampaigns: async () => data,
@@ -225,4 +226,38 @@ test('real UI clears review when authentication changes and does not allow a sta
   assert(!h.dialog())
   stale(); await h.flush()
   assert.equal(h.calls.length, 0)
+})
+
+test('all-app content-only draft panel stays independent of selected-app recipient data', async () => {
+  const h = harness()
+  const tree = await h.flush()
+  const panel = nodes(tree).find(item => item?.type === 'workspace-drafts-panel')
+  assert(panel)
+  assert.equal(panel.props.workspaceId, W)
+  assert.equal(panel.props.productId, undefined)
+  assert.equal(panel.props.contacts, undefined)
+  assert.equal(panel.props.recipients, undefined)
+  assert.equal(panel.props.onSend, undefined)
+  assert.equal(typeof panel.props.onCopy, 'function')
+  assert(pageSource.indexOf('<EmailWorkspaceDraftsPanel') < pageSource.indexOf('className="es-card es-app-bar"'))
+  const observedCalls = h.calls.length
+  panel.props.onCopy({ productId: P, field: 'subject' })
+  assert.equal(h.calls.length, observedCalls)
+})
+
+test('workspace draft content view is disabled and remounted when verified authentication changes', async () => {
+  const h = harness()
+  let tree = await h.flush()
+  const initial = nodes(tree).find(item => item?.type === 'workspace-drafts-panel')
+  assert.equal(initial.props.disabled, false)
+  const firstKey = initial.props.key
+  await h.authChange({ id: 'different-authenticated-user', email: 'member@example.test' })
+  tree = await h.flush()
+  const changed = nodes(tree).find(item => item?.type === 'workspace-drafts-panel')
+  assert.notEqual(changed.props.key, firstKey)
+  await h.authChange(null)
+  tree = await h.flush()
+  const signedOut = nodes(tree).find(item => item?.type === 'workspace-drafts-panel')
+  assert.equal(signedOut.props.disabled, true)
+  assert.notEqual(signedOut.props.key, changed.props.key)
 })
