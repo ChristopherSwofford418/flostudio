@@ -150,19 +150,20 @@ test('asks for listing-first narrow relevance rather than assuming a product cap
   const { prompt } = build()
   assert.match(prompt, /First read official listing/)
   assert.match(prompt, /infer no features or audience/)
-  assert.match(prompt, /one relevant adult-organization niche within this segment based on listing/)
+  assert.match(prompt, /a relevant adult-organization niche from listing facts/)
   assert.match(prompt, /if none fits, report zero/)
   assert.match(prompt, /Country is a research filter, not assumed app availability/)
 })
 
-test('caps research at up to 80 and requires actual counts and honest contact-history exclusions', () => {
+test('targets 80 for each app/day but requires honest verified counts and contact-history exclusions', () => {
   const { prompt } = build()
-  assert.match(prompt, /UP TO 80 new unique public business role emails/)
+  assert.match(prompt, /Target: 80 verified, unique public business role emails for this app\/day/)
+  assert.match(prompt, /Stop at 80 verified results/)
   assert.match(prompt, /Exclude prior provided contacts/)
   assert.match(prompt, /without history, do not claim never previously contacted/)
-  assert.match(prompt, /Report actual verified count, not a filled quota/)
-  assert.match(prompt, /omit unverifiable entries and duplicates/)
-  assert.doesNotMatch(prompt, /guarantee(?:d)? 80|exactly 80|fill (?:the )?target/i)
+  assert.match(prompt, /If fewer are verifiable, report the actual count and shortfall/)
+  assert.match(prompt, /never pad with guesses or duplicates/)
+  assert.doesNotMatch(prompt, /UP TO 80|guarantee(?:d)? 80|exactly 80|fill (?:the )?target/i)
 })
 
 test('restricts sources to public business-role contacts and requires evidence for every email', () => {

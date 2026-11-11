@@ -295,7 +295,7 @@ export default function EmailWorkspaceDraftsPanel({ workspaceId, workspaceName, 
       <div className="es-actions">{[['subject', 'Copy subject'], ['body', 'Copy body'], ['full', 'Copy full text']].map(([field, title]) => <button key={field} type="button" className="es-button es-button--secondary" disabled={disabled || loading || unavailable || copying || row.state !== 'ready'} onClick={() => { void copy(row, field) }}>{title}</button>)}</div>
       {research && <details>
         <summary>ChatGPT research prompt · {research.country} · {research.audienceFocus}</summary>
-        <p className="es-help">Date-specific country and organization focus; ask ChatGPT to choose a relevant industry from the app listing. Targets up to 80 verified public business contacts, not a guaranteed count. Prior results are needed to check historical uniqueness. This is copyable research text only.</p>
+        <p className="es-help">Date-specific country and organization focus; ask ChatGPT to choose a relevant industry from the app listing. Target: 80 verified public business contacts for this app and date. Report any verified shortfall rather than inventing entries. Prior results are needed to check historical uniqueness. This is copyable research text only.</p>
         <label className="es-field"><span>ChatGPT research prompt · {row.record.scheduled_day}</span><textarea readOnly rows={7} maxLength={1500} value={research.prompt} aria-label={`Research prompt for ${row.app.name} on ${row.record.scheduled_day}`} /></label>
       </details>}
       {research && <button type="button" className="es-button es-button--secondary" disabled={disabled || loading || unavailable || copying} onClick={() => { void copy(row, 'research') }}>Copy research prompt</button>}

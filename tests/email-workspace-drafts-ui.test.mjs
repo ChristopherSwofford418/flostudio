@@ -391,7 +391,7 @@ test('each saved draft has a bounded app/date research prompt and a separate one
   const count = h.calls.length; h.button('Copy research prompt', 0).props.onClick(); await h.flush()
   assert.deepEqual(h.copied, [expected.prompt]); assert.equal(h.calls.length, count)
   assert.deepEqual(events, [{ productId: id(0), field: 'research' }]); assert.match(h.allText(), /No search was run and nothing was sent/)
-  assert.match(expected.prompt, /UP TO 80/); assert(expected.prompt.includes(URL)); assert(expected.prompt.includes(DAY)); h.unmount()
+  assert.match(expected.prompt, /Target: 80 verified/); assert(expected.prompt.includes(URL)); assert(expected.prompt.includes(DAY)); h.unmount()
 })
 
 test('future or unverified drafts have no generated research prompt or captured copy capability', async () => {
@@ -407,7 +407,7 @@ test('research prompt clipboard failure supplies only the bounded prompt and dat
   const h = harness({}, { clipboardAvailable: false }); await h.flush()
   h.button('Copy research prompt', 0).props.onClick(); await h.flush()
   const manual = h.node(item => item.type === 'textarea' && item.props['aria-label'] === 'Saved research for manual copy')
-  assert.equal(manual.props.readOnly, true); assert.match(manual.props.value, /UP TO 80/); assert(!manual.props.value.includes('Actual saved body'))
+  assert.equal(manual.props.readOnly, true); assert.match(manual.props.value, /Target: 80 verified/); assert(!manual.props.value.includes('Actual saved body'))
   h.respondDaily = async input => calendarStatus(input.productId, W, input.payload.scheduledDay)
   changeDate(h, '2026-11-12'); await h.flush(); assert.equal(h.node(item => item.type === 'textarea'), undefined); h.unmount()
 })
