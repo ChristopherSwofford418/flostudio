@@ -8,6 +8,7 @@ const migration = name => readFile(new URL(`../supabase/migrations/${name}.sql`,
 const sql = await migration('20261111_facebook_daily_drafts')
 const emailSql = await migration('20261111_email_daily_campaigns')
 const fixedScheduleSql = await migration('20261111_facebook_daily_fixed_schedule')
+const profilePageSql = await migration('20261111_facebook_profile_page_links')
 
 test('Facebook migration is additive, private, draft-only and has precisely six narrow RPCs', () => {
   assert.match(sql, /begin;[\s\S]*commit;/)
@@ -48,6 +49,20 @@ test('Fixed-schedule follow-up changes only settings normalization, the named co
     notify pgrst, 'reload schema';
     commit;
   `))
+})
+
+test('Profile-page follow-up replaces only the private immutable URL helper without grants or data changes', () => {
+  const replacement = profilePageSql.match(/create or replace function[\s\S]*?\$\$;/)?.[0]
+  assert.ok(replacement)
+  assert.match(replacement, /^create or replace function public\.facebook_daily_page_url\(p_url text\)\nreturns text language sql immutable security definer set search_path = '' as \$\$/)
+  const normalize = text => text.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim()
+  assert.equal(normalize(profilePageSql.replace(replacement, 'PAGE_URL_HELPER;')), normalize(`
+    begin;
+    PAGE_URL_HELPER;
+    revoke all on function public.facebook_daily_page_url(text) from public,anon,authenticated,service_role;
+    commit;
+  `))
+  assert.doesNotMatch(profilePageSql, /\b(?:grant|drop|truncate|insert|update|delete|alter)\b/i)
 })
 
 // Local PostgreSQL-in-WASM only. Skip solely when both PGlite module locations are absent.
@@ -517,6 +532,106 @@ test('Offline Facebook daily database contracts', { skip: !PGlite }, async t => 
       await root()
       assert.deepEqual(await historyRows(), oldHistory)
       assert.deepEqual(await aclRows(), oldAcls)
+    })
+
+    await t.test('Profile-page follow-up preserves state and ACLs and exposes only exact safe links in the member workspace', async () => {
+      // w now has >100 active apps; use its existing one-app neighbor for member status checks.
+      await root()
+      const stateRows = async () => ({
+        settings: (await q('select to_jsonb(s) as row from facebook_daily_settings s order by workspace_id,product_id')).rows,
+        drafts: (await q('select to_jsonb(d) as row from facebook_daily_drafts d order by id')).rows,
+        assets: (await q('select to_jsonb(a) as row from facebook_draft_assets a order by id')).rows,
+        legacy: await preserved(),
+        tables: (await q(`select relname,relacl::text as acl,relrowsecurity from pg_class
+          where relnamespace='public'::regnamespace and relkind in ('r','p') order by relname`)).rows,
+        functions: (await q(`select oid::regprocedure::text as signature,proacl::text as acl,prosecdef,provolatile,proconfig,
+          case when proname='facebook_daily_page_url' then null else prosrc end as body
+          from pg_proc where pronamespace='public'::regnamespace order by oid::regprocedure::text`)).rows
+      })
+      const oldState = await stateRows()
+      const helperRows = () => q(`select oid,proacl::text as acl,prosecdef,provolatile,proconfig
+        from pg_proc where oid='public.facebook_daily_page_url(text)'::regprocedure`).then(r => r.rows)
+      const oldHelper = await helperRows()
+      assert.equal(await scalar('select facebook_daily_page_url($1)', ['https://www.facebook.com/profile.php?id=61512345678901']), null)
+      await db.exec(profilePageSql)
+      assert.deepEqual(await stateRows(), oldState)
+      assert.deepEqual(await helperRows(), oldHelper)
+      assert.equal(oldHelper[0].prosecdef, true)
+      assert.equal(oldHelper[0].provolatile, 'i')
+      assert.deepEqual(oldHelper[0].proconfig, ['search_path=""'])
+      assert.equal(await scalar(`select count(*)::int from pg_proc p,aclexplode(p.proacl) a
+        where p.oid='public.facebook_daily_page_url(text)'::regprocedure and a.grantee=0 and a.privilege_type='EXECUTE'`), 0)
+      for (const role of ['anon', 'authenticated', 'service_role']) {
+        assert.equal(await scalar("select has_function_privilege($1,'public.facebook_daily_page_url(text)','EXECUTE')", [role]), false)
+        await as(member, role)
+        await assert.rejects(q('select facebook_daily_page_url($1)', ['https://facebook.com/profile.php?id=1']), /permission denied/)
+        await root()
+      }
+
+      const originalProducts = (await q('select id,source_facts from products where id in ($1,$2) order by id', [app, foreignApp])).rows
+      const originalRole = await scalar('select role from workspace_members where workspace_id=$1 and user_id=$2', [w2, member])
+      const foreignPage = 'https://www.facebook.com/profile.php?id=987654321098765'
+      const setPage = async (url, product = foreignApp) => {
+        await root()
+        await q("update products set source_facts=jsonb_set(source_facts,'{socialLinks}',jsonb_build_object('facebook',$2::text)) where id=$1", [product, url])
+      }
+      const memberPage = async url => {
+        await setPage(url)
+        await as(member)
+        const s = await status(w2)
+        assert.equal(s.workspace_id, w2)
+        assert.deepEqual(s.apps.map(a => [a.workspace_id, a.product_id]), [[w2, foreignApp]])
+        assert.doesNotMatch(JSON.stringify(s), new RegExp(foreignPage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        return s.apps[0].facebook_page_url
+      }
+      try {
+        // Replace the pre-existing forged owner label only in this local fixture with real read membership.
+        await q("update workspace_members set role='member' where workspace_id=$1 and user_id=$2", [w2, member])
+        await setPage(foreignPage, app)
+        const profilePages = ['https://facebook.com/profile.php?id=1', 'https://www.facebook.com/profile.php?id=61512345678901',
+          'https://facebook.com/profile.php?id=1234567890123456789012345', 'https://www.facebook.com/profile.php?id=9999999999999999999999999']
+        const safePaths = ['https://www.facebook.com/syntheticpage', 'https://facebook.com/pages/Name_1.~-2/',
+          'https://facebook.com/profile.php', 'https://facebook.com/a..b', 'https://facebook.com//page',
+          `https://facebook.com/${'a'.repeat(2000 - 'https://facebook.com/'.length)}`]
+        for (const url of [...profilePages, ...safePaths]) {
+          await root(); assert.equal(await scalar('select facebook_daily_page_url($1)', [url]), url)
+          assert.equal(await memberPage(url), url)
+        }
+        const base = 'https://www.facebook.com/profile.php?id=123456789'
+        const unsafe = [null, '', `${base}&ref=bookmarks`, `${base}&id=2`, `${base}?next=1`, `${base}&`, `${base}#`, `${base}#details`,
+          `${base}|`, `${base} `, ` ${base}`, base.replace('https:', 'http:'), base.replace('https:', 'HTTPS:'),
+          base.replace('www.facebook.com', 'facebook.com.evil.test'), base.replace('www.facebook.com', 'evil.test'),
+          base.replace('www.facebook.com', 'm.facebook.com'), base.replace('www.facebook.com', 'WWW.facebook.com'),
+          base.replace('www.facebook.com', 'user@www.facebook.com'), base.replace('www.facebook.com', 'www.facebook.com@evil.test'),
+          base.replace('www.facebook.com', 'www.facebook.com:443'), base.replace('www.facebook.com', 'www.facebook.com:80'),
+          base.replace('www.facebook.com', 'www%2Efacebook.com'), base.replace('profile.php', 'profile%2Ephp'),
+          base.replace('profile.php', '%70rofile.php'), base.replace('profile.php', 'profile.php/'),
+          base.replace('?id=', '%3Fid='), base.replace('?id=', '?%69d='), base.replace('?id=', '?ID='),
+          base.replace('123456789', '%31'), base.replace('123456789', '1%26ref=1'),
+          base.replace('profile.php?id=123456789', 'l.php?u=https://evil.test'),
+          base.replace('profile.php?id=123456789', 'redirect.php?id=1'),
+          ...['', '0', '00', '01', '-1', '+1', '1.0', '1e2', '١', '1'.repeat(26)].map(id => base.replace('123456789', id)),
+          ...['\n', '\r', '\t', '\u0001', '\u007f'].flatMap(control => [`${base}${control}`, `${control}${base}`, base.replace('123456789', `123${control}456789`)]),
+          'https://facebook.com/page?ref=1', 'https://facebook.com/page#details', 'https://facebook.com/page|',
+          'https://facebook.com/page\n', 'https://facebook.com/page\r\n', 'https://facebook.com/./page',
+          'https://facebook.com/page/../other', 'https://facebook.com/..', 'https://facebook.com/%2e%2e/page',
+          'https://facebook.com/', `https://facebook.com/${'a'.repeat(2001 - 'https://facebook.com/'.length)}`]
+        for (const url of unsafe) {
+          await root(); assert.equal(await scalar('select facebook_daily_page_url($1)', [url]), null, JSON.stringify(url))
+          assert.equal(await memberPage(url), null, JSON.stringify(url))
+        }
+        await as(other); await assert.rejects(status(w), /FACEBOOK_DAILY_MEMBER_REQUIRED/)
+        await as(member); await assert.rejects(status(w), /FACEBOOK_DAILY_APP_LIMIT_EXCEEDED/)
+        await root()
+        await q("update workspace_members set role='owner' where workspace_id=$1 and user_id=$2", [w2, member])
+        await as(member); await assert.rejects(status(w2), /FACEBOOK_DAILY_MEMBER_REQUIRED/)
+      } finally {
+        await root()
+        for (const product of originalProducts) await q('update products set source_facts=$2 where id=$1', [product.id, product.source_facts])
+        await q('update workspace_members set role=$3 where workspace_id=$1 and user_id=$2', [w2, member, originalRole])
+      }
+      assert.deepEqual(await stateRows(), oldState)
+      assert.deepEqual(await helperRows(), oldHelper)
     })
   } finally {
     await db.close(); await rm(dir, { recursive: true, force: true })
