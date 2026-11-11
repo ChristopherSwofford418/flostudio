@@ -224,3 +224,15 @@ test('scheduled exclusions only forward bounded public business roles and block 
   assert.equal(JSON.parse(bounded.calls.provider.body.input).excludePublicRoleEmails.length, 100)
   assert(!bounded.calls.provider.body.input.includes('info@business100.com'))
 })
+
+test('exclusion input drops personal, malformed, control-bearing and non-public-domain values without extending requests', async () => {
+  const io = researchIo([])
+  await run(io, { excludeEmails: [' INFO@acme.com ', 'alice@acme.com', 'info@gmail.com', 'info@service.internal', 'info@service.local', 'info@-invalid.com', 'info@acme.com\nprivate instructions', null, { secret:'never forward' }] })
+  const input = JSON.parse(io.calls.provider.body.input)
+  assert.deepEqual(input.excludePublicRoleEmails, ['info@acme.com'])
+  assert.equal(io.calls.provider.body.max_tool_calls, 3)
+  assert.equal(io.calls.provider.body.max_output_tokens, 2400)
+  assert.equal(io.calls.requests.length, 0)
+  assert(!io.calls.provider.body.input.includes('private instructions'))
+  assert(!io.calls.provider.body.input.includes('secret'))
+})

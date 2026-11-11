@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { emailRpc, normalizeEmail } from './email-core.js'
 import { decryptProviderKey } from './provider-key-vault.js'
-import { researchEmailCandidates, safeBusinessUrl } from './email-source-research.js'
+import { researchEmailCandidates, safeBusinessUrl, normalizeResearchExclusions } from './email-source-research.js'
 
 export const EMAIL_RESEARCH_DEADLINE_MS = 170000
 export const EMAIL_RESEARCH_MAX_TOOL_CALLS = 3
@@ -135,9 +135,9 @@ const roles = /^(info|hello|contact|sales|support|office|admin|team|enquiries|in
 const consumerDomains = new Set(['gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'aol.com', 'icloud.com', 'me.com', 'mac.com', 'proton.me', 'protonmail.com', 'pm.me', 'mail.com', 'gmx.com', 'gmx.net', 'yandex.com', 'yandex.ru'])
 // Only the helper's verified candidate fields survive. Never adopt supplied opt-in,
 // draft, send, campaign, queue, suppression or provider-body fields.
-function candidateRows(result, limit) {
+function candidateRows(result, limit, exclusions = []) {
   if (!object(result) || !Array.isArray(result.candidates)) throw fail('EMAIL_RESEARCH_FORMAT_ERROR')
-  const seen = new Set(), rows = []
+  const seen = new Set(exclusions), rows = []
   for (const row of result.candidates.slice(0, 10)) {
     if (!object(row) || rows.length >= limit) continue
     try {
@@ -206,6 +206,10 @@ export async function runEmailResearchBatch({ research = researchEmailCandidates
     const model = clean(process.env.OPENAI_EMAIL_RESEARCH_MODEL, 120)
     if (!model || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,119}$/.test(model)) throw fail('EMAIL_RESEARCH_MODEL_REQUIRED')
     const input = buildEmailResearchQuery(claim)
+    const exclusions = normalizeResearchExclusions(claim.exclude_emails).filter(email => {
+      const [role, domain] = email.split('@')
+      return roles.test(role) && !consumerDomains.has(domain)
+    })
     if (deadline - now() < 155000) throw fail('EMAIL_RESEARCH_DEADLINE_EXCEEDED')
     let apiKey = await claimedWorkspaceKey(claim, now)
     try {
@@ -215,10 +219,10 @@ export async function runEmailResearchBatch({ research = researchEmailCandidates
       const result = await boundedResearch(research, {
         apiKey, model, ...input, limit:Math.min(claim.batch_limit, claim.target_remaining, 10),
         maxToolCalls:EMAIL_RESEARCH_MAX_TOOL_CALLS,
-        ...(Array.isArray(claim.exclude_emails) ? { excludeEmails:claim.exclude_emails.filter(value => typeof value === 'string').slice(0, 200) } : {}),
+        ...(exclusions.length ? { excludeEmails:exclusions } : {}),
       }, deadline, now)
       if (now() >= deadline - 15000) throw fail('EMAIL_RESEARCH_DEADLINE_EXCEEDED')
-      candidates = candidateRows(result, Math.min(claim.batch_limit, claim.target_remaining, 10))
+      candidates = candidateRows(result, Math.min(claim.batch_limit, claim.target_remaining, 10), exclusions)
     } finally { apiKey = null }
   } catch (error) { errorCode = errorCodes.has(error?.code) ? error.code : 'EMAIL_RESEARCH_ERROR'; candidates = [] }
   if (now() >= deadline) return { statusCode:503, body:{ ...stats, code:'EMAIL_RESEARCH_DEADLINE_EXCEEDED' } }

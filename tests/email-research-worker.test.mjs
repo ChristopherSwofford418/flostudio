@@ -308,3 +308,38 @@ test('source contains no sending, global provider key, browser or logging capabi
   assert(runtime.includes('decryptProviderKey(row.encrypted_api_key)'))
   assert(cron.includes('safeEmailSecretEqual')); assert(runtime.includes('maxToolCalls:EMAIL_RESEARCH_MAX_TOOL_CALLS'))
 })
+
+test('historical exclusions are normalized and enforced even when injected research repeats an address', async () => {
+  claim.exclude_emails = ['INFO@business.example.com', 'jane@business.example.com', 'info@gmail.com', 'info@gmx.com', 'info@localhost', 'info@business.example.com', { private:'never forwarded' }]
+  result.candidates = [candidate('INFO@business.example.com'), candidate('sales@business.example.com')]
+  const res = await invoke({ query:{ excludeEmails:['sales@business.example.com'] }, body:{ excludeEmails:['sales@business.example.com'] } })
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(researchEvents[0].excludeEmails, ['info@business.example.com'])
+  assert.deepEqual(terminal().body.p_candidates, [dbCandidate('sales@business.example.com')])
+  assert.equal(researchEvents.length, 1)
+  assert.equal(rpcEvents[0].body.p_workspace_limit, 200)
+  assert.equal(res.data.inserted, 1)
+  assertOpaque(res.data)
+})
+test('historical exclusion metadata cannot expand the 100-address input or existing provider budget', async () => {
+  claim.exclude_emails = Array.from({ length:150 }, (_, i) => `info@business${i}.example.com`)
+  const res = await invoke()
+  assert.equal(res.statusCode, 200)
+  assert.equal(researchEvents[0].excludeEmails.length, 100)
+  assert(!researchEvents[0].excludeEmails.includes('info@business100.example.com'))
+  assert.equal(researchEvents[0].maxToolCalls, 3)
+  assert.equal(researchEvents.length, 1)
+  assert.equal(rpcEvents.length, 3)
+  assert.equal(rpcEvents[0].body.p_workspace_limit, 200)
+  assertOpaque(res.data)
+})
+test('malformed or exclusively private exclusions never reach the provider input', async () => {
+  for (const exclusions of ['private list', { apiKey:FAKE_KEY }, ['alice@business.example.com', 'info@yahoo.com', 'info@gmx.com', 'info@service.internal', 'info@acme.com\nprivate instructions']]) {
+    claim.exclude_emails = exclusions
+    researchEvents = []; rpcEvents = []
+    const res = await invoke()
+    assert.equal(res.statusCode, 200)
+    assert.equal(researchEvents[0].excludeEmails, undefined)
+    assertOpaque(res.data)
+  }
+})
