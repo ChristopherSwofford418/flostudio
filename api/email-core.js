@@ -110,7 +110,7 @@ export function emailMessage({ senderEmail, senderName, recipient, subject, body
   const link = emailHttpsUrl(adLink)
   if (!title || !link || !postalAddress || !/^[a-zA-Z0-9_-]{40,}$/.test(unsubscribeToken || '')) throw emailError('EMAIL_PAYLOAD_INVALID', 'Complete the approved email, app link, sender address, and unsubscribe token before sending.')
   const unsubscribe = `${emailPublicOrigin()}/api/email-unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`
-  const text = `${cleanEmailText(body, 6000)}\n\nExplore the app: ${link}\n\nAdvertisement from ${name || from}\n${cleanEmailText(postalAddress, 500)}\n\nUnsubscribe: ${unsubscribe}`
+  const text = `${cleanEmailText(body, 6000)}\n\nExplore the app: ${link}\n\nApp promotion from ${name || from}\n${cleanEmailText(postalAddress, 500)}\n\nUnsubscribe: ${unsubscribe}`
   const id = String(messageId || crypto.randomUUID()).replace(/[^a-zA-Z0-9-]/g, '')
   const lines = [
     `From: =?UTF-8?B?${Buffer.from(name || from).toString('base64')}?= <${from}>`,

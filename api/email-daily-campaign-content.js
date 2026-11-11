@@ -178,7 +178,7 @@ export function buildDailyEmailCampaignContent(snapshot) {
   const index = (seed + dayIndex) % subjects.length
   const description = listingDescription(snapshot.product)
   const excerpt = safeListingExcerpt(description)
-  const paragraphs = ['Advertisement', intros[index](name)]
+  const paragraphs = ['App promotion', intros[index](name)]
   if (excerpt) paragraphs.push(`From the App Store listing: “${excerpt}”`)
   paragraphs.push(...topicLimitations(snapshot.product, description), `App Store: ${source.app_store_url}`)
   const result = {

@@ -31,7 +31,8 @@ test('verified MatterPrep uses exact latest metadata link without tracking; immu
   assert.deepEqual(Object.keys(content), ['name', 'subject', 'body', 'app_store_url', 'status', 'content_source'])
   assert.equal(content.app_store_url, URL)
   assert(content.body.includes(`App Store: ${URL}`)); assert(!content.body.includes('?uo='))
-  assert(content.body.startsWith('Advertisement\n\n')); assert(content.name.includes('2026-11-11'))
+  assert(content.body.startsWith('App promotion\n\n')); assert(content.name.includes('2026-11-11'))
+  assert.doesNotMatch(`${content.name}\n${content.subject}\n${content.body}`, /\bAdvertisement\b/i)
   assert(content.name.includes('English template')); assert(content.name.includes('Draft for review'))
   assert(!content.body.includes('Draft for review')); assert(!content.subject.includes('Draft for review'))
   assert.equal(content.status, 'draft'); assert.equal(content.content_source, 'listing_template')
@@ -118,6 +119,8 @@ test('one full 12-day cycle varies subjects, body wording, and date names determ
     const row = snapshot(); const day = new Date('2026-11-11T00:00:00Z'); day.setUTCDate(day.getUTCDate() + offset)
     row.scheduled_day = day.toISOString().slice(0, 10)
     const copy = buildDailyEmailCampaignContent(row); copies.push(copy)
+    assert(copy.body.startsWith('App promotion\n\n'))
+    assert.doesNotMatch(`${copy.name}\n${copy.subject}\n${copy.body}`, /\bAdvertisement\b/i)
     assert.deepEqual(copy, buildDailyEmailCampaignContent(structuredClone(row)))
   }
   assert.equal(new Set(copies.slice(0, -1).map(copy => copy.subject)).size, EMAIL_DAILY_CAMPAIGN_TEMPLATE_COUNT)
