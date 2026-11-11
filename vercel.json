@@ -4,10 +4,12 @@
   "crons": [
     { "path": "/api/email-cron", "schedule": "*/5 * * * *" },
     { "path": "/api/email-research-cron", "schedule": "* * * * *" },
-    { "path": "/api/email-daily-campaign-cron", "schedule": "*/5 * * * *" }
+    { "path": "/api/email-daily-campaign-cron", "schedule": "*/5 * * * *" },
+    { "path": "/api/facebook-daily-cron", "schedule": "*/5 * * * *" }
   ],
   "rewrites": [
     { "source": "/child-safety", "destination": "/child-safety.html" },
+    { "source": "/facebook-assets/:workspace/:product/:file", "destination": "/api/facebook-draft-image?workspace=:workspace&product=:product&file=:file" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
