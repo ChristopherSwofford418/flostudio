@@ -1,4 +1,5 @@
-import crypto from 'node:crypto'
+import { resolveDailyAppCopyProfile, dailyAppThemeQualifiers, dailyAppCopyAngleIndex,
+  dailyAppUnduplicatedQualifiers, isSafeDailyAppCopyText, DAILY_APP_COPY_FORBIDDEN_CONTROLS } from './daily-app-copy.js'
 import { canonicalAppStoreUrl, resolveDailyCampaignAppStoreSource } from './email-daily-campaign-content.js'
 
 export const FACEBOOK_DAILY_CONTENT_LIMIT = 4000
@@ -15,57 +16,9 @@ const fail = code => Object.assign(new Error('Facebook daily draft blocked.'), {
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 // Canonical lowercase UUIDs make comparisons and the approved literal path unambiguous.
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
-const forbiddenControls = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/u
-// The only link belongs to the final validated App Store CTA. Reject links,
-// encoded links, HTML/Markdown links, handles and protocol/host impersonation
-// rather than silently editing the pre-reviewed caption into different copy.
-const hasLinkOrMarkup = value => /(?:[\p{L}\d+.-]+:\/\/|\b(?:https?|javascript|data|mailto|tel)\s*:|www[.\uff0e]|(?:[\p{L}\d-]+[.\uff0e])+(?:[\p{L}]{2,63}|\d{1,3})(?=[\s/:?#]|$)|%[0-9a-f]{2}|[<>@\\]|\[[^\]]*\]\s*\(|!\[)/iu.test(value)
-// Portuguese cure inflections are bounded word forms, not the shared prefix in
-// English "curated"/"curation". Actual cure and guarantee claims remain blocked.
-const unsafeClaimsOrInstructions = /\b(?:ignore\s+(?:(?:all|any|the|previous|prior)\s+)*(?:instructions?|rules?|prompts?)|(?:system|developer)\s+(?:prompt|message)|follow\s+(?:these|my)\s+instructions|override\s+(?:the\s+)?(?:rules?|policy)|do\s+not\s+(?:include|mention|add)\s+(?:the\s+)?(?:disclaimer|qualifier|limitations?)|guarantee\w*|guaranteed\s+results?|risk[- ]free|cure\w*|diagnos\w*|win\s+(?:every\s+)?(?:case|cases)|get\s+rich|lose\s+\d+|(?:100%|completely)\s+safe|no\s+risks?|(?:free|gr[aá]tis)\s+(?:trial|download|app|teste)|(?:buy|purchase|subscribe|pay|join|sign\s+up|register|message|dm|email|click)\s+(?:now|today|here|us|me)|(?:limited[- ]time|discount|promo\s+code|coupon)|(?:garantid\w*|garante\w*|cura(?:s|m|mos|is|r(?:ei|ás?|emos|eis|ão|am|ia(?:s|m)?|íamos|íeis|es|mos|des|em)?|ndo|d[oa]s?|va(?:s|m)?|stes?|sse(?:s|m)?|tiv[oa]s?)?|diagn[oó]stic\w*|sem\s+risco\w*|resultados\s+garantid\w*|compre\s+agora|assine\s+agora|envie\s+(?:uma\s+)?mensagem|ignore\s+(?:as\s+)?instru[cç][oõ]es))\b/iu
-const unsupportedPromotion = /\b(?:(?:download|install|get\s+it|try\s+it)\s+(?:now|today|here|free|for\s+free)|(?:baixe|instale|experimente)\s+(?:agora|hoje|gr[aá]tis)|(?:use|enter|apply)\s+(?:the\s+)?(?:code|coupon)|(?:100\s*%\s*free|totally\s+free|completely\s+free)|(?:earn|make|save)\s+(?:\$|\d+\s*(?:dollars?|reais|%))|(?:double|triple)\s+(?:your\s+)?(?:money|returns)|(?:win|guarantee)\s+(?:all|any)\s+cases|(?:guaranteed|certain)\s+(?:profit|income)|(?:prevents?|eliminates?)\s+(?:all\s+)?(?:injur\w*|accidents?|disease\w*))\b/iu
-
-function claimScanCopy(value, appId) {
-  // Mask only bounded explicit negative qualifiers for the claim scan, never
-  // the stored caption or a whole sentence. An affirmative claim after a safe
-  // disclaimer must still be rejected; URLs/instructions are scanned unmasked.
-  const copy = value
-    .replace(/\b(no\s+)free\s+trial\b/giu, '$1 precaution ')
-    .replace(/\b((?:not|never|isn['’]t|aren['’]t|is\s+not|are\s+not)\s+(?:(?:(?:a|an)\s+)?(?:parental\s+control|monitoring(?:\s+tool)?|employer['’]s\s+assessment|(?:health|medical)\s+assessment|issuer-verified\s+proof|confirmation\s+of\s+license\s+standing)(?:,\s*(?:or\s+)?|\s+or\s+)){1,3}(?:(?:a|an|any)\s+)?)guarantees?\b/giu, '$1 precaution ')
-    .replace(/\b(no\s+)guarantees?\b/giu, '$1 precaution ')
-    .replace(/\b((?:not|never|(?:does|do)\s+not\s+provide|(?:doesn|don)['’]t\s+provide)\s+(?:a\s+(?:health|medical)\s+assessment(?:,\s*|\s+or\s+))?medical\s+advice,\s+)diagnosis(?=,\s+(?:or\s+)?treatment\b)/giu, '$1 precaution ')
-    .replace(/\b(without\s+(?:algorithmic\s+)?)diagnosis\b/giu, '$1 precaution ')
-    .replace(/\b(without\s+treating\s+an\s+idea\s+as\s+a\s+)guaranteed(?=\s+outcome\b)/giu, '$1 precaution ')
-    .replace(/\b(?:not|never|isn't|isn’t)\s+(?:(?:a|an|any)\s+)?(?:(?:confirmed|mechanical|medical|clinical|professional)\s+){0,3}(?:diagnos\w*|cure\w*)\b/giu, ' precaution ')
-    .replace(/\bno\s+(?:(?:health|medical|financial|safety|repair|fitness|accuracy|legal)\s+){0,3}(?:outcomes?|results?|returns?|profits?)\s+(?:(?:are|is|will\s+be|can\s+be)\s+)?guaranteed\b/giu, ' precaution ')
-    .replace(/\b(?:not|never)\s+guaranteed\b/giu, ' precaution ')
-    .replace(/\b(?:not|never|isn['’]t)\s+(?:(?:a|an|any)\s+)?guarantees?\b/giu, ' precaution ')
-    .replace(/\b(?:cannot|can['’]t|does\s+not|doesn['’]t|do\s+not|don['’]t|will\s+not|won['’]t)\s+(?:provide\s+(?:(?:a|an)\s+)?)?(?:(?:confirmed|mechanical|medical|clinical|professional)\s+){0,3}(?:guarantee\w*|diagnos\w*|cure\w*)\b/giu, ' precaution ')
-    .replace(/\b(?:n[aã]o\s+[eé]\s+(?:um\s+)?(?:diagn[oó]stic\w*|cura\w*)|sem\s+diagn[oó]stic\w*|n[aã]o\s+garantid\w*|n[aã]o\s+garante\w*|(?:resultados?|retornos?)\s+n[aã]o\s+s[aã]o\s+garantid\w*)\b/giu, ' precaution ')
-  // These saved-listing features are not human-health claims or sale urgency.
-  // Scope comes only from the authority/ID resolver, not a name or raw fact.
-  // Mask the feature token only; unrelated diagnoses, cures and offers remain.
-  if (appId === '6779000255' && /\bAI-assisted\s+lawn\s+diagnoses\b/iu.test(value)) {
-    return copy
-      .replace(/\b(AI-assisted\s+lawn\s+)diagnoses\b/giu, '$1 feature ')
-      .replace(/\b(AI-assisted\s+)diagnoses(?=\s+require\s+LawnSignal\s+Pro\b)/giu, '$1 feature ')
-      .replace(/\b((?:keep|save)\s+(?:your\s+)?(?:lawn\s+)?)diagnosis(?=\s+history\b)/giu, '$1 feature ')
-      .replace(/\b(past\s+)diagnoses(?=\s+as\s+you\s+consider\s+practical\s+next\s+steps\s+for\s+visible\s+lawn\s+problems\b)/giu, '$1 feature ')
-      .replace(/\b(does\s+not\s+make\s+AI\s+)diagnoses(?=\s+free\b)/giu, '$1 feature ')
-      .replace(/\b(does\s+not\s+include\s+Pro\s+)diagnoses\b/giu, '$1 feature ')
-  }
-  if (appId === '6816541818') return copy.replace(/\b(Optional\s+)diagnostics(?=\s+(?:are\s+your\s+choice\s+in\s+CivicGlow|stay\s+off\s+until\s+you\s+consent)\b)/giu, '$1 feature ')
-  if (appId === '6763152727' && /\bprivate\s+QR\s+presentation\s+that\s+lasts\s+one\s+hour\b/iu.test(value)) {
-    return copy.replace(/\b(share\s+them\s+for\s+a\s+)limited\s+time\b/giu, '$1 feature ')
-  }
-  return copy
-}
-
-function assertPlainCopy(value, max, { multiline = false, appId = '' } = {}) {
-  if (typeof value !== 'string' || !value.trim() || value.length > max || forbiddenControls.test(value) ||
-      (!multiline && /[\r\n\t]/.test(value)) || hasLinkOrMarkup(value) || unsafeClaimsOrInstructions.test(claimScanCopy(value, appId)) || unsupportedPromotion.test(value)) {
-    throw fail('FACEBOOK_DAILY_CONTENT_UNSAFE')
-  }
+const forbiddenControls = DAILY_APP_COPY_FORBIDDEN_CONTROLS
+function assertPlainCopy(value, max, options = {}) {
+  if (!isSafeDailyAppCopyText(value, max, options)) throw fail('FACEBOOK_DAILY_CONTENT_UNSAFE')
   return value
 }
 
@@ -131,25 +84,6 @@ function hashtagsFor(asset, name) {
   return brand ? `#${brand}` : ''
 }
 
-function qualifiers(product) {
-  const facts = product.source_facts
-  // Only official saved listing fields inform topic precautions; arbitrary product
-  // descriptions, prompts, audiences, and imported research are never copied.
-  const context = [product.name, facts.storeMetadata?.trackName, facts.storeMetadata?.primaryGenreName,
-    facts.storeMetadata?.description, facts.appStoreListing?.description].filter(value => typeof value === 'string').join(' ').slice(0, 40000)
-  const named = product.name.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase()
-  const result = []
-  if (named.includes('citationshield')) result.push('Extraction only. Verify sources. Not legal advice.')
-  else if (named.includes('matterprep') || /legal|lawyer|attorney|\blaw\b|court|jur[ií]dic|advog/i.test(context)) result.push('Legal information only. Not legal advice.')
-  if (named.includes('autowizard')) result.push('Vehicle information only. Follow manufacturer guidance and consult a qualified professional. No safety or repair outcomes are guaranteed.')
-  if (named.includes('gymguard')) result.push('Fitness information only. Follow safe exercise practices and qualified guidance. No safety or fitness outcomes are guaranteed.')
-  if (named.includes('tagsnap')) result.push('Identification information only. Verify results and follow applicable safety guidance. No accuracy or safety outcomes are guaranteed.')
-  if (named.includes('pratofit')) result.push('Nutrition estimates only. Not medical advice.')
-  else if (/health|wellness|medical|medicine|diagnos|diagn[oó]stic|treat|fitness|nutrition|diet|weight|mental|therapy|sa[uú]de|nutri[cç]|alimenta[cç]/i.test(context)) result.push('Health and wellness information only. Not medical advice, diagnosis, or treatment. No health outcomes are promised.')
-  if (/financ|invest|trading|stocks?|crypto|banking|money|budget|income|loan|credit|\btax\b/i.test(context)) result.push('Financial information only. Not financial or investment advice. No financial outcomes are promised.')
-  return result
-}
-
 const intros = [
   name => `A closer look at ${name}.`,
   name => `Take a moment to explore ${name}.`,
@@ -165,15 +99,20 @@ export function buildFacebookDailyContent(snapshot) {
   validateFacebookDailySnapshot(snapshot)
   const source = resolveSource(snapshot.product)
   const name = assertPlainCopy(snapshot.product.name, 120).trim()
-  const dayIndex = Math.floor(Date.parse(`${snapshot.scheduled_day}T00:00:00Z`) / 86400000)
-  const seed = crypto.createHash('sha256').update(source.app_id).digest().readUInt32BE(0)
-  const index = ((seed + dayIndex) % intros.length + intros.length) % intros.length
+  const profile = resolveDailyAppCopyProfile(snapshot.product, source)
+  const index = dailyAppCopyAngleIndex(source.app_id, snapshot.scheduled_day, intros.length)
   const asset = snapshot.asset || null
-  const hashtags = hashtagsFor(asset, name)
-  const paragraphs = [intros[index](name)]
-  if (asset) paragraphs.push(asset.caption) // Intentionally verbatim, not translated or inferred from an image filename.
-  paragraphs.push(...qualifiers(snapshot.product),
-    `View the current App Store listing for features, requirements, pricing, and limitations:\n${source.app_store_url}`)
+  const fallback = !asset && profile ? profile.facebook_fallback : null
+  const hashtags = hashtagsFor(asset || fallback, name)
+  // A vetted caption speaks for itself, without an unrelated rotating intro.
+  const paragraphs = profile ? [] : [intros[index](name)]
+  const caption = asset?.caption || fallback?.caption || ''
+  if (caption) paragraphs.push(caption) // Reviewed asset text is intentionally verbatim, never translated.
+  const reviewedCta = source.app_id === '6804450872' ? `Conheça ${name} na App Store:` :
+    source.app_id === '6816477432' ? `גלו את ${name} ב-App Store:` : `Explore ${name} on the App Store:`
+  paragraphs.push(...dailyAppUnduplicatedQualifiers(dailyAppThemeQualifiers(snapshot.product, 'facebook', profile), caption),
+    profile ? `${reviewedCta}\n${source.app_store_url}` :
+      `View the current App Store listing for features, requirements, pricing, and limitations:\n${source.app_store_url}`)
   const body = paragraphs.join('\n\n')
   if (body.length > FACEBOOK_DAILY_CONTENT_LIMIT || body.split(source.app_store_url).length !== 2) throw fail('FACEBOOK_DAILY_CONTENT_UNSAFE')
   return {

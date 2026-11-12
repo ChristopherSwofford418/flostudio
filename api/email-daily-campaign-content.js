@@ -1,4 +1,4 @@
-import crypto from 'node:crypto'
+import { resolveDailyAppCopyProfile, dailyAppThemeQualifiers, dailyAppCopyAngleIndex } from './daily-app-copy.js'
 
 export const EMAIL_DAILY_CAMPAIGN_LANGUAGE = 'en'
 export const EMAIL_DAILY_CAMPAIGN_CONTENT_SOURCE = 'listing_template'
@@ -109,14 +109,6 @@ export function safeListingExcerpt(description) {
   return ''
 }
 
-function listingDescription(product) {
-  const facts = product.source_facts
-  // These are saved listing descriptions, not arbitrary product copy/instructions.
-  for (const value of [facts.storeMetadata?.description, facts.appStoreListing?.description]) {
-    if (typeof value === 'string' && value.trim()) return value.slice(0, 12000)
-  }
-  return ''
-}
 function appName(product) {
   const raw = product.name
   const name = clean(raw)
@@ -126,23 +118,6 @@ function appName(product) {
   }
   return name
 }
-function topicLimitations(product, description) {
-  const facts = product.source_facts
-  const context = [product.name, product.description, facts.category, facts.audience,
-    facts.storeMetadata?.primaryGenreName, facts.storeMetadata?.category,
-    facts.storeMetadata?.description, facts.appStoreListing?.description, description].filter(value => typeof value === 'string').join(' ').slice(0, 40000)
-  const limitations = []
-  if (/legal|lawyer|attorney|law\b|court|matterprep|jur[ií]dic|advog/i.test(context)) limitations.push('Legal information only, not legal advice or a substitute for a qualified lawyer.')
-  if (/health|wellness|medical|medicine|diagnos|treat|fitness|nutrition|diet|weight|mental|therapy|pratofit|sa[uú]de|nutri[cç]|alimenta[cç]/i.test(context)) limitations.push('Health and wellness information only, not diagnosis, treatment, or a substitute for qualified medical care.')
-  if (/financ|invest|trading|stocks?|crypto|banking|money|budget|income|loan|credit|tax\b/i.test(context)) limitations.push('Financial information only, not financial or investment advice. No financial outcomes are promised.')
-  if (/child|kids?\b|toddlers?|bab(?:y|ies)|preschool|parent|caregiver|pediatric|crianc|crianç|infantil|developmental|early learning/i.test(context)) {
-    limitations.push('For parents and caregivers, not children. Adults should review age suitability, permissions, pricing, and limitations. No purchase pressure is directed at children and no developmental outcomes are promised.')
-  } else {
-    limitations.push('For consenting adults reviewing app options; this draft does not establish permission to contact anyone.')
-  }
-  return limitations
-}
-
 // Finite factual rotations intentionally repeat eventually; they are not AI,
 // translation, individualized copy, or a promise of forever-unique messages.
 const subjects = [
@@ -173,17 +148,15 @@ export function buildDailyEmailCampaignContent(snapshot) {
   validateDailyCampaignSnapshot(snapshot)
   const source = resolveDailyCampaignAppStoreSource(snapshot.product)
   const name = appName(snapshot.product)
-  const dayIndex = Math.floor(Date.parse(`${snapshot.scheduled_day}T00:00:00Z`) / 86400000)
-  const seed = crypto.createHash('sha256').update(source.app_id).digest().readUInt32BE(0)
-  const index = (seed + dayIndex) % subjects.length
-  const description = listingDescription(snapshot.product)
-  const excerpt = safeListingExcerpt(description)
-  const paragraphs = ['App promotion', intros[index](name)]
-  if (excerpt) paragraphs.push(`From the App Store listing: “${excerpt}”`)
-  paragraphs.push(...topicLimitations(snapshot.product, description), `App Store: ${source.app_store_url}`)
+  const profile = resolveDailyAppCopyProfile(snapshot.product, source)
+  const index = dailyAppCopyAngleIndex(source.app_id, snapshot.scheduled_day, subjects.length)
+  const angle = profile?.email_angles[index]
+  // Changed or unknown listings never borrow features from a stale/other profile.
+  const paragraphs = angle ? [...angle.paragraphs] : ['App promotion', intros[index](name)]
+  paragraphs.push(...dailyAppThemeQualifiers(snapshot.product, 'email', profile), `App Store: ${source.app_store_url}`)
   const result = {
     name:`${name} — ${snapshot.scheduled_day} — English template — Draft for review`,
-    subject:subjects[index](name), body:paragraphs.join('\n\n'),
+    subject:angle ? angle.subject : subjects[index](name), body:paragraphs.join('\n\n'),
     app_store_url:source.app_store_url, status:'draft', content_source:EMAIL_DAILY_CAMPAIGN_CONTENT_SOURCE,
   }
   if (result.name.length > 180 || result.subject.length > 180 || result.body.length > 6000) throw fail('EMAIL_DAILY_CAMPAIGN_CONTENT_UNSAFE')

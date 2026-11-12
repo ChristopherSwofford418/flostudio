@@ -37,7 +37,7 @@ test('verified MatterPrep uses exact latest metadata link without tracking; immu
   assert(!content.body.includes('Draft for review')); assert(!content.subject.includes('Draft for review'))
   assert.equal(content.status, 'draft'); assert.equal(content.content_source, 'listing_template')
   assert(content.subject.length <= 180); assert(content.body.length <= 6000); assert(content.name.length <= 180)
-  assert(content.body.includes('“Organize your documents.”')); assert.match(content.body, /Legal information only, not legal advice/)
+  assert(!content.body.includes('From the App Store listing:')); assert.match(content.body, /Legal information only, not legal advice/)
   assert(!/Win every|guaranteed results|Free forever|approved|unsubscribe|sender@/i.test(content.body))
   assert.deepEqual(content, generateDailyCampaignContent(row))
 })
@@ -159,8 +159,8 @@ for (const [name, description, expected] of [
   assert.match(copy.body, expected)
   if (name === 'Toddler Stories') { assert.match(copy.body, /No purchase pressure.*no developmental outcomes/); assert(!copy.body.includes('For consenting adults')) }
 })
-test('mixed regulated/children context retains all applicable limitations', () => {
-  const row = snapshot(); row.product.name = 'Family Information'; row.product.source_facts.storeMetadata.description = 'Children, health, legal and financial information.'
+test('mixed regulated/children trusted title retains all applicable limitations, not description topics', () => {
+  const row = snapshot(); row.product.name = 'Children Health Legal Financial Information'; row.product.source_facts.storeMetadata.description = 'Saved app information.'
   const copy = buildDailyEmailCampaignContent(row)
   for (const phrase of ['Legal information only', 'Health and wellness information only', 'Financial information only', 'For parents and caregivers']) assert(copy.body.includes(phrase))
 })
@@ -169,4 +169,54 @@ test('pure generator has no fetch, credential, AI, browser, messaging, or loggin
   const source = await readFile(new globalThis.URL('../api/email-daily-campaign-content.js', import.meta.url), 'utf8')
   assert(!/\bfetch\s*\(|process\.env|console\.|emailRpc|email-gmail|openai\.com|resolveWorkspaceOpenAIKey|submitGmail/.test(source))
   assert.equal(validateDailyCampaignSnapshot(snapshot()).product.id, P)
+})
+
+const ownAppSnapshot = (name, index = 1) => {
+  const row = snapshot(), id = String(9001000000 + index)
+  row.product.name = name; row.product.product_url = `https://apps.apple.com/app/id${id}`
+  row.product.source_facts = { appId:id, storeMetadata:{ trackId:id, trackUrl:row.product.product_url,
+    description:'Review app details.' } }
+  return row
+}
+for (const [index, name, description] of [
+  [1, 'Bible Study', 'Scripture reading. https://www.apple.com/legal/internet-services/itunes/dev/stdeula/ Privacy policy.'],
+  [2, 'Tanakh', 'Saved reading. Apple EULA legal terms and privacy policy apply.'],
+  [3, 'Prayframe', 'A prayer journal. Legal terms: https://example.test/legal/privacy'],
+  [4, 'AutoWizard', 'Mechanical diagnosis for vehicle checks, not a confirmed medical diagnosis.'],
+  [5, 'CitationShield', 'Review case treatment, authorities and cited cases.'],
+  [6, 'Credential Kit', 'Jamee health connection. Saved qualifications and employer information.'],
+  [7, 'BlockYourPhone', 'NOT parental control. Does not provide treatment. Self-directed adult focus.'],
+  [8, 'CreditPath', 'Transparent credit planning for adults.'],
+  [9, 'LawnSignal', 'AI-assisted lawn diagnoses and treatment suggestions for grass.'],
+  [10, 'סדר', 'Hebrew custom routine notes. No Bible, Passover, custody or health advice.'],
+]) test(`own-app generic email never infers unrelated topics from incidental description: ${name}`, () => {
+  const row = ownAppSnapshot(name, index)
+  row.product.source_facts.storeMetadata.description = description
+  row.product.source_facts.appStoreListing = { description:'Children medical law and investment advice.' }
+  row.product.description = 'Children, health, legal and financial information.'
+  row.product.source_facts.audience = 'parents kids medical court'
+  row.product.source_facts.category = 'medical legal children finance'
+  const content = buildDailyEmailCampaignContent(row)
+  assert(!content.body.includes('For parents and caregivers'))
+  assert(!content.body.includes('Health and wellness information only'))
+  assert(!content.body.includes('From the App Store listing:'))
+  if (name !== 'CitationShield') assert(!content.body.includes('Legal information only'))
+  if (name !== 'CreditPath') assert(!content.body.includes('Financial information only'))
+  assert(content.body.includes(`App Store: ${row.product.product_url}`))
+  if (name === 'CitationShield') assert(content.body.includes('Legal information only'))
+  if (name === 'CreditPath') assert(content.body.includes('Financial information only'))
+  if (name === 'AutoWizard') assert(content.body.includes('Vehicle information only'))
+})
+for (const [genre, expected] of [
+  ['Medical', 'Health and wellness information only'], ['Health & Fitness', 'Health and wellness information only'],
+  ['Finance', 'Financial information only'],
+]) test(`exact trusted App Store genre ${genre} retains regulated email safeguards`, () => {
+  const row = ownAppSnapshot('Context Notes', 20)
+  row.product.source_facts.storeMetadata.primaryGenreName = genre
+  assert(buildDailyEmailCampaignContent(row).body.includes(expected))
+})
+test('unanchored genre prose and substring title tokens cannot introduce email topic precautions', () => {
+  const row = ownAppSnapshot('Transparent Curated Notes', 21)
+  row.product.source_facts.storeMetadata.primaryGenreName = 'Not medical; for transparent documents'
+  assert(!/For parents and caregivers|Health and wellness information only|Legal information only|Financial information only/.test(buildDailyEmailCampaignContent(row).body))
 })

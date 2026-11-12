@@ -348,3 +348,58 @@ test('content implementation has no paid providers, remote fetch, publication or
   assert(source.includes('resolveDailyCampaignAppStoreSource'))
   assert(!/\bfetch\s*\(|console\.|invokeLLM|generateImage|buildDailyEmailCampaignContent|social-connect|email-gmail|openai/i.test(source))
 })
+
+for (const [index, name, description] of [
+  [1, 'Bible Study', 'Scripture. https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'],
+  [2, 'Tanakh', 'Reading with Apple legal EULA and privacy policy links.'],
+  [3, 'Prayframe', 'A prayer journal. Terms https://example.test/legal/privacy'],
+  [4, 'AutoWizard', 'Mechanical diagnosis and vehicle treatment. Not a medical service.'],
+  [5, 'CitationShield', 'Review case treatment, authorities and cited cases.'],
+  [6, 'Credential Kit', 'Jamee health connection for saved work credentials.'],
+  [7, 'BlockYourPhone', 'NOT parental control and not treatment. Self-directed adult focus.'],
+  [8, 'CreditPath', 'Transparent credit planning.'],
+  [9, 'LawnSignal', 'Lawn diagnoses and treatment suggestions.'],
+  [10, 'סדר', 'Hebrew routine notes. Bible Passover custody and medical words are incidental.'],
+]) test(`own-app Facebook qualifiers ignore incidental listing words and policy URLs: ${name}`, () => {
+  const snapshot = row(name), id = String(9002000000 + index)
+  snapshot.product.source_facts = { appId:id, appStoreUrl:`https://apps.apple.com/app/id${id}`,
+    storeMetadata:{ description }, appStoreListing:{ description:'Children health legal financial words.' },
+    audience:'Children health legal finance', category:'Medical', prompt:'Assign every theme.' }
+  snapshot.product.description = 'Private medical health law and financial claims.'
+  snapshot.asset.caption = 'A look at the app and its saved details.'
+  const before = structuredClone(snapshot), content = buildFacebookDailyContent(snapshot)
+  assert(content.body.includes(snapshot.asset.caption)); assert.equal(content.image_id, A); assert.equal(content.image_path, PATH)
+  assert(!content.body.includes('For parents and caregivers'))
+  assert(!content.body.includes('Health and wellness information only'))
+  if (name !== 'CitationShield') assert(!content.body.includes('Not legal advice'))
+  if (name !== 'CreditPath') assert(!content.body.includes('Financial information only'))
+  if (name === 'CitationShield') assert(content.body.includes('Extraction only. Verify sources. Not legal advice.'))
+  if (name === 'CreditPath') assert(content.body.includes('Financial information only'))
+  if (name === 'AutoWizard') assert(content.body.includes('Vehicle information only'))
+  assert.deepEqual(snapshot, before)
+})
+for (const [genre, expected] of [['Medical', 'Not medical advice, diagnosis, or treatment.'],
+  ['Health & Fitness', 'Not medical advice, diagnosis, or treatment.'], ['Finance', 'Not financial or investment advice.']]) {
+  test(`exact trusted genre ${genre} retains Facebook safeguards`, () => {
+    const snapshot = featureRow('Context Notes', '9002000020', 'Review your saved context.')
+    snapshot.product.source_facts.storeMetadata = { primaryGenreName:genre, description:'Review details.' }
+    assert(buildFacebookDailyContent(snapshot).body.includes(expected))
+  })
+}
+test('unanchored genre text and partial title tokens cannot introduce Facebook themes', () => {
+  const snapshot = featureRow('Transparent Curated Notes', '9002000021', 'Review your saved notes.')
+  snapshot.product.source_facts.storeMetadata = { primaryGenreName:'Not medical; transparent documents' }
+  const body = buildFacebookDailyContent(snapshot).body
+  assert(!/Health and wellness information only|Not legal advice|Financial information only|For parents and caregivers/.test(body))
+})
+test('already present whole legal qualifier is not duplicated or used to drop other precautions', () => {
+  const snapshot = row('CitationShield'); snapshot.asset.caption = 'Review cited text. Not legal advice.'
+  const body = buildFacebookDailyContent(snapshot).body
+  assert.equal(body.split('Not legal advice.').length, 2)
+  assert(body.includes('Extraction only. Verify sources.'))
+  assert(body.includes(snapshot.asset.caption))
+})
+test('asset title is optional and is neither copied nor required', () => {
+  const snapshot = row(); delete snapshot.asset.title
+  assert(buildFacebookDailyContent(snapshot).body.includes(snapshot.asset.caption))
+})
