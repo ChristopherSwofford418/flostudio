@@ -313,7 +313,9 @@ test('Offline workspace automation: strict scope, atomicity, reviews, durable hi
     await t.test('Contacts, daily copy creation/edit and unrelated product metadata do not invalidate research-only review', async () => {
       await as(owner); const revision = (await get()).reviewRevision
       await q("insert into email_contacts(workspace_id,product_id,email,status,consent_evidence) values($1,$2,'another-synthetic@example.test','opted_in',$3)", [w, app, consent])
-      await root(); await q("insert into email_daily_campaigns(workspace_id,product_id,scheduled_day,name,subject,body,app_store_url) values($1,$2,current_date-1,'Unrelated historical draft','New private copy',$3,$4)", [w, app, `Another private copy ${link}`, link])
+      // The earlier fixture uses app-local time: UTC yesterday can be that same
+      // day after midnight. Pick a day before its oldest existing saved draft.
+      await root(); await q("insert into email_daily_campaigns(workspace_id,product_id,scheduled_day,name,subject,body,app_store_url) select $1,$2,min(scheduled_day)-1,'Unrelated historical draft','New private copy',$3,$4 from email_daily_campaigns where workspace_id=$1 and product_id=$2 limit 1", [w, app, `Another private copy ${link}`, link])
       await q("update email_daily_campaigns set subject='Edited private copy' where workspace_id=$1 and product_id=$2", [w, app])
       await q('update products set source_facts=$2 where id=$1', [app, { arbitraryMetadata: 'DO-NOT-RETURN', appId: '123456789' }])
       await as(owner)
